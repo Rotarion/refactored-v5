@@ -1,0 +1,662 @@
+﻿2026-04-23 16:17:17 | RUN_START | INIT | lead=Amalia Garcia, vehicles=1
+2026-04-23 16:17:18 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-23 16:17:18 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-23 16:17:20 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-23 16:17:22 | STEP | ENTRY_FLOW | Detected state: BEGIN_QUOTING_SEARCH
+2026-04-23 16:17:26 | STEP | PROSPECT_RESOLUTION | Creating/selecting prospect.
+2026-04-23 16:17:28 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:17:30 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:17:32 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:17:34 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:17:40 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:17:51 | WAIT_JS | PROSPECT_RESOLUTION | elapsedMs=6688
+2026-04-23 16:17:54 | STOP | PROSPECT_RESOLUTION | manual-esc, lastStepAt=2026-04-23 16:17:26
+2026-04-23 16:17:54 | STOP | PROSPECT_RESOLUTION | manual-stop-detected-after-run, lastStepAt=2026-04-23 16:17:26
+2026-04-23 16:17:56 | STOP | PROSPECT_RESOLUTION | manual-esc, lastStepAt=2026-04-23 16:17:26
+2026-04-23 16:17:57 | STOP | PROSPECT_RESOLUTION | manual-esc, lastStepAt=2026-04-23 16:17:26
+2026-04-23 16:19:42 | RUN_START | INIT | lead=Amalia Garcia, vehicles=1
+2026-04-23 16:19:42 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-23 16:19:42 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-23 16:19:45 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-23 16:19:47 | STEP | ENTRY_FLOW | Detected state: BEGIN_QUOTING_FORM
+2026-04-23 16:19:47 | STEP | PROSPECT_RESOLUTION | Creating/selecting prospect.
+2026-04-23 16:19:49 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:19:51 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:19:53 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:19:55 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:20:01 | TIMEOUT_JS | PROSPECT_RESOLUTION | Timed out waiting for JS condition. timeoutMs=350
+2026-04-23 16:20:11 | STOP | PROSPECT_RESOLUTION | manual-esc, lastStepAt=2026-04-23 16:19:47
+2026-04-23 16:20:11 | JS_EMPTY | PROSPECT_RESOLUTION | JS returned blank result after 1 attempt(s).
+2026-04-23 16:20:11 | STOP | PROSPECT_RESOLUTION | manual-stop-detected-after-run, lastStepAt=2026-04-23 16:19:47
+2026-04-23 16:51:35 | RUN_START | INIT | lead=Claudio Leite, vehicles=2
+2026-04-23 16:51:35 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-23 16:51:35 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-23 16:51:38 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-23 16:51:40 | STEP | ENTRY_FLOW | Detected state: ADVISOR_OTHER
+2026-04-23 16:51:49 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_duplicate, timeoutMs=350
+2026-04-23 16:51:50 | STOP | ENTRY_FLOW | manual-esc, lastStepAt=2026-04-23 16:51:40
+2026-04-23 16:51:51 | WAIT_STATE | ENTRY_FLOW | state=ADVISOR_OTHER, elapsedMs=6015
+2026-04-23 16:51:51 | ENTRY_FLOW_FAIL | ENTRY_FLOW | Could not reach form/quote state from entry.
+2026-04-23 16:51:51 | STOP | ENTRY_FLOW | manual-stop-detected-after-run, lastStepAt=2026-04-23 16:51:40
+2026-04-23 16:58:14 | RUN_START | INIT | lead=Ana Fernandez, vehicles=1
+2026-04-23 16:58:14 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-23 16:58:14 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-23 16:58:16 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-23 16:58:18 | STEP | ENTRY_FLOW | Detected state: ADVISOR_HOME
+2026-04-23 16:58:24 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_duplicate, timeoutMs=350
+2026-04-23 16:58:27 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_rapport, timeoutMs=350
+2026-04-23 16:58:29 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_select_product, timeoutMs=350
+2026-04-23 16:58:31 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_asc, timeoutMs=350
+2026-04-23 16:58:31 | WAIT_STATE | ENTRY_FLOW | state=BEGIN_QUOTING_SEARCH, elapsedMs=10718
+2026-04-23 16:58:33 | STOP | ENTRY_FLOW | manual-esc, lastStepAt=2026-04-23 16:58:18
+2026-04-23 16:58:34 | ENTRY_FLOW_FAIL | ENTRY_FLOW | Could not reach form/quote state from entry.
+2026-04-23 16:58:34 | STOP | ENTRY_FLOW | manual-stop-detected-after-run, lastStepAt=2026-04-23 16:58:18
+2026-04-23 18:43:18 | STOP | UNKNOWN | manual-esc
+2026-04-24 09:12:21 | STOP | UNKNOWN | manual-esc
+2026-04-24 10:45:51 | RUN_START | INIT | lead=Jose Sanchez, vehicles=0
+2026-04-24 10:45:51 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 10:45:51 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 10:45:55 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-24 10:45:57 | STEP | ENTRY_FLOW | Detected state: BEGIN_QUOTING_SEARCH
+2026-04-24 10:45:57 | STEP | ENTRY_FLOW | Begin Quoting search detected; clicking Create New Prospect.
+2026-04-24 10:46:01 | STEP | PROSPECT_RESOLUTION | Creating/selecting prospect.
+2026-04-24 10:46:01 | STEP | PROSPECT_RESOLUTION | Resolving prospect/create flow.
+2026-04-24 10:46:03 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_rapport, timeoutMs=350
+2026-04-24 10:46:05 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_select_product, timeoutMs=350
+2026-04-24 10:46:07 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_asc, timeoutMs=350
+2026-04-24 10:46:10 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_duplicate, timeoutMs=350
+2026-04-24 10:46:13 | STOP | PROSPECT_RESOLUTION | manual-esc, lastStepAt=2026-04-24 10:46:01
+2026-04-24 10:46:13 | STEP | PROSPECT_SUBMIT | Submitting Create New Prospect form.
+2026-04-24 10:46:13 | PROSPECT_SUBMIT_FAIL | PROSPECT_SUBMIT | Could not find a submit button after filling prospect form.
+2026-04-24 10:46:14 | STOP | PROSPECT_SUBMIT | manual-stop-detected-after-run, lastStepAt=2026-04-24 10:46:13
+2026-04-24 10:46:16 | STOP | PROSPECT_SUBMIT | manual-esc, lastStepAt=2026-04-24 10:46:13
+2026-04-24 11:03:43 | JS_ASSET_RETRY | PROSPECT_SUBMIT | op=scan_current_page, attempt=2/2
+2026-04-24 11:03:48 | JS_ASSET_EMPTY | PROSPECT_SUBMIT | op=scan_current_page, attempts=2
+2026-04-24 11:25:56 | RUN_START | INIT | lead=Keren Leon, vehicles=0
+2026-04-24 11:25:56 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 11:25:56 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 11:25:59 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-24 11:26:01 | STEP | ENTRY_FLOW | Detected state: ADVISOR_HOME
+2026-04-24 11:26:07 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_duplicate, timeoutMs=350
+2026-04-24 11:26:10 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_rapport, timeoutMs=350
+2026-04-24 11:26:12 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_select_product, timeoutMs=350
+2026-04-24 11:26:14 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_asc, timeoutMs=350
+2026-04-24 11:26:14 | WAIT_STATE | ENTRY_FLOW | state=BEGIN_QUOTING_SEARCH, elapsedMs=10765
+2026-04-24 11:26:19 | TIMEOUT_CONDITION | ENTRY_FLOW | condition=is_duplicate, timeoutMs=350
+2026-04-24 11:26:20 | STOP | ENTRY_FLOW | manual-esc, lastStepAt=2026-04-24 11:26:01
+2026-04-24 11:26:20 | WAIT_STATE | ENTRY_FLOW | state=BEGIN_QUOTING_SEARCH, elapsedMs=17172
+2026-04-24 11:26:20 | ENTRY_FLOW_FAIL | ENTRY_FLOW | Could not reach form/quote state from entry.
+2026-04-24 11:26:20 | STOP | ENTRY_FLOW | manual-stop-detected-after-run, lastStepAt=2026-04-24 11:26:01
+2026-04-24 11:27:04 | STOP | ENTRY_FLOW | manual-esc, lastStepAt=2026-04-24 11:26:01
+2026-04-24 14:16:00 | RUN_START | INIT | lead=Yaidelys Guzman, vehicles=3
+2026-04-24 14:16:00 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 14:16:00 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 14:16:02 | STEP | ENTRY_FLOW | Opening Advisor quote entry flow.
+2026-04-24 14:16:04 | STEP | ENTRY_FLOW | Detected state: BEGIN_QUOTING_SEARCH
+2026-04-24 14:16:04 | STEP | ENTRY_FLOW | Begin Quoting search detected; clicking Create New Prospect.
+2026-04-24 14:16:08 | STEP | PROSPECT_RESOLUTION | Creating/selecting prospect.
+2026-04-24 14:16:08 | STEP | PROSPECT_RESOLUTION | Resolving prospect/create flow.
+2026-04-24 14:16:10 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_rapport, timeoutMs=350
+2026-04-24 14:16:12 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_select_product, timeoutMs=350
+2026-04-24 14:16:15 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_asc, timeoutMs=350
+2026-04-24 14:16:17 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_duplicate, timeoutMs=350
+2026-04-24 14:16:23 | TIMEOUT_CONDITION | PROSPECT_RESOLUTION | condition=is_duplicate, timeoutMs=350
+2026-04-24 14:16:23 | STEP | PROSPECT_SUBMIT | Submitting Create New Prospect form.
+2026-04-24 14:16:30 | JS_ASSET_RETRY | PROSPECT_SUBMIT | op=wait_condition, attempt=2/2
+2026-04-24 14:16:34 | JS_ASSET_EMPTY | PROSPECT_SUBMIT | op=wait_condition, attempts=2
+2026-04-24 14:16:34 | WAIT_CONDITION | PROSPECT_SUBMIT | condition=post_prospect_submit, elapsedMs=9437
+2026-04-24 14:16:39 | JS_ASSET_RETRY | PROSPECT_SUBMIT | op=wait_condition, attempt=2/2
+2026-04-24 14:16:44 | JS_ASSET_EMPTY | PROSPECT_SUBMIT | op=wait_condition, attempts=2
+2026-04-24 14:16:44 | WAIT_CONDITION | PROSPECT_SUBMIT | condition=post_prospect_submit, elapsedMs=19312
+2026-04-24 14:16:49 | JS_ASSET_RETRY | PROSPECT_SUBMIT | op=wait_condition, attempt=2/2
+2026-04-24 14:16:54 | JS_ASSET_EMPTY | PROSPECT_SUBMIT | op=wait_condition, attempts=2
+2026-04-24 14:16:54 | WAIT_CONDITION | PROSPECT_SUBMIT | condition=post_prospect_submit, elapsedMs=29140
+2026-04-24 14:16:57 | STOP | PROSPECT_SUBMIT | manual-esc, lastStepAt=2026-04-24 14:16:23
+2026-04-24 14:16:57 | STOP | PROSPECT_SUBMIT | manual-stop-detected-after-run, lastStepAt=2026-04-24 14:16:23
+2026-04-24 15:10:42 | RUN_START | INIT | lead=Alvaro Ardila, vehicles=1
+2026-04-24 15:10:42 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 15:13:35 | RUN_START | INIT | lead=Alvaro Ardila, vehicles=1
+2026-04-24 15:13:35 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 15:17:00 | RUN_START | INIT | lead=Alvaro Ardila, vehicles=1
+2026-04-24 15:17:00 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 15:17:00 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 15:17:03 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_151703_021_edge-activation_entry-attempt-1.json
+2026-04-24 15:17:03 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 15:17:05 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 15:17:07 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_151707_295_entry-search_entry-attempt-1.json
+2026-04-24 15:17:07 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 15:17:09 | STEP | ENTRY_CREATE_FORM | Attempt 1/3
+2026-04-24 15:17:11 | STATE_ATTEMPT | ENTRY_CREATE_FORM | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_151711_392_entry-create-form_entry-attempt-1.json
+2026-04-24 15:17:11 | STEP | ENTRY_CREATE_FORM | Opening and submitting the Create New Prospect form.
+2026-04-24 15:17:19 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:outOfLocationCreateNewProspectButton, beforeState=BEGIN_QUOTING_SEARCH, afterState=BEGIN_QUOTING_FORM
+2026-04-24 15:17:24 | PROSPECT_FILL | ENTRY_CREATE_FORM | pass=1
+2026-04-24 15:17:28 | TIMEOUT_CONDITION | ENTRY_CREATE_FORM | condition=is_duplicate, timeoutMs=350
+2026-04-24 15:17:37 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:17:42 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:17:47 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:17:52 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:17:57 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:18:02 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:18:07 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:18:12 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:18:17 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:18:21 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:18:21 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:PrimaryApplicant-Continue-button, beforeState=BEGIN_QUOTING_FORM, afterState=UNKNOWN
+2026-04-24 15:18:22 | STOP | ENTRY_CREATE_FORM | manual-esc, lastStepAt=2026-04-24 15:17:11
+2026-04-24 15:18:22 | PROSPECT_SUBMIT_STILL_ON_FORM | ENTRY_CREATE_FORM | ready=, submitPresent=, submitEnabled=, firstName=, lastName=, dob=, address=, city=, state=, zip=, phone=, errors=
+2026-04-24 15:18:22 | STATE_RESULT | ENTRY_CREATE_FORM | ok=0, retryable=1, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, observedState=UNKNOWN, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_151711_392_entry-create-form_entry-attempt-1.json
+2026-04-24 15:18:22 | STATE_RETRY | ENTRY_CREATE_FORM | attempt=1/3, observedState=UNKNOWN, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, scan=
+2026-04-24 15:18:22 | STOP | ENTRY_CREATE_FORM | manual-stop-detected-after-run, lastStepAt=2026-04-24 15:17:11
+2026-04-24 15:18:24 | STOP | ENTRY_CREATE_FORM | manual-esc, lastStepAt=2026-04-24 15:17:11
+2026-04-24 15:34:59 | RUN_START | INIT | lead=Alvaro Ardila, vehicles=1
+2026-04-24 15:34:59 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 15:34:59 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 15:35:01 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_153501_850_edge-activation_entry-attempt-1.json
+2026-04-24 15:35:01 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 15:35:04 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 15:35:06 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_153506_126_entry-search_entry-attempt-1.json
+2026-04-24 15:35:06 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 15:35:12 | CLICK_TRANSITION | ENTRY_SEARCH | target=id:group2_Quoting_button, beforeState=ADVISOR_HOME, afterState=BEGIN_QUOTING_SEARCH
+2026-04-24 15:35:12 | STEP | ENTRY_CREATE_FORM | Attempt 1/3
+2026-04-24 15:35:14 | STATE_ATTEMPT | ENTRY_CREATE_FORM | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_153514_245_entry-create-form_entry-attempt-1.json
+2026-04-24 15:35:14 | STEP | ENTRY_CREATE_FORM | Opening and submitting the Create New Prospect form.
+2026-04-24 15:35:22 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:outOfLocationCreateNewProspectButton, beforeState=BEGIN_QUOTING_SEARCH, afterState=BEGIN_QUOTING_FORM
+2026-04-24 15:35:26 | PROSPECT_FILL | ENTRY_CREATE_FORM | pass=1
+2026-04-24 15:35:31 | TIMEOUT_CONDITION | ENTRY_CREATE_FORM | condition=is_duplicate, timeoutMs=350
+2026-04-24 15:35:40 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:35:45 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:35:50 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 15:35:50 | STOP | ENTRY_CREATE_FORM | manual-esc, lastStepAt=2026-04-24 15:35:14
+2026-04-24 15:35:50 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 15:35:50 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:PrimaryApplicant-Continue-button, beforeState=BEGIN_QUOTING_FORM, afterState=UNKNOWN
+2026-04-24 15:35:50 | PROSPECT_SUBMIT_STILL_ON_FORM | ENTRY_CREATE_FORM | ready=, submitPresent=, submitEnabled=, firstName=, lastName=, dob=, address=, city=, state=, zip=, phone=, errors=
+2026-04-24 15:35:50 | STATE_RESULT | ENTRY_CREATE_FORM | ok=0, retryable=1, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, observedState=UNKNOWN, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_153514_245_entry-create-form_entry-attempt-1.json
+2026-04-24 15:35:50 | STATE_RETRY | ENTRY_CREATE_FORM | attempt=1/3, observedState=UNKNOWN, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, scan=
+2026-04-24 15:35:51 | STOP | ENTRY_CREATE_FORM | manual-stop-detected-after-run, lastStepAt=2026-04-24 15:35:14
+2026-04-24 15:35:53 | STOP | ENTRY_CREATE_FORM | manual-esc, lastStepAt=2026-04-24 15:35:14
+2026-04-24 16:12:28 | RUN_START | INIT | lead=Roberto Castillo, vehicles=1
+2026-04-24 16:12:28 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 16:12:28 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 16:12:30 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_161230_723_edge-activation_entry-attempt-1.json
+2026-04-24 16:12:30 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 16:12:33 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 16:12:35 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_161235_046_entry-search_entry-attempt-1.json
+2026-04-24 16:12:35 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 16:12:41 | CLICK_TRANSITION | ENTRY_SEARCH | target=id:group2_Quoting_button, beforeState=ADVISOR_HOME, afterState=BEGIN_QUOTING_SEARCH
+2026-04-24 16:12:41 | STEP | ENTRY_CREATE_FORM | Attempt 1/3
+2026-04-24 16:12:43 | STATE_ATTEMPT | ENTRY_CREATE_FORM | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_161243_102_entry-create-form_entry-attempt-1.json
+2026-04-24 16:12:43 | STEP | ENTRY_CREATE_FORM | Opening and submitting the Create New Prospect form.
+2026-04-24 16:12:51 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:outOfLocationCreateNewProspectButton, beforeState=BEGIN_QUOTING_SEARCH, afterState=BEGIN_QUOTING_FORM
+2026-04-24 16:12:55 | PROSPECT_FILL | ENTRY_CREATE_FORM | pass=1
+2026-04-24 16:13:00 | TIMEOUT_CONDITION | ENTRY_CREATE_FORM | condition=is_duplicate, timeoutMs=350
+2026-04-24 16:13:09 | JS_ASSET_RETRY | ENTRY_CREATE_FORM | op=detect_state, attempt=2/2
+2026-04-24 16:13:14 | JS_ASSET_EMPTY | ENTRY_CREATE_FORM | op=detect_state, attempts=2
+2026-04-24 16:13:17 | STOP | ENTRY_CREATE_FORM | manual-esc, lastStepAt=2026-04-24 16:12:43
+2026-04-24 16:13:17 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:PrimaryApplicant-Continue-button, beforeState=BEGIN_QUOTING_FORM, afterState=UNKNOWN
+2026-04-24 16:13:17 | PROSPECT_SUBMIT_STILL_ON_FORM | ENTRY_CREATE_FORM | ready=, submitPresent=, submitEnabled=, firstName=, lastName=, dob=, address=, city=, state=, zip=, phone=, errors=
+2026-04-24 16:13:17 | STATE_RESULT | ENTRY_CREATE_FORM | ok=0, retryable=1, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, observedState=UNKNOWN, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_161243_102_entry-create-form_entry-attempt-1.json
+2026-04-24 16:13:17 | STATE_RETRY | ENTRY_CREATE_FORM | attempt=1/3, observedState=UNKNOWN, reason=Create New Prospect submit did not transition off the form. Create New Prospect form still has missing fields: firstName, lastName, dob, address, city, state, zip, scan=
+2026-04-24 16:13:17 | STOP | ENTRY_CREATE_FORM | manual-stop-detected-after-run, lastStepAt=2026-04-24 16:12:43
+2026-04-24 16:37:10 | RUN_START | INIT | lead=Roberto Mejia, vehicles=1
+2026-04-24 16:37:10 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 16:37:10 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 16:37:12 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163712_634_edge-activation_entry-attempt-1.json
+2026-04-24 16:37:12 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 16:37:14 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 16:37:16 | STOP | ENTRY_SEARCH | manual-esc, lastStepAt=2026-04-24 16:37:14
+2026-04-24 16:37:16 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=
+2026-04-24 16:37:16 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 16:37:16 | STATE_RESULT | ENTRY_SEARCH | ok=0, retryable=1, reason=Unexpected state before quote entry., observedState=UNKNOWN, scan=
+2026-04-24 16:37:16 | STATE_RETRY | ENTRY_SEARCH | attempt=1/3, observedState=UNKNOWN, reason=Unexpected state before quote entry., scan=
+2026-04-24 16:37:16 | STOP | ENTRY_SEARCH | manual-stop-detected-after-run, lastStepAt=2026-04-24 16:37:16
+2026-04-24 16:37:35 | RUN_START | INIT | lead=Roberto Mejia, vehicles=1
+2026-04-24 16:37:35 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 16:37:35 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 16:37:36 | DEVTOOLS_BRIDGE_OPENED | EDGE_ACTIVATION | mode=edge
+2026-04-24 16:37:37 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163737_172_edge-activation_entry-attempt-1.json
+2026-04-24 16:37:37 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 16:37:37 | DEVTOOLS_BRIDGE_REUSED | EDGE_ACTIVATION | mode=edge
+2026-04-24 16:37:38 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 16:37:38 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 16:37:39 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163739_230_entry-search_entry-attempt-1.json
+2026-04-24 16:37:39 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 16:37:39 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 16:37:40 | ACTION_JS | ENTRY_SEARCH | op=click_by_id, attempt=1/2
+2026-04-24 16:37:40 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 16:37:41 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 16:37:41 | CLICK_TRANSITION | ENTRY_SEARCH | target=id:group2_Quoting_button, beforeState=ADVISOR_HOME, afterState=BEGIN_QUOTING_SEARCH
+2026-04-24 16:37:41 | STEP | ENTRY_CREATE_FORM | Attempt 1/3
+2026-04-24 16:37:42 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:42 | STATE_ATTEMPT | ENTRY_CREATE_FORM | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163742_833_entry-create-form_entry-attempt-1.json
+2026-04-24 16:37:42 | STEP | ENTRY_CREATE_FORM | Opening and submitting the Create New Prospect form.
+2026-04-24 16:37:43 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:43 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:44 | ACTION_JS | ENTRY_CREATE_FORM | op=click_by_id, attempt=1/2
+2026-04-24 16:37:44 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:45 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:46 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:outOfLocationCreateNewProspectButton, beforeState=BEGIN_QUOTING_SEARCH, afterState=BEGIN_QUOTING_FORM
+2026-04-24 16:37:46 | WAIT_POLL_JS | ENTRY_CREATE_FORM | op=wait_condition, condition=prospect_form_ready, attempt=1/2
+2026-04-24 16:37:46 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:47 | ACTION_JS | ENTRY_CREATE_FORM | op=focus_prospect_first_input, attempt=1/1
+2026-04-24 16:37:47 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:48 | PROSPECT_FILL | ENTRY_CREATE_FORM | pass=1
+2026-04-24 16:37:49 | PAGE_REFOCUSED_FOR_NATIVE_INPUT | ENTRY_CREATE_FORM | reason=prospect-form-fill-pass-1
+2026-04-24 16:37:51 | WAIT_POLL_JS | ENTRY_CREATE_FORM | op=wait_condition, condition=is_duplicate, attempt=1/2
+2026-04-24 16:37:52 | DEVTOOLS_BRIDGE_OPENED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:53 | TIMEOUT_CONDITION | ENTRY_CREATE_FORM | condition=is_duplicate, timeoutMs=350
+2026-04-24 16:37:53 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:54 | ACTION_JS | ENTRY_CREATE_FORM | op=click_by_id, attempt=1/2
+2026-04-24 16:37:54 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:55 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:56 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:58 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 16:37:58 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:PrimaryApplicant-Continue-button, beforeState=BEGIN_QUOTING_FORM, afterState=PRODUCT_OVERVIEW
+2026-04-24 16:37:58 | STEP | DUPLICATE | Attempt 1/3
+2026-04-24 16:37:59 | DEVTOOLS_BRIDGE_REUSED | DUPLICATE | mode=edge
+2026-04-24 16:37:59 | STATE_ATTEMPT | DUPLICATE | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163759_708_duplicate_entry-attempt-1.json
+2026-04-24 16:37:59 | STEP | DUPLICATE | Resolving This Prospect May Already Exist if shown.
+2026-04-24 16:37:59 | DEVTOOLS_BRIDGE_REUSED | DUPLICATE | mode=edge
+2026-04-24 16:38:00 | STEP | CUSTOMER_SUMMARY_OVERVIEW | Attempt 1/3
+2026-04-24 16:38:00 | DEVTOOLS_BRIDGE_REUSED | CUSTOMER_SUMMARY_OVERVIEW | mode=edge
+2026-04-24 16:38:01 | STATE_ATTEMPT | CUSTOMER_SUMMARY_OVERVIEW | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163801_577_customer-summary-overview_entry-attempt-1.json
+2026-04-24 16:38:01 | STEP | CUSTOMER_SUMMARY_OVERVIEW | Normalizing Customer Summary Overview through START HERE.
+2026-04-24 16:38:02 | DEVTOOLS_BRIDGE_REUSED | CUSTOMER_SUMMARY_OVERVIEW | mode=edge
+2026-04-24 16:38:02 | STEP | PRODUCT_OVERVIEW | Attempt 1/3
+2026-04-24 16:38:02 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:03 | STATE_ATTEMPT | PRODUCT_OVERVIEW | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163803_608_product-overview_entry-attempt-1.json
+2026-04-24 16:38:03 | STEP | PRODUCT_OVERVIEW | Selecting Auto on the product overview grid.
+2026-04-24 16:38:04 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:04 | WAIT_POLL_JS | PRODUCT_OVERVIEW | op=wait_condition, condition=on_product_overview, attempt=1/2
+2026-04-24 16:38:05 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:05 | PRODUCT_OVERVIEW_ACTION | PRODUCT_OVERVIEW | action=select-auto-tile, match=text:Auto
+2026-04-24 16:38:05 | ACTION_JS | PRODUCT_OVERVIEW | op=click_product_overview_tile, attempt=1/1
+2026-04-24 16:38:05 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:07 | PRODUCT_OVERVIEW_ACTION | PRODUCT_OVERVIEW | action=click-primary, match=text:Save & Continue to Gather Data
+2026-04-24 16:38:07 | ACTION_JS | PRODUCT_OVERVIEW | op=click_by_text, attempt=1/2
+2026-04-24 16:38:08 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:08 | WAIT_POLL_JS | PRODUCT_OVERVIEW | op=wait_condition, condition=gather_data, attempt=1/2
+2026-04-24 16:38:08 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:09 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 16:38:10 | STEP | RAPPORT | Attempt 1/3
+2026-04-24 16:38:10 | DEVTOOLS_BRIDGE_REUSED | RAPPORT | mode=edge
+2026-04-24 16:38:11 | STATE_ATTEMPT | RAPPORT | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163811_482_rapport_entry-attempt-1.json
+2026-04-24 16:38:11 | STEP | RAPPORT | Filling Gather Data and lead vehicles.
+2026-04-24 16:38:11 | DEVTOOLS_BRIDGE_REUSED | RAPPORT | mode=edge
+2026-04-24 16:38:12 | STEP | GATHER_DATA | Waiting for GATHER DATA page.
+2026-04-24 16:38:12 | WAIT_POLL_JS | GATHER_DATA | op=wait_condition, condition=gather_data, attempt=1/2
+2026-04-24 16:38:12 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA | mode=edge
+2026-04-24 16:38:13 | ACTION_JS | GATHER_DATA | op=fill_gather_defaults, attempt=1/1
+2026-04-24 16:38:13 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA | mode=edge
+2026-04-24 16:38:14 | STEP | GATHER_DATA_VEHICLE_CHECK | Checking vehicle: 2015|FORD|F
+2026-04-24 16:38:14 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:15 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=ensure_auto_start_quoting_state, attempt=1/1
+2026-04-24 16:38:15 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:16 | WAIT_POLL_JS | GATHER_DATA_VEHICLE_CHECK | op=wait_condition, condition=is_select_product, attempt=1/2
+2026-04-24 16:38:16 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:17 | TIMEOUT_CONDITION | GATHER_DATA_VEHICLE_CHECK | condition=is_select_product, timeoutMs=350
+2026-04-24 16:38:17 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 16:38:17 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:18 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 16:38:18 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:19 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 16:38:19 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:20 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 16:38:20 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:21 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 16:38:21 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:22 | WAIT_POLL_JS | GATHER_DATA_VEHICLE_CHECK | op=wait_condition, condition=to_select_product, attempt=1/2
+2026-04-24 16:38:22 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:23 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 16:38:24 | STEP | SELECT_PRODUCT | Attempt 1/3
+2026-04-24 16:38:24 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:25 | STATE_ATTEMPT | SELECT_PRODUCT | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163825_267_select-product_entry-attempt-1.json
+2026-04-24 16:38:25 | STEP | SELECT_PRODUCT | Applying Select Product defaults.
+2026-04-24 16:38:25 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:26 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=on_select_product, attempt=1/2
+2026-04-24 16:38:26 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:27 | ACTION_JS | SELECT_PRODUCT | op=set_select_product_defaults, attempt=1/1
+2026-04-24 16:38:27 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:27 | ACTION_JS | SELECT_PRODUCT | op=click_by_id, attempt=1/2
+2026-04-24 16:38:28 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:28 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:29 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:30 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:30 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:31 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:31 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:32 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:32 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:33 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:34 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:34 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=5969
+2026-04-24 16:38:35 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:35 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:36 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:36 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:37 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:37 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:38 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:39 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:39 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=10969
+2026-04-24 16:38:40 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:40 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:41 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:41 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:42 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:42 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:43 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:44 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:44 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=16063
+2026-04-24 16:38:45 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:45 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:46 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:46 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:47 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:48 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:49 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:49 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:49 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=21078
+2026-04-24 16:38:50 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:50 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:51 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:51 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:52 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:53 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:54 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:54 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:54 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=26094
+2026-04-24 16:38:55 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:55 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:56 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:56 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:57 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:58 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:38:59 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:38:59 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:39:00 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=31141
+2026-04-24 16:39:00 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:39:00 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:39:01 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 16:39:01 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:39:02 | STOP | SELECT_PRODUCT | manual-esc, lastStepAt=2026-04-24 16:38:25
+2026-04-24 16:39:02 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=wait_condition, attempt=1/2, reason=empty-result
+2026-04-24 16:39:02 | JS_ASSET_RETRY | SELECT_PRODUCT | op=wait_condition, attempt=1/2
+2026-04-24 16:39:02 | STATE_RESULT | SELECT_PRODUCT | ok=0, retryable=1, reason=Select Product stage did not complete., observedState=UNKNOWN, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_163825_267_select-product_entry-attempt-1.json
+2026-04-24 16:39:02 | STATE_RETRY | SELECT_PRODUCT | attempt=1/3, observedState=UNKNOWN, reason=Select Product stage did not complete., scan=
+2026-04-24 16:39:02 | STOP | SELECT_PRODUCT | manual-stop-detected-after-run, lastStepAt=2026-04-24 16:38:25
+2026-04-24 16:39:09 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:40:54 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 16:40:57 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=scan_current_page, attempt=1/2, reason=empty-result
+2026-04-24 16:40:57 | JS_ASSET_RETRY | SELECT_PRODUCT | op=scan_current_page, attempt=1/2
+2026-04-24 16:40:58 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:08:36 | RUN_START | INIT | lead=Amanda Perez, vehicles=1
+2026-04-24 17:08:36 | STEP | INIT | Workflow triggered from clipboard.
+2026-04-24 17:08:36 | STEP | EDGE_ACTIVATION | Attempt 1/3
+2026-04-24 17:08:37 | DEVTOOLS_BRIDGE_OPENED | EDGE_ACTIVATION | mode=edge
+2026-04-24 17:08:37 | STATE_ATTEMPT | EDGE_ACTIVATION | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170837_998_edge-activation_entry-attempt-1.json
+2026-04-24 17:08:38 | STEP | EDGE_ACTIVATION | Ensuring Edge context and Advisor page detection.
+2026-04-24 17:08:38 | DEVTOOLS_BRIDGE_REUSED | EDGE_ACTIVATION | mode=edge
+2026-04-24 17:08:39 | STEP | ENTRY_SEARCH | Attempt 1/3
+2026-04-24 17:08:39 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 17:08:40 | STATE_ATTEMPT | ENTRY_SEARCH | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170840_073_entry-search_entry-attempt-1.json
+2026-04-24 17:08:40 | STEP | ENTRY_SEARCH | Opening Advisor quote entry flow.
+2026-04-24 17:08:40 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 17:08:40 | ACTION_JS | ENTRY_SEARCH | op=click_by_id, attempt=1/2
+2026-04-24 17:08:41 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 17:08:42 | DEVTOOLS_BRIDGE_REUSED | ENTRY_SEARCH | mode=edge
+2026-04-24 17:08:42 | CLICK_TRANSITION | ENTRY_SEARCH | target=id:group2_Quoting_button, beforeState=ADVISOR_HOME, afterState=BEGIN_QUOTING_SEARCH
+2026-04-24 17:08:42 | STEP | ENTRY_CREATE_FORM | Attempt 1/3
+2026-04-24 17:08:43 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:43 | STATE_ATTEMPT | ENTRY_CREATE_FORM | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170843_754_entry-create-form_entry-attempt-1.json
+2026-04-24 17:08:43 | STEP | ENTRY_CREATE_FORM | Opening and submitting the Create New Prospect form.
+2026-04-24 17:08:44 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:44 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:45 | ACTION_JS | ENTRY_CREATE_FORM | op=click_by_id, attempt=1/2
+2026-04-24 17:08:45 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:46 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:47 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:outOfLocationCreateNewProspectButton, beforeState=BEGIN_QUOTING_SEARCH, afterState=BEGIN_QUOTING_FORM
+2026-04-24 17:08:47 | WAIT_POLL_JS | ENTRY_CREATE_FORM | op=wait_condition, condition=prospect_form_ready, attempt=1/2
+2026-04-24 17:08:47 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:48 | ACTION_JS | ENTRY_CREATE_FORM | op=focus_prospect_first_input, attempt=1/1
+2026-04-24 17:08:48 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:49 | PROSPECT_FILL | ENTRY_CREATE_FORM | pass=1
+2026-04-24 17:08:50 | PAGE_REFOCUSED_FOR_NATIVE_INPUT | ENTRY_CREATE_FORM | reason=prospect-form-fill-pass-1
+2026-04-24 17:08:52 | WAIT_POLL_JS | ENTRY_CREATE_FORM | op=wait_condition, condition=is_duplicate, attempt=1/2
+2026-04-24 17:08:53 | DEVTOOLS_BRIDGE_OPENED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:54 | TIMEOUT_CONDITION | ENTRY_CREATE_FORM | condition=is_duplicate, timeoutMs=350
+2026-04-24 17:08:54 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:55 | ACTION_JS | ENTRY_CREATE_FORM | op=click_by_id, attempt=1/2
+2026-04-24 17:08:55 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:56 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:57 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:08:58 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:09:00 | DEVTOOLS_BRIDGE_REUSED | ENTRY_CREATE_FORM | mode=edge
+2026-04-24 17:09:00 | CLICK_TRANSITION | ENTRY_CREATE_FORM | target=id:PrimaryApplicant-Continue-button, beforeState=BEGIN_QUOTING_FORM, afterState=PRODUCT_OVERVIEW
+2026-04-24 17:09:00 | STEP | DUPLICATE | Attempt 1/3
+2026-04-24 17:09:01 | DEVTOOLS_BRIDGE_REUSED | DUPLICATE | mode=edge
+2026-04-24 17:09:01 | STATE_ATTEMPT | DUPLICATE | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170901_713_duplicate_entry-attempt-1.json
+2026-04-24 17:09:01 | STEP | DUPLICATE | Resolving This Prospect May Already Exist if shown.
+2026-04-24 17:09:01 | DEVTOOLS_BRIDGE_REUSED | DUPLICATE | mode=edge
+2026-04-24 17:09:02 | STEP | CUSTOMER_SUMMARY_OVERVIEW | Attempt 1/3
+2026-04-24 17:09:02 | DEVTOOLS_BRIDGE_REUSED | CUSTOMER_SUMMARY_OVERVIEW | mode=edge
+2026-04-24 17:09:03 | STATE_ATTEMPT | CUSTOMER_SUMMARY_OVERVIEW | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170903_621_customer-summary-overview_entry-attempt-1.json
+2026-04-24 17:09:03 | STEP | CUSTOMER_SUMMARY_OVERVIEW | Normalizing Customer Summary Overview through START HERE.
+2026-04-24 17:09:04 | DEVTOOLS_BRIDGE_REUSED | CUSTOMER_SUMMARY_OVERVIEW | mode=edge
+2026-04-24 17:09:04 | STEP | PRODUCT_OVERVIEW | Attempt 1/3
+2026-04-24 17:09:04 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:05 | STATE_ATTEMPT | PRODUCT_OVERVIEW | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170905_629_product-overview_entry-attempt-1.json
+2026-04-24 17:09:05 | STEP | PRODUCT_OVERVIEW | Selecting Auto on the product overview grid.
+2026-04-24 17:09:06 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:06 | WAIT_POLL_JS | PRODUCT_OVERVIEW | op=wait_condition, condition=on_product_overview, attempt=1/2
+2026-04-24 17:09:06 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:07 | PRODUCT_OVERVIEW_ACTION | PRODUCT_OVERVIEW | action=select-auto-tile, match=text:Auto
+2026-04-24 17:09:07 | ACTION_JS | PRODUCT_OVERVIEW | op=click_product_overview_tile, attempt=1/1
+2026-04-24 17:09:07 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:09 | PRODUCT_OVERVIEW_ACTION | PRODUCT_OVERVIEW | action=click-primary, match=text:Save & Continue to Gather Data
+2026-04-24 17:09:09 | ACTION_JS | PRODUCT_OVERVIEW | op=click_by_text, attempt=1/2
+2026-04-24 17:09:10 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:10 | WAIT_POLL_JS | PRODUCT_OVERVIEW | op=wait_condition, condition=gather_data, attempt=1/2
+2026-04-24 17:09:10 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:11 | DEVTOOLS_BRIDGE_REUSED | PRODUCT_OVERVIEW | mode=edge
+2026-04-24 17:09:12 | STEP | RAPPORT | Attempt 1/3
+2026-04-24 17:09:12 | DEVTOOLS_BRIDGE_REUSED | RAPPORT | mode=edge
+2026-04-24 17:09:13 | STATE_ATTEMPT | RAPPORT | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170913_494_rapport_entry-attempt-1.json
+2026-04-24 17:09:13 | STEP | RAPPORT | Filling Gather Data and lead vehicles.
+2026-04-24 17:09:13 | DEVTOOLS_BRIDGE_REUSED | RAPPORT | mode=edge
+2026-04-24 17:09:14 | STEP | GATHER_DATA | Waiting for GATHER DATA page.
+2026-04-24 17:09:14 | WAIT_POLL_JS | GATHER_DATA | op=wait_condition, condition=gather_data, attempt=1/2
+2026-04-24 17:09:14 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA | mode=edge
+2026-04-24 17:09:15 | ACTION_JS | GATHER_DATA | op=fill_gather_defaults, attempt=1/1
+2026-04-24 17:09:15 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA | mode=edge
+2026-04-24 17:09:16 | GATHER_DEFAULTS_APPLIED | GATHER_DATA | ageValue=16, emailPresent=0, ownershipValue=RE, homeTypeValue=SF, ageApplied=1, emailApplied=SKIP, ownershipApplied=1, homeTypeApplied=1
+2026-04-24 17:09:16 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA | mode=edge
+2026-04-24 17:09:17 | GATHER_DEFAULTS_STATUS | GATHER_DATA | ageFirstLicensed=16, email=, ownershipTypeValue=RE, ownershipTypeText=Rent, homeTypeValue=SF, homeTypeText=Single Family, licenseStateValue=FL, licenseStateText=FL, alerts=
+2026-04-24 17:09:17 | STEP | GATHER_DATA_VEHICLE_CHECK | Checking vehicle: 2019|GMC|ACADIA
+2026-04-24 17:09:17 | VEHICLE_NORMALIZED | GATHER_DATA_VEHICLE_CHECK | raw=2019 Gmc Acadia, displayKey=2019|GMC|ACADIA, year=2019, make=GMC, model=ACADIA, trimHint=
+2026-04-24 17:09:17 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:18 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=ensure_auto_start_quoting_state, attempt=1/1
+2026-04-24 17:09:18 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:18 | WAIT_POLL_JS | GATHER_DATA_VEHICLE_CHECK | op=wait_condition, condition=is_select_product, attempt=1/2
+2026-04-24 17:09:19 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:20 | TIMEOUT_CONDITION | GATHER_DATA_VEHICLE_CHECK | condition=is_select_product, timeoutMs=350
+2026-04-24 17:09:20 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 17:09:20 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:21 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 17:09:21 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:22 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 17:09:22 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:23 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 17:09:23 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:24 | ACTION_JS | GATHER_DATA_VEHICLE_CHECK | op=click_by_id, attempt=1/2
+2026-04-24 17:09:24 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:25 | WAIT_POLL_JS | GATHER_DATA_VEHICLE_CHECK | op=wait_condition, condition=to_select_product, attempt=1/2
+2026-04-24 17:09:25 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:26 | DEVTOOLS_BRIDGE_REUSED | GATHER_DATA_VEHICLE_CHECK | mode=edge
+2026-04-24 17:09:27 | STEP | SELECT_PRODUCT | Attempt 1/3
+2026-04-24 17:09:27 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:28 | STATE_ATTEMPT | SELECT_PRODUCT | attempt=1/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_170928_241_select-product_entry-attempt-1.json
+2026-04-24 17:09:28 | STEP | SELECT_PRODUCT | Applying Select Product defaults.
+2026-04-24 17:09:28 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:29 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=on_select_product, attempt=1/2
+2026-04-24 17:09:29 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:30 | ACTION_JS | SELECT_PRODUCT | op=set_select_product_defaults, attempt=1/1
+2026-04-24 17:09:30 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:31 | SELECT_PRODUCT_DEFAULTS_APPLIED | SELECT_PRODUCT | productSet=1, ratingStateSet=1, currentInsuredSet=1, currentInsuredMethod=already-selected, ownOrRentSet=0, ownOrRentMethod=no-radio-match
+2026-04-24 17:09:31 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:31 | SELECT_PRODUCT_STATUS | SELECT_PRODUCT | ratingStateValue=FL, ratingStateText=FL, productValue=AUTO, productText=Auto, currentInsuredValue=YES, currentInsuredSelected=1, currentInsuredSource=semantic, currentInsuredAlert=0, alerts=, continuePresent=1, continueEnabled=1
+2026-04-24 17:09:31 | ACTION_JS | SELECT_PRODUCT | op=click_by_id, attempt=1/2
+2026-04-24 17:09:32 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:32 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:33 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:34 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:34 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:35 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:35 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:36 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:36 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:37 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:38 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:38 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=5968
+2026-04-24 17:09:39 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:39 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:40 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:40 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:41 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:42 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:43 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:43 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:43 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=11000
+2026-04-24 17:09:44 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:44 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:45 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:45 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:46 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:47 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:48 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:48 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:48 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=16047
+2026-04-24 17:09:49 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:49 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:50 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:50 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:51 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:52 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:53 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:53 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:54 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=21078
+2026-04-24 17:09:54 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:54 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:55 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:55 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:56 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:57 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:58 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:58 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:09:59 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=26109
+2026-04-24 17:09:59 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:09:59 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:00 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:00 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:01 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:02 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:03 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:03 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:04 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=31125
+2026-04-24 17:10:04 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:04 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:05 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:05 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:06 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:07 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:08 | TIMEOUT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, timeoutMs=35000
+2026-04-24 17:10:08 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:09 | SELECT_PRODUCT_STATUS | SELECT_PRODUCT | ratingStateValue=FL, ratingStateText=FL, productValue=AUTO, productText=Auto, currentInsuredValue=YES, currentInsuredSelected=1, currentInsuredSource=semantic, currentInsuredAlert=1, alerts=Is the customer currently insured? - This is required || Select One FL * Rating State Select One Auto Boat Condo Home Motorcycle ORV Renters Roadside Membership Umbrella Policy * Select Product * Effective Date open date picker Subproducer Code 2217 NE 2ND PL, CAPE CORAL, FL, 33909 * Current Address Based on location, this customer qualifies for the latest product and experience. * Is the customer currently insured? Yes No This is required || Yes No || This is required, continuePresent=1, continueEnabled=1
+2026-04-24 17:10:09 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:10 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:10 | STATE_RESULT | SELECT_PRODUCT | ok=0, retryable=1, reason=Select Product Continue did not transition to the next quote state., observedState=SELECT_PRODUCT, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_171010_056_select-product_select-product-transition-timeout.json
+2026-04-24 17:10:11 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:12 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:12 | STATE_RETRY | SELECT_PRODUCT | attempt=1/3, observedState=SELECT_PRODUCT, reason=Select Product Continue did not transition to the next quote state., scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_171011_854_select-product_retry-1.json
+2026-04-24 17:10:13 | STEP | SELECT_PRODUCT | Attempt 2/3
+2026-04-24 17:10:14 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:14 | STATE_ATTEMPT | SELECT_PRODUCT | attempt=2/3, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_171014_864_select-product_entry-attempt-2.json
+2026-04-24 17:10:14 | STEP | SELECT_PRODUCT | Applying Select Product defaults.
+2026-04-24 17:10:15 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:15 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=on_select_product, attempt=1/2
+2026-04-24 17:10:16 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:16 | ACTION_JS | SELECT_PRODUCT | op=set_select_product_defaults, attempt=1/1
+2026-04-24 17:10:16 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:17 | SELECT_PRODUCT_DEFAULTS_APPLIED | SELECT_PRODUCT | productSet=1, ratingStateSet=1, currentInsuredSet=1, currentInsuredMethod=already-selected, ownOrRentSet=0, ownOrRentMethod=no-radio-match
+2026-04-24 17:10:17 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:18 | SELECT_PRODUCT_STATUS | SELECT_PRODUCT | ratingStateValue=FL, ratingStateText=FL, productValue=AUTO, productText=Auto, currentInsuredValue=YES, currentInsuredSelected=1, currentInsuredSource=semantic, currentInsuredAlert=1, alerts=Is the customer currently insured? - This is required || Select One FL * Rating State Select One Auto Boat Condo Home Motorcycle ORV Renters Roadside Membership Umbrella Policy * Select Product * Effective Date open date picker Subproducer Code 2217 NE 2ND PL, CAPE CORAL, FL, 33909 * Current Address Based on location, this customer qualifies for the latest product and experience. * Is the customer currently insured? Yes No This is required || Yes No || This is required, continuePresent=1, continueEnabled=1
+2026-04-24 17:10:18 | ACTION_JS | SELECT_PRODUCT | op=click_by_id, attempt=1/2
+2026-04-24 17:10:18 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:19 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:19 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:20 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:20 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:22 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:22 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:23 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:23 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:24 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:24 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:25 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=6078
+2026-04-24 17:10:25 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:26 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:27 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:27 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:28 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:28 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:29 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:29 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:30 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=11125
+2026-04-24 17:10:30 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:31 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:32 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:32 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:33 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:33 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:34 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:35 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:35 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=16281
+2026-04-24 17:10:36 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:36 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:37 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:37 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:38 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:38 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:39 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:40 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:40 | WAIT_CONDITION | SELECT_PRODUCT | condition=select_product_to_consumer, elapsedMs=21328
+2026-04-24 17:10:41 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:41 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:42 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:42 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:43 | WAIT_POLL_JS | SELECT_PRODUCT | op=wait_condition, condition=select_product_to_consumer, attempt=1/2
+2026-04-24 17:10:43 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:10:44 | STOP | SELECT_PRODUCT | manual-esc, lastStepAt=2026-04-24 17:10:14
+2026-04-24 17:10:44 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=wait_condition, attempt=1/2, reason=empty-result
+2026-04-24 17:10:44 | JS_ASSET_RETRY | SELECT_PRODUCT | op=wait_condition, attempt=1/2
+2026-04-24 17:10:44 | SELECT_PRODUCT_STATUS | SELECT_PRODUCT | ratingStateValue=, ratingStateText=, productValue=, productText=, currentInsuredValue=, currentInsuredSelected=, currentInsuredSource=, currentInsuredAlert=, alerts=, continuePresent=, continueEnabled=
+2026-04-24 17:10:44 | SELECT_PRODUCT_DEFAULTS_FAILED | SELECT_PRODUCT | Select Product status could not be read back from the page.
+2026-04-24 17:10:44 | STATE_RESULT | SELECT_PRODUCT | ok=0, retryable=1, reason=Select Product status could not be read back from the page., observedState=UNKNOWN, scan=C:\Users\sflzsl7k\Documents\Codex\Final_V5.5_refactored\logs\advisor_scan_20260424_171014_864_select-product_entry-attempt-2.json
+2026-04-24 17:10:44 | STATE_RETRY | SELECT_PRODUCT | attempt=2/3, observedState=UNKNOWN, reason=Select Product status could not be read back from the page., scan=
+2026-04-24 17:10:44 | STOP | SELECT_PRODUCT | manual-stop-detected-after-run, lastStepAt=2026-04-24 17:10:14
+2026-04-24 17:10:56 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:13:46 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:13:49 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=scan_current_page, attempt=1/2, reason=empty-result
+2026-04-24 17:13:49 | JS_ASSET_RETRY | SELECT_PRODUCT | op=scan_current_page, attempt=1/2
+2026-04-24 17:13:50 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:14:11 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:14:14 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=scan_current_page, attempt=1/2, reason=empty-result
+2026-04-24 17:14:14 | JS_ASSET_RETRY | SELECT_PRODUCT | op=scan_current_page, attempt=1/2
+2026-04-24 17:14:15 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:14:30 | DEVTOOLS_BRIDGE_REUSED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:14:33 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=scan_current_page, attempt=1/2, reason=empty-result
+2026-04-24 17:14:33 | JS_ASSET_RETRY | SELECT_PRODUCT | op=scan_current_page, attempt=1/2
+2026-04-24 17:14:34 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:14:38 | DEVTOOLS_BRIDGE_FAILED | SELECT_PRODUCT | op=scan_current_page, attempt=2/2, reason=empty-result
+2026-04-24 17:14:38 | JS_ASSET_EMPTY | SELECT_PRODUCT | op=scan_current_page, attempts=2
+2026-04-24 17:14:43 | DEVTOOLS_BRIDGE_OPENED | SELECT_PRODUCT | mode=edge
+2026-04-24 17:54:23 | STOP | UNKNOWN | manual-esc

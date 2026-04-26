@@ -1,0 +1,18 @@
+﻿{
+    "label":  "validate-pricing-tests",
+    "exePath":  "C:\\Users\\sflzsl7k\\AppData\\Local\\Programs\\AutoHotkey\\v2\\AutoHotkey64.exe",
+    "arguments":  [
+                      "/ErrorStdOut",
+                      "/Validate",
+                      "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored\\tests\\pricing_tests.ahk"
+                  ],
+    "workingDirectory":  "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored",
+    "timeoutSeconds":  5,
+    "timedOut":  false,
+    "status":  "exited",
+    "exitCode":  0,
+    "durationMs":  62,
+    "stdout":  "",
+    "stderr":  "",
+    "errorMessage":  ""
+}

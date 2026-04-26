@@ -1,0 +1,17 @@
+﻿{
+    "label":  "pricing-only-batch-2car-smoke",
+    "exePath":  "C:\\Users\\sflzsl7k\\AppData\\Local\\Programs\\AutoHotkey\\v2\\AutoHotkey64.exe",
+    "arguments":  [
+                      "/ErrorStdOut",
+                      "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored\\logs\\pricing_only_batch_2car_smoke.ahk"
+                  ],
+    "workingDirectory":  "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored",
+    "timeoutSeconds":  5,
+    "timedOut":  false,
+    "status":  "exited",
+    "exitCode":  0,
+    "durationMs":  81,
+    "stdout":  "",
+    "stderr":  "",
+    "errorMessage":  ""
+}

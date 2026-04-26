@@ -1,0 +1,18 @@
+﻿{
+    "label":  "validate-message-tests",
+    "exePath":  "C:\\Users\\sflzsl7k\\AppData\\Local\\Programs\\AutoHotkey\\v2\\AutoHotkey64.exe",
+    "arguments":  [
+                      "/ErrorStdOut",
+                      "/Validate",
+                      "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored\\tests\\message_tests.ahk"
+                  ],
+    "workingDirectory":  "C:\\Users\\sflzsl7k\\Documents\\Codex\\Final_V5.5_refactored",
+    "timeoutSeconds":  5,
+    "timedOut":  true,
+    "status":  "timeout",
+    "exitCode":  -1,
+    "durationMs":  5309,
+    "stdout":  "",
+    "stderr":  "",
+    "errorMessage":  ""
+}
