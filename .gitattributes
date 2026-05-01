@@ -1,0 +1,1 @@
+data/vehicle_db_compact.json filter=lfs diff=lfs merge=lfs -text
