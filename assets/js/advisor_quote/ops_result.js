@@ -1,0 +1,4359 @@
+copy(String((() => {
+  const op = @@OP@@;
+  const args = @@ARGS@@ || {};
+  try {
+
+  const safe = (v) => String(v ?? '');
+  const compact = (v, max = 240) => safe(v).replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  const lower = (v) => safe(v).toLowerCase();
+  const normUpper = (v) => safe(v).toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const normLower = (v) => safe(v).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cssEscape = (value) => {
+    const text = safe(value);
+    if (globalThis.CSS && typeof CSS.escape === 'function') return CSS.escape(text);
+    return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  };
+  const isAriaDisabled = (el) => lower(el && el.getAttribute && el.getAttribute('aria-disabled')) === 'true';
+  const isDisabledLike = (el) => {
+    if (!el) return true;
+    if (el.disabled) return true;
+    if (el.hidden) return true;
+    if (isAriaDisabled(el)) return true;
+    const disabledAncestor = el.closest && el.closest('[aria-disabled="true"]');
+    return !!disabledAncestor;
+  };
+  const visible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return r.width > 0
+      && r.height > 0
+      && cs.display !== 'none'
+      && cs.visibility !== 'hidden'
+      && cs.opacity !== '0'
+      && cs.pointerEvents !== 'none'
+      && !el.hidden;
+  };
+  const findByStableId = (id) => {
+    const key = safe(id);
+    if (!key) return null;
+    return document.getElementById(key)
+      || document.querySelector(`[data-uid="${cssEscape(key)}"]`)
+      || document.querySelector(`[name="${cssEscape(key)}"]`);
+  };
+  const dispatchPointerSequence = (el) => {
+    const common = { bubbles: true, cancelable: true, composed: true, button: 0, buttons: 1 };
+    try { el.dispatchEvent(new PointerEvent('pointerdown', common)); } catch {}
+    try { el.dispatchEvent(new MouseEvent('mousedown', common)); } catch {}
+    try { el.dispatchEvent(new PointerEvent('pointerup', common)); } catch {}
+    try { el.dispatchEvent(new MouseEvent('mouseup', common)); } catch {}
+  };
+  const clickEl = (el, options = {}) => {
+    if (!el || !visible(el) || isDisabledLike(el)) return false;
+    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
+    try { el.focus({ preventScroll: true }); } catch {
+      try { el.focus(); } catch {}
+    }
+    const tag = safe(el.tagName);
+    const role = lower(el.getAttribute && el.getAttribute('role'));
+    const needsPointerSequence = options.preClickSequence === true
+      || (!/^(BUTTON|A|INPUT|LABEL|OPTION|SELECT|TEXTAREA)$/i.test(tag)
+        && /^(button|radio|checkbox|option|switch|tab)$/.test(role));
+    if (needsPointerSequence)
+      dispatchPointerSequence(el);
+    try {
+      el.click();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const getValueSetter = (el) => {
+    if (!el) return null;
+    let proto = Object.getPrototypeOf(el);
+    while (proto) {
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc && typeof desc.set === 'function') return desc.set;
+      proto = Object.getPrototypeOf(proto);
+    }
+    return null;
+  };
+  const fireFieldEvents = (el) => {
+    if (!el) return;
+    try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+    try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    try { el.dispatchEvent(new Event('blur', { bubbles: true })); } catch {}
+  };
+  const setNativeValue = (el, value) => {
+    if (!el) return false;
+    const setter = getValueSetter(el);
+    try {
+      if (setter) setter.call(el, safe(value));
+      else el.value = safe(value);
+      return true;
+    } catch {
+      try {
+        el.value = safe(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+  const getText = (node) => {
+    if (typeof node === 'string') return safe(node).replace(/\s+/g, ' ').trim();
+    return safe(node ? (node.innerText || node.textContent || '') : '').replace(/\s+/g, ' ').trim();
+  };
+  const setInputValue = (el, value, onlyIfBlank = false) => {
+    if (!el || !visible(el) || isDisabledLike(el) || el.readOnly) return false;
+    const current = safe(el.value).trim();
+    if (onlyIfBlank && current !== '') return true;
+    try { el.focus(); } catch {}
+    if (!setNativeValue(el, value)) return false;
+    fireFieldEvents(el);
+    return true;
+  };
+  const setSelectValue = (el, value, onlyIfBlank = false) => {
+    if (!el || !visible(el) || isDisabledLike(el)) return false;
+    const current = safe(el.value).trim();
+    if (onlyIfBlank && current !== '') return true;
+    const wanted = safe(value).trim();
+    let option = Array.from(el.options || []).find((opt) => safe(opt.value) === wanted) || null;
+    if (!option) {
+      const wantedText = normUpper(wanted);
+      option = Array.from(el.options || []).find((opt) => {
+        const text = normUpper(opt.text || opt.innerText || '');
+        return !!wantedText && (text === wantedText || text.includes(wantedText));
+      }) || null;
+    }
+    if (!option) return false;
+    try { el.focus(); } catch {}
+    if (!setNativeValue(el, option.value)) return false;
+    try { el.value = option.value; } catch {}
+    fireFieldEvents(el);
+    return safe(el.value) === safe(option.value);
+  };
+  const bodyText = () => lower((document.body && document.body.innerText) || '');
+  const pageUrl = () => safe(location.href || '');
+  const normalizeDigits = (value) => safe(value).replace(/\D/g, '');
+  const normalizePhoneKey = (value) => {
+    const digits = normalizeDigits(value);
+    return digits.length > 10 ? digits.slice(-10) : digits;
+  };
+  const normalizeDobKey = (value) => normalizeDigits(value);
+  const normalizeEmailKey = (value) => lower(value).trim();
+  const normalizeAddressText = (value) => normUpper(value)
+    .replace(/\b(APT|APARTMENT|UNIT|STE|SUITE)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const includesText = (haystack, expected) => {
+    const needle = lower(expected);
+    return !!needle && haystack.includes(needle);
+  };
+  const matchesNormalizedValue = (actual, wanted) => {
+    const actualNorm = normUpper(actual);
+    const wantedNorm = normUpper(wanted);
+    return !!wantedNorm && (actualNorm === wantedNorm || actualNorm.includes(wantedNorm));
+  };
+  const exactNormalizedValue = (actual, wanted) => {
+    const actualNorm = normUpper(actual);
+    const wantedNorm = normUpper(wanted);
+    return !!wantedNorm && actualNorm === wantedNorm;
+  };
+  const linesOut = (pairs = {}) => Object.entries(pairs).map(([k, v]) => `${k}=${safe(v)}`).join('\n');
+  const isSuccessValue = (v, allowSkip = false) => {
+    const raw = safe(v).toUpperCase();
+    return v === true || raw === '1' || raw === 'OK' || (allowSkip && raw === 'SKIP');
+  };
+  const normalizeCheck = (check) => {
+    if (typeof check === 'boolean')
+      return { name: '', ok: check, allowSkip: false };
+    if (!check || typeof check !== 'object')
+      return { name: '', ok: false, allowSkip: false };
+    return {
+      name: safe(check.name),
+      ok: ('ok' in check) ? !!check.ok : isSuccessValue(check.value, !!check.allowSkip),
+      allowSkip: !!check.allowSkip,
+      value: check.value
+    };
+  };
+  const resultFromChecks = (requiredChecks = [], optionalChecks = []) => {
+    const required = requiredChecks.map(normalizeCheck);
+    const optional = optionalChecks.map(normalizeCheck);
+    if (!required.every((check) => check.ok))
+      return 'FAILED';
+    return optional.every((check) => check.ok) ? 'OK' : 'PARTIAL';
+  };
+  const failedCheckNames = (checks = []) => checks
+    .map(normalizeCheck)
+    .filter((check) => !check.ok && check.name)
+    .map((check) => check.name);
+  const lineResult = (fields = {}) => {
+    const out = { ...fields };
+    if (Array.isArray(out.failedFields))
+      out.failedFields = out.failedFields.join(',');
+    const result = safe(out.result).toUpperCase();
+    if (result === 'FAILED' || result === 'PARTIAL' || result === 'ERROR') {
+      if (!('op' in out)) out.op = op;
+      if (!('method' in out)) out.method = '';
+      if (!('alerts' in out)) out.alerts = collectVisibleAlerts().join(' || ');
+      if (!('url' in out)) out.url = pageUrl();
+      out.failedFields = compact(out.failedFields || '', 240);
+      out.alerts = compact(out.alerts || '', 240);
+      out.url = compact(out.url || '', 240);
+      out.method = compact(out.method || '', 240);
+    }
+    return linesOut(out);
+  };
+  const getUrlArgs = (source = {}) => {
+    const urls = source.urls || {};
+    return {
+      rapportContains: safe(urls.rapportContains || source.rapportContains),
+      customerSummaryContains: safe(urls.customerSummaryContains || source.customerSummaryContains),
+      productOverviewContains: safe(urls.productOverviewContains || source.productOverviewContains),
+      selectProductContains: safe(urls.selectProductContains || source.selectProductContains),
+      ascProductContains: safe(urls.ascProductContains || source.ascProductContains)
+    };
+  };
+  const getTextArgs = (source = {}) => {
+    const texts = source.texts || {};
+    return {
+      duplicateHeading: safe(texts.duplicateHeading || source.duplicateHeading),
+      customerSummaryStartHereText: safe(texts.customerSummaryStartHereText || source.customerSummaryStartHereText),
+      customerSummaryQuoteHistoryText: safe(texts.customerSummaryQuoteHistoryText || source.customerSummaryQuoteHistoryText),
+      customerSummaryAssetsDetailsText: safe(texts.customerSummaryAssetsDetailsText || source.customerSummaryAssetsDetailsText),
+      productOverviewHeading: safe(texts.productOverviewHeading || source.productOverviewHeading),
+      productOverviewAutoTile: safe(texts.productOverviewAutoTile || source.productOverviewAutoTile),
+      productOverviewContinueText: safe(texts.productOverviewContinueText || source.productOverviewContinueText),
+      incidentsHeading: safe(texts.incidentsHeading || source.incidentsHeading)
+    };
+  };
+  const getSelectorArgs = (source = {}) => {
+    const selectors = source.selectors || {};
+    return {
+      advisorQuotingButtonId: safe(selectors.advisorQuotingButtonId || source.advisorQuotingButtonId),
+      searchCreateNewProspectId: safe(selectors.searchCreateNewProspectId || source.searchCreateNewProspectId),
+      beginQuotingContinueId: safe(selectors.beginQuotingContinueId || source.beginQuotingContinueId),
+      sidebarAddProductId: safe(selectors.sidebarAddProductId || source.sidebarAddProductId),
+      quoteBlockAddProductId: safe(selectors.quoteBlockAddProductId || source.quoteBlockAddProductId),
+      createQuotesButtonId: safe(selectors.createQuotesButtonId || source.createQuotesButtonId),
+      selectProductProductId: safe(selectors.selectProductProductId || source.selectProductProductId),
+      selectProductRatingStateId: safe(selectors.selectProductRatingStateId || source.selectProductRatingStateId),
+      selectProductContinueId: safe(selectors.selectProductContinueId || source.selectProductContinueId)
+    };
+  };
+  const hasStableVisible = (id) => {
+    const el = findByStableId(id);
+    return !!el && visible(el);
+  };
+  const isDuplicatePage = (source = {}) => {
+    const texts = getTextArgs(source);
+    return includesText(bodyText(), texts.duplicateHeading || 'This Prospect May Already Exist');
+  };
+  const countIncludesText = (haystack, needle) => {
+    const have = lower(haystack);
+    const wanted = lower(needle);
+    if (!wanted) return 0;
+    let count = 0;
+    let index = have.indexOf(wanted);
+    while (index >= 0) {
+      count += 1;
+      index = have.indexOf(wanted, index + wanted.length);
+    }
+    return count;
+  };
+  const customerSummaryStartHereTextMatches = (value, expectedText) => {
+    const normalized = normUpper(value);
+    if (!normalized.includes('START HERE')) return false;
+    const expected = normUpper(expectedText);
+    if (expected && normalized.includes(expected)) return true;
+    return /\bPRE\b.*\bFILL\b/.test(normalized) || normalized === 'START HERE';
+  };
+  const customerSummaryActionText = (el) => compact(getText(el) || safe(el && el.value), 240);
+  const customerSummaryOverviewStatus = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const normalizedBody = normUpper(text);
+    const urls = getUrlArgs(source);
+    const texts = getTextArgs(source);
+    const customerSummaryContains = urls.customerSummaryContains || '/apps/customer-summary/';
+    const startHereText = texts.customerSummaryStartHereText || 'START HERE (Pre-fill included)';
+    const quoteHistoryText = texts.customerSummaryQuoteHistoryText || 'Quote History';
+    const assetsDetailsText = texts.customerSummaryAssetsDetailsText || 'Assets Details';
+    const extraAnchorTexts = ['Contact Information', 'Family Members', 'Net Worth'];
+    const urlMatched = !!customerSummaryContains && url.includes(customerSummaryContains);
+    const overviewMatched = url.includes('/overview');
+    const startHereMatched = includesText(text, startHereText) || customerSummaryStartHereTextMatches(text, startHereText);
+    const quoteHistoryMatched = includesText(text, quoteHistoryText);
+    const assetsDetailsMatched = includesText(text, assetsDetailsText);
+    const extraAnchorMatched = extraAnchorTexts.some((anchor) => normalizedBody.includes(normUpper(anchor)));
+    const summaryAnchorMatched = quoteHistoryMatched || assetsDetailsMatched || extraAnchorMatched;
+    const interactiveStartHereCount = Array.from(document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit],[tabindex]'))
+      .filter(visible)
+      .filter((node) => customerSummaryStartHereTextMatches(customerSummaryActionText(node), startHereText))
+      .length;
+    const startHereCount = Math.max(countIncludesText(text, startHereText), interactiveStartHereCount);
+    const routeMatched = urlMatched && overviewMatched;
+    const evidence = [];
+    const missing = [];
+    if (urlMatched) evidence.push('url:/apps/customer-summary/');
+    else missing.push('url:/apps/customer-summary/');
+    if (overviewMatched) evidence.push('url:/overview');
+    else missing.push('url:/overview');
+    if (startHereMatched) evidence.push('text:START HERE');
+    else missing.push('text:START HERE');
+    if (quoteHistoryMatched) evidence.push('text:Quote History');
+    if (assetsDetailsMatched) evidence.push('text:Assets Details');
+    if (extraAnchorMatched) evidence.push('text:summary-anchor-extra');
+    if (!summaryAnchorMatched) missing.push('text:Quote History|Assets Details|Contact Information|Family Members|Net Worth');
+
+    let result = 'NOT_DETECTED';
+    let confidence = 'none';
+    let runtimeState = '';
+    if (routeMatched && startHereMatched && summaryAnchorMatched) {
+      result = 'DETECTED';
+      confidence = 'high';
+      runtimeState = 'CUSTOMER_SUMMARY_OVERVIEW';
+    } else if (routeMatched && startHereMatched) {
+      result = 'PARTIAL';
+      confidence = 'medium';
+      runtimeState = 'CUSTOMER_SUMMARY_OVERVIEW';
+    } else if (routeMatched) {
+      result = 'PARTIAL';
+      confidence = 'low';
+    }
+
+    return {
+      result,
+      runtimeState,
+      confidence,
+      urlMatched: urlMatched ? '1' : '0',
+      overviewMatched: overviewMatched ? '1' : '0',
+      startHereMatched: startHereMatched ? '1' : '0',
+      quoteHistoryMatched: quoteHistoryMatched ? '1' : '0',
+      assetsDetailsMatched: assetsDetailsMatched ? '1' : '0',
+      summaryAnchorMatched: summaryAnchorMatched ? '1' : '0',
+      startHereCount: String(startHereCount),
+      evidence: compact(evidence.join('|'), 240),
+      missing: compact(missing.join('|'), 240),
+      url: compact(url, 240)
+    };
+  };
+  const isCustomerSummaryOverviewPage = (source = {}) => {
+    const status = customerSummaryOverviewStatus(source);
+    return status.urlMatched === '1'
+      && status.overviewMatched === '1'
+      && status.startHereMatched === '1'
+      && (status.confidence === 'high' || status.confidence === 'medium');
+  };
+  const findCustomerSummaryStartHereTarget = (source = {}) => {
+    const status = customerSummaryOverviewStatus(source);
+    if (status.urlMatched !== '1' || status.overviewMatched !== '1')
+      return { status, target: null, reason: 'no-customer-summary' };
+    const startHereText = (getTextArgs(source).customerSummaryStartHereText || 'START HERE (Pre-fill included)');
+    const candidates = Array.from(document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit],[tabindex]'))
+      .filter(visible)
+      .filter((node) => !isDisabledLike(node))
+      .map((node) => {
+        const textValue = customerSummaryActionText(node);
+        return { node, text: textValue, normalized: normUpper(textValue) };
+      })
+      .filter(({ text, normalized }) => customerSummaryStartHereTextMatches(text, startHereText)
+        && !normalized.includes('ADD PRODUCT'));
+    if (!candidates.length) return { status, target: null, reason: 'no-start-here' };
+    const score = ({ node, normalized }) => {
+      const tag = safe(node.tagName).toUpperCase();
+      let value = 0;
+      if (tag === 'BUTTON' || tag === 'INPUT') value += 40;
+      if ((node.getAttribute && lower(node.getAttribute('role'))) === 'button') value += 30;
+      if (tag === 'A') value += 20;
+      if (/\bPRE\b.*\bFILL\b/.test(normalized)) value += 10;
+      if (normalized === normUpper(startHereText)) value += 5;
+      return value;
+    };
+    candidates.sort((a, b) => score(b) - score(a));
+    return { status, target: candidates[0].node, reason: 'matched-start-here' };
+  };
+  const isProductOverviewPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const texts = getTextArgs(source);
+    const selectors = getSelectorArgs(source);
+    const byUrl = !!urls.productOverviewContains && url.includes(urls.productOverviewContains);
+    const byText = includesText(text, texts.productOverviewHeading || 'Select Product')
+      && includesText(text, texts.productOverviewAutoTile || 'Auto')
+      && includesText(text, texts.productOverviewContinueText || 'Save & Continue to Gather Data')
+      && !hasStableVisible(selectors.beginQuotingContinueId);
+    return byUrl && byText && !isCustomerSummaryOverviewPage(source);
+  };
+  const isSelectProductFormPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const texts = getTextArgs(source);
+    const selectors = getSelectorArgs(source);
+    const hasFormControls = hasStableVisible(selectors.selectProductProductId)
+      || hasStableVisible(selectors.selectProductRatingStateId)
+      || hasStableVisible(selectors.selectProductContinueId);
+    const byUrl = !!urls.selectProductContains && url.includes(urls.selectProductContains);
+    const byText = includesText(text, texts.productOverviewHeading || 'Select Product') && hasFormControls;
+    return !isProductOverviewPage(source) && (byUrl || byText);
+  };
+  const isConsumerReportsPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const byUrl = !!urls.ascProductContains && url.includes(urls.ascProductContains);
+    const yesBtn = findByStableId(source.consumerReportsConsentYesId || 'orderReportsConsent-yes-btn');
+    return byUrl && (includesText(text, 'order consumer reports') || !!yesBtn);
+  };
+  const hasDriverVehicleAnchors = () => hasStableVisible('profile-summary-submitBtn')
+    || Array.from(document.querySelectorAll('button[id$="-add"],button[id$="-addToQuote"],button[id$="-remove"]')).some((el) => visible(el));
+  const isDriversAndVehiclesPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const byUrl = !!urls.ascProductContains && url.includes(urls.ascProductContains);
+    return byUrl && includesText(text, 'drivers and vehicles') && hasDriverVehicleAnchors();
+  };
+  const isIncidentsPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const texts = getTextArgs(source);
+    const byUrl = !!urls.ascProductContains && url.includes(urls.ascProductContains);
+    return byUrl
+      && includesText(text, texts.incidentsHeading || 'Incidents')
+      && (hasStableVisible('CONTINUE_OFFER-btn') || includesText(text, 'animal or road debris'));
+  };
+  const hasQuoteLandingAnchor = (text) => {
+    const value = lower(text);
+    return value.includes('coverages')
+      || value.includes('personalized quote')
+      || value.includes('quote details')
+      || value.includes('your quote');
+  };
+  const isQuoteLandingPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const byUrl = !!urls.ascProductContains && url.includes(urls.ascProductContains);
+    if (!byUrl) return false;
+    if (isConsumerReportsPage(source) || isDriversAndVehiclesPage(source) || isIncidentsPage(source))
+      return false;
+    return hasQuoteLandingAnchor(text);
+  };
+  const isAscProductPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const byUrl = !!urls.ascProductContains && url.includes(urls.ascProductContains);
+    return byUrl && (
+      isConsumerReportsPage(source)
+      || isDriversAndVehiclesPage(source)
+      || isIncidentsPage(source)
+      || hasQuoteLandingAnchor(text)
+    );
+  };
+  const isGatherDataPage = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const urls = getUrlArgs(source);
+    const hasVehicleField = !!document.querySelector('input[id*="ConsumerData.Assets.Vehicles["],select[id*="ConsumerData.Assets.Vehicles["]');
+    const hasGatherMarkers = text.includes('add car or truck') || hasVehicleField;
+    return (!!urls.rapportContains && url.includes(urls.rapportContains))
+      || (!isProductOverviewPage(source) && text.includes('gather data') && hasGatherMarkers);
+  };
+  const isOverviewTileLike = (node) => {
+    if (!node || !visible(node)) return false;
+    const cls = lower(node.className || '');
+    const role = lower(node.getAttribute && node.getAttribute('role'));
+    return /\bl-tile\b|tile|card|product|choice|option|selectable/.test(cls)
+      || role === 'button'
+      || role === 'radio'
+      || role === 'option';
+  };
+  const isOverviewGridColumnOnly = (node) => {
+    const cls = lower(node && node.className || '');
+    return /\bl-grid__col\b/.test(cls) && !/\bl-tile\b|tile|card|product|choice|option|selectable/.test(cls);
+  };
+  const isOverviewInteractive = (node) => {
+    if (!node || !visible(node)) return false;
+    const tag = safe(node.tagName);
+    const role = lower(node.getAttribute && node.getAttribute('role'));
+    const tabIndex = Number(node.tabIndex);
+    return tag === 'BUTTON'
+      || tag === 'A'
+      || tag === 'LABEL'
+      || role === 'button'
+      || role === 'radio'
+      || role === 'option'
+      || tabIndex >= 0;
+  };
+  const overviewProductLabelPatterns = [
+    { label: 'auto', re: /\bauto\b/i },
+    { label: 'home', re: /\bhome\b/i },
+    { label: 'renters', re: /\brenters\b/i },
+    { label: 'pup', re: /\bpup\b/i },
+    { label: 'condo', re: /\bcondo\b/i },
+    { label: 'motorcycle', re: /\bmotorcycle\b/i },
+    { label: 'orv', re: /\borv\b/i },
+    { label: 'boat', re: /\bboat\b/i },
+    { label: 'motorhome', re: /\bmotor\s*home\b/i },
+    { label: 'landlords', re: /\blandlords?\b/i },
+    { label: 'manufacturedhome', re: /\bmanufactured\s*home\b/i }
+  ];
+  const overviewProductLabelCount = (text) => {
+    const value = safe(text);
+    if (!value) return 0;
+    return overviewProductLabelPatterns.reduce((count, entry) => count + (entry.re.test(value) ? 1 : 0), 0);
+  };
+  const overviewIsBroadProductContainer = (node, wantedText) => {
+    if (!node) return false;
+    const text = getText(node);
+    if (!text || !normLower(text).includes(normLower(wantedText))) return false;
+    return overviewProductLabelCount(text) > 1;
+  };
+  const overviewTileCandidateRank = (node) => {
+    const cls = lower(node && node.className || '');
+    const role = lower(node && node.getAttribute && node.getAttribute('role'));
+    if (/\bl-tile\b|c-tile|product-card|product-tile/.test(cls)) return 0;
+    if (/tile|card|product|choice|option|selectable/.test(cls)) return 1;
+    if (role === 'button' || role === 'radio' || role === 'option') return 2;
+    if (isOverviewInteractive(node)) return 3;
+    return 4;
+  };
+  const overviewTextMatchesProduct = (text, wantedText) => {
+    const textNorm = normLower(text);
+    const wanted = normLower(wantedText);
+    if (!wanted) return false;
+    if (overviewProductLabelCount(text) > 1) return false;
+    return textNorm === wanted || (textNorm.startsWith(wanted) && textNorm.length <= 80);
+  };
+  const findOverviewTileContainerFromSeed = (seed, wantedText) => {
+    let best = null;
+    let rejectedBroadContainer = false;
+    const consider = (node) => {
+      if (!node || !visible(node)) return false;
+      const text = getText(node);
+      if (text && !normLower(text).includes(normLower(wantedText))) return false;
+      if (isOverviewGridColumnOnly(node)) return false;
+      if (overviewIsBroadProductContainer(node, wantedText)) {
+        rejectedBroadContainer = true;
+        return false;
+      }
+      if (isOverviewTileLike(node)) {
+        best = node;
+        return /\bl-tile\b/.test(lower(node.className || ''));
+      }
+      return false;
+    };
+    for (let depth = 0, current = seed; depth < 8 && current; depth++, current = current.parentElement) {
+      if (consider(current))
+        return { container: best, rejectedBroadContainer };
+    }
+    if (seed && seed.querySelector) {
+      const descendantTile = Array.from(seed.querySelectorAll('.l-tile,.c-tile,.product-card,.product-tile,[role=button],[role=radio],[role=option]'))
+        .filter((node) => visible(node) && normLower(getText(node)).includes(normLower(wantedText)))
+        .filter((node) => !isOverviewGridColumnOnly(node))
+        .filter((node) => {
+          const broad = overviewIsBroadProductContainer(node, wantedText);
+          if (broad) rejectedBroadContainer = true;
+          return !broad;
+        })
+        .sort((a, b) => overviewTileCandidateRank(a) - overviewTileCandidateRank(b) || getText(a).length - getText(b).length)[0] || null;
+      if (descendantTile) return { container: descendantTile, rejectedBroadContainer };
+    }
+    if (!best && seed && !overviewIsBroadProductContainer(seed, wantedText) && !isOverviewGridColumnOnly(seed))
+      best = seed;
+    return { container: best, rejectedBroadContainer };
+  };
+  const findOverviewClickableTarget = (tileContainer, seed, wantedText) => {
+    const candidates = [];
+    if (isOverviewInteractive(tileContainer)) candidates.push(tileContainer);
+    if (tileContainer && tileContainer.querySelectorAll) {
+      candidates.push(...Array.from(tileContainer.querySelectorAll('button,a,label,[role=button],[role=radio],[role=option],[tabindex]'))
+        .filter(visible)
+        .filter((node) => {
+          const text = getText(node);
+          return !text || overviewTextMatchesProduct(text, wantedText) || normLower(text).includes(normLower(wantedText));
+        }));
+    }
+    if (isOverviewInteractive(seed)) candidates.push(seed);
+    const picked = candidates.find((node) => node && !isDisabledLike(node)) || null;
+    return picked || tileContainer || seed;
+  };
+  const findOverviewProductTile = (wantedText) => {
+    const wanted = normLower(wantedText);
+    if (!wanted) return null;
+    const seeds = Array.from(document.querySelectorAll('button,a,[role=button],[role=radio],[role=option],label,[tabindex],div,span,h1,h2,h3,h4,h5,p,li'))
+      .filter(visible)
+      .map((node) => ({ node, text: getText(node) }))
+      .filter(({ text }) => overviewTextMatchesProduct(text, wantedText))
+      .filter(({ text }) => {
+        const textNorm = normLower(text);
+        return !textNorm.includes('add product')
+          && !textNorm.includes('start quote')
+          && !textNorm.includes('create quotes')
+          && !textNorm.includes('order reports');
+      })
+      .sort((a, b) => a.text.length - b.text.length);
+    for (const { node: seed, text } of seeds) {
+      const resolved = findOverviewTileContainerFromSeed(seed, wantedText);
+      const tileContainer = resolved.container;
+      if (!tileContainer || isOverviewGridColumnOnly(tileContainer)) continue;
+      const clickableTarget = findOverviewClickableTarget(tileContainer, seed, wantedText);
+      return {
+        textNode: seed,
+        tileContainer,
+        clickableTarget,
+        tileText: compact(getText(tileContainer) || text, 160),
+        tileContainerText: compact(getText(tileContainer) || text, 240),
+        tileProductLabelCount: String(overviewProductLabelCount(getText(tileContainer))),
+        rejectedBroadContainer: resolved.rejectedBroadContainer ? '1' : '0',
+        method: clickableTarget && clickableTarget !== tileContainer ? 'interactive-descendant' : 'tile-container',
+        resolverMethod: 'a3-text-seed-tile-card-target',
+        textSeedTag: safe(seed.tagName),
+        textSeedText: compact(text, 120),
+        textSeedClass: compact(safe(seed.className), 160)
+      };
+    }
+    return null;
+  };
+  const findOverviewProductTileTarget = (wantedText) => {
+    const tile = findOverviewProductTile(wantedText);
+    return tile ? (tile.clickableTarget || tile.tileContainer || tile.textNode) : null;
+  };
+  const summarizeOverviewTileNode = (node) => {
+    if (!node) return '';
+    const tag = safe(node.tagName).toLowerCase();
+    const id = safe(node.id);
+    const role = safe(node.getAttribute && node.getAttribute('role'));
+    const cls = compact(safe(node.className), 80);
+    return [tag, id ? `#${id}` : '', role ? `[role=${role}]` : '', cls ? `.${cls.replace(/\s+/g, '.')}` : ''].join('');
+  };
+  const overviewSelectedClassRe = /(^|[\s_-])((is|c|l-tile|c-tile)-)?(selected|active|checked|chosen|current|pressed|on)([\s_-]|$)|--selected|--active|--checked/i;
+  const overviewStateSelectedRe = /(^|[\s_-])(selected|active|checked|chosen|current|pressed|on|true)([\s_-]|$)/i;
+  const overviewTileSelectionEvidence = (tile, productText) => {
+    const target = tile && (tile.clickableTarget || tile.tileContainer || tile.textNode);
+    const tileContainer = tile && (tile.tileContainer || target);
+    const wanted = normLower(productText);
+    const nodes = [];
+    const addNode = (node, depth, source) => {
+      if (!node || !visible(node)) return;
+      if (nodes.some((entry) => entry.node === node)) return;
+      const text = compact(getText(node), 360);
+      if (source === 'target' || source === 'tile' || (text && text.length <= 420 && (!wanted || normLower(text).includes(wanted))))
+        nodes.push({ node, depth, source });
+    };
+    addNode(target, 0, 'target');
+    addNode(tileContainer, 0, 'tile');
+    for (let depth = 1, current = tileContainer && tileContainer.parentElement; depth < 6 && current; depth++, current = current.parentElement) {
+      addNode(current, depth, 'ancestor');
+    }
+    const hasSelectedClass = (node) => overviewSelectedClassRe.test(safe(node.className || ''));
+    const hasSelectedState = (node) => overviewStateSelectedRe.test(safe(node.getAttribute && node.getAttribute('data-state')));
+    let checkedDescendant = '';
+    let selectedDescendant = '';
+    let checkmarkEvidence = '';
+    const ancestorSummary = () => nodes.filter(({ source }) => source === 'ancestor').map(({ node: item }) => summarizeOverviewTileNode(item)).filter(Boolean).join(' > ');
+    for (const { node, depth, source } of nodes) {
+      const prefix = source === 'target' ? 'target' : (source === 'tile' ? 'tile-container' : `ancestor-${depth}`);
+      if (/^(INPUT|OPTION)$/i.test(safe(node.tagName)) && 'checked' in node && node.checked)
+        return { selected: true, evidence: `${prefix}-checked`, selectedClassSource: '', selectedAriaSource: '', selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      if (safe(node.getAttribute && node.getAttribute('aria-selected')) === 'true')
+        return { selected: true, evidence: `${prefix}-aria-selected`, selectedClassSource: '', selectedAriaSource: summarizeOverviewTileNode(node), selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      if (safe(node.getAttribute && node.getAttribute('aria-checked')) === 'true')
+        return { selected: true, evidence: `${prefix}-aria-checked`, selectedClassSource: '', selectedAriaSource: summarizeOverviewTileNode(node), selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      if (safe(node.getAttribute && node.getAttribute('aria-pressed')) === 'true')
+        return { selected: true, evidence: `${prefix}-aria-pressed`, selectedClassSource: '', selectedAriaSource: summarizeOverviewTileNode(node), selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      if (hasSelectedClass(node))
+        return { selected: true, evidence: `${prefix}-class`, selectedClassSource: summarizeOverviewTileNode(node), selectedAriaSource: '', selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      if (hasSelectedState(node))
+        return { selected: true, evidence: `${prefix}-data-state`, selectedClassSource: '', selectedAriaSource: '', selectedDataStateSource: summarizeOverviewTileNode(node), checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      const checked = node.querySelector && node.querySelector('input:checked');
+      if (checked) {
+        checkedDescendant = summarizeOverviewTileNode(checked) || 'input:checked';
+        return { selected: true, evidence: `${prefix}-checked-descendant`, selectedClassSource: '', selectedAriaSource: '', selectedDataStateSource: '', checkedDescendant: '1', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      }
+      const selectedNode = node.querySelector && Array.from(node.querySelectorAll('[aria-selected="true"],[aria-checked="true"],[aria-pressed="true"],[class],[data-state]')).find((candidate) => {
+        if (safe(candidate.getAttribute && candidate.getAttribute('aria-selected')) === 'true') return true;
+        if (safe(candidate.getAttribute && candidate.getAttribute('aria-checked')) === 'true') return true;
+        if (safe(candidate.getAttribute && candidate.getAttribute('aria-pressed')) === 'true') return true;
+        if (hasSelectedClass(candidate)) return true;
+        if (hasSelectedState(candidate)) return true;
+        return false;
+      });
+      if (selectedNode) {
+        selectedDescendant = summarizeOverviewTileNode(selectedNode) || 'selected-descendant';
+        const selectedByClass = hasSelectedClass(selectedNode);
+        const selectedByState = hasSelectedState(selectedNode);
+        return { selected: true, evidence: `${prefix}-selected-descendant`, selectedClassSource: selectedByClass ? summarizeOverviewTileNode(selectedNode) : '', selectedAriaSource: selectedByClass || selectedByState ? '' : summarizeOverviewTileNode(selectedNode), selectedDataStateSource: selectedByState ? summarizeOverviewTileNode(selectedNode) : '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: '1', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      }
+    }
+    if (tileContainer && tileContainer.querySelectorAll) {
+      const checkmark = Array.from(tileContainer.querySelectorAll('[class*="check"],[class*="tick"],[class*="selected"],svg,i,span'))
+        .filter(visible)
+        .find((node) => {
+          const text = lower(getText(node));
+          const cls = lower(node.className || '');
+          const label = lower(node.getAttribute && (node.getAttribute('aria-label') || node.getAttribute('title')));
+          return /✓|check|checkmark|tick|selected/.test(text)
+            || /check|checkmark|tick|selected/.test(cls)
+            || /check|checkmark|tick|selected/.test(label);
+        });
+      if (checkmark) {
+        checkmarkEvidence = summarizeOverviewTileNode(checkmark) || 'checkmark';
+        return { selected: true, evidence: 'tile-container-checkmark', selectedClassSource: '', selectedAriaSource: '', selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+      }
+    }
+    return { selected: false, evidence: '', selectedClassSource: '', selectedAriaSource: '', selectedDataStateSource: '', checkedDescendant: checkedDescendant ? '1' : '0', selectedDescendant: selectedDescendant ? '1' : '0', checkmarkEvidence, ancestorSummary: ancestorSummary() };
+  };
+  const overviewTileEmptyState = (result, productText, method) => ({
+    result,
+    present: '0',
+    selected: '0',
+    productText,
+    tileText: '',
+    method,
+    selectedEvidence: '',
+    targetTag: '',
+    targetId: '',
+    targetClass: '',
+    targetRole: '',
+    targetAriaSelected: '',
+    targetAriaChecked: '',
+    targetAriaPressed: '',
+    targetDataState: '',
+    tileContainerTag: '',
+    tileContainerId: '',
+    tileContainerClass: '',
+    clickableTag: '',
+    clickableId: '',
+    clickableClass: '',
+    clickableRole: '',
+    selectedClassSource: '',
+    selectedAriaSource: '',
+    selectedDataStateSource: '',
+    ancestorSummary: '',
+    checkedDescendant: '0',
+    selectedDescendant: '0',
+    checkmarkEvidence: '',
+    resolverMethod: method,
+    textSeedTag: '',
+    textSeedText: '',
+    textSeedClass: '',
+    tileContainerText: '',
+    tileProductLabelCount: '0',
+    rejectedBroadContainer: '0',
+    clickTargetTag: '',
+    clickTargetClass: '',
+    clickTargetRole: '',
+    clickAttemptCount: '0',
+    selectedBefore: '0',
+    selectedAfter: '0',
+    elementFromPointTag: '',
+    elementFromPointClass: ''
+  });
+  const readOverviewProductTileState = (source = {}) => {
+    const productText = safe(source.productText || (getTextArgs(source).productOverviewAutoTile || 'Auto'));
+    if (!isProductOverviewPage(source))
+      return overviewTileEmptyState('NOT_OVERVIEW', productText, 'not-overview');
+    const tile = findOverviewProductTile(productText);
+    if (!tile)
+      return overviewTileEmptyState('NO_TILE', productText, 'not-found');
+    const target = tile.clickableTarget || tile.tileContainer || tile.textNode;
+    const tileContainer = tile.tileContainer || target;
+    const clickable = tile.clickableTarget || target;
+    const rect = clickable && clickable.getBoundingClientRect ? clickable.getBoundingClientRect() : null;
+    const fromPoint = rect ? document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2)) : null;
+    const evidence = overviewTileSelectionEvidence(tile, productText);
+    const selected = evidence.selected ? '1' : '0';
+    return {
+      result: selected === '1' ? 'SELECTED' : 'FOUND',
+      present: '1',
+      selected,
+      productText,
+      tileText: tile.tileText,
+      method: tile.method,
+      selectedEvidence: evidence.evidence,
+      targetTag: safe(target.tagName),
+      targetId: safe(target.id),
+      targetClass: compact(safe(target.className), 160),
+      targetRole: safe(target.getAttribute && target.getAttribute('role')),
+      targetAriaSelected: safe(target.getAttribute && target.getAttribute('aria-selected')),
+      targetAriaChecked: safe(target.getAttribute && target.getAttribute('aria-checked')),
+      targetAriaPressed: safe(target.getAttribute && target.getAttribute('aria-pressed')),
+      targetDataState: safe(target.getAttribute && target.getAttribute('data-state')),
+      tileContainerTag: safe(tileContainer.tagName),
+      tileContainerId: safe(tileContainer.id),
+      tileContainerClass: compact(safe(tileContainer.className), 160),
+      clickableTag: safe(clickable.tagName),
+      clickableId: safe(clickable.id),
+      clickableClass: compact(safe(clickable.className), 160),
+      clickableRole: safe(clickable.getAttribute && clickable.getAttribute('role')),
+      selectedClassSource: compact(evidence.selectedClassSource, 160),
+      selectedAriaSource: compact(evidence.selectedAriaSource, 160),
+      selectedDataStateSource: compact(evidence.selectedDataStateSource, 160),
+      ancestorSummary: compact(evidence.ancestorSummary, 240),
+      checkedDescendant: evidence.checkedDescendant,
+      selectedDescendant: evidence.selectedDescendant,
+      checkmarkEvidence: compact(evidence.checkmarkEvidence, 160),
+      resolverMethod: tile.resolverMethod,
+      textSeedTag: tile.textSeedTag,
+      textSeedText: tile.textSeedText,
+      textSeedClass: tile.textSeedClass,
+      tileContainerText: tile.tileContainerText,
+      tileProductLabelCount: tile.tileProductLabelCount,
+      rejectedBroadContainer: tile.rejectedBroadContainer,
+      clickTargetTag: safe(clickable.tagName),
+      clickTargetClass: compact(safe(clickable.className), 160),
+      clickTargetRole: safe(clickable.getAttribute && clickable.getAttribute('role')),
+      clickAttemptCount: '0',
+      selectedBefore: selected,
+      selectedAfter: selected,
+      elementFromPointTag: safe(fromPoint && fromPoint.tagName),
+      elementFromPointClass: compact(safe(fromPoint && fromPoint.className), 160)
+    };
+  };
+  const ensureOverviewProductTileSelected = (source = {}) => {
+    const productText = safe(source.productText || (getTextArgs(source).productOverviewAutoTile || 'Auto'));
+    const before = readOverviewProductTileState(source);
+    const base = (result, extra = {}) => ({
+      result,
+      present: before.present || '0',
+      selectedBefore: before.selected || '0',
+      selectedAfter: before.selected || '0',
+      clicked: '0',
+      productText,
+      tileText: before.tileText || '',
+      selectedEvidence: before.selectedEvidence || '',
+      targetTag: before.targetTag || '',
+      targetClass: before.targetClass || '',
+      tileContainerClass: before.tileContainerClass || '',
+      resolverMethod: before.resolverMethod || '',
+      textSeedTag: before.textSeedTag || '',
+      textSeedText: before.textSeedText || '',
+      textSeedClass: before.textSeedClass || '',
+      tileContainerText: before.tileContainerText || '',
+      tileProductLabelCount: before.tileProductLabelCount || '0',
+      rejectedBroadContainer: before.rejectedBroadContainer || '0',
+      clickTargetTag: before.clickTargetTag || before.clickableTag || '',
+      clickTargetClass: before.clickTargetClass || before.clickableClass || '',
+      clickTargetRole: before.clickTargetRole || before.clickableRole || '',
+      clickAttemptCount: '0',
+      method: before.method || '',
+      failedFields: '',
+      evidence: compact(before.selectedEvidence || before.method || before.result || '', 240),
+      ...extra
+    });
+    if (before.result === 'NOT_OVERVIEW')
+      return base('NOT_OVERVIEW', { failedFields: 'overview', evidence: 'not-product-overview' });
+    if (before.present !== '1')
+      return base('NO_TILE', { failedFields: 'autoTile', evidence: before.result || 'no-auto-tile' });
+    if (before.selected === '1')
+      return base('SELECTED');
+    const tile = findOverviewProductTile(productText);
+    const target = tile && (tile.clickableTarget || tile.tileContainer || tile.textNode);
+    if (!target)
+      return base('NO_TILE', { failedFields: 'autoTile', evidence: 'no-click-target' });
+    const clicked = clickCenterEl(target);
+    if (!clicked)
+      return base('CLICK_FAILED', {
+        clicked: '0',
+        failedFields: 'click',
+        targetTag: safe(target.tagName),
+        targetClass: compact(safe(target.className), 160),
+        clickTargetTag: safe(target.tagName),
+        clickTargetClass: compact(safe(target.className), 160),
+        clickTargetRole: safe(target.getAttribute && target.getAttribute('role')),
+        clickAttemptCount: '1',
+        evidence: 'click-failed'
+      });
+    const after = readOverviewProductTileState(source);
+    const selectedAfter = after.selected || '0';
+    return base(selectedAfter === '1' ? 'CLICKED_SELECTED' : 'VERIFY_FAILED', {
+      present: after.present || before.present || '0',
+      selectedAfter,
+      clicked: '1',
+      tileText: after.tileText || before.tileText || '',
+      selectedEvidence: after.selectedEvidence || '',
+      targetTag: after.targetTag || safe(target.tagName),
+      targetClass: after.targetClass || compact(safe(target.className), 160),
+      tileContainerClass: after.tileContainerClass || before.tileContainerClass || '',
+      resolverMethod: after.resolverMethod || before.resolverMethod || '',
+      textSeedTag: after.textSeedTag || before.textSeedTag || '',
+      textSeedText: after.textSeedText || before.textSeedText || '',
+      textSeedClass: after.textSeedClass || before.textSeedClass || '',
+      tileContainerText: after.tileContainerText || before.tileContainerText || '',
+      tileProductLabelCount: after.tileProductLabelCount || before.tileProductLabelCount || '0',
+      rejectedBroadContainer: (before.rejectedBroadContainer === '1' || after.rejectedBroadContainer === '1') ? '1' : '0',
+      clickTargetTag: after.clickTargetTag || safe(target.tagName),
+      clickTargetClass: after.clickTargetClass || compact(safe(target.className), 160),
+      clickTargetRole: after.clickTargetRole || safe(target.getAttribute && target.getAttribute('role')),
+      clickAttemptCount: '1',
+      method: `${before.method || 'tile'}|click`,
+      failedFields: selectedAfter === '1' ? '' : 'selected',
+      evidence: compact(after.selectedEvidence || after.result || 'post-click-unselected', 240)
+    });
+  };
+  const uniqText = (items) => {
+    const seen = new Set();
+    const out = [];
+    for (const item of items) {
+      const text = getText(item);
+      if (!text) continue;
+      const key = lower(text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(text);
+    }
+    return out;
+  };
+  const collectVisibleAlerts = () => {
+    const nodes = Array.from(document.querySelectorAll(
+      '[id^="message_"], .c-alert a, .c-alert__content a, .c-alert__content, .c-alert, [role=alert], [class*=alert], [class*=error], [class*=validation]'
+    )).filter(visible);
+    const raw = [];
+    for (const node of nodes) {
+      const text = getText(node);
+      if (!text) continue;
+      for (const line of text.split(/\r?\n/)) {
+        const cleaned = safe(line).replace(/\s+/g, ' ').trim();
+        if (cleaned && !/^view all$/i.test(cleaned))
+          raw.push(cleaned);
+      }
+    }
+    return uniqText(raw);
+  };
+  const readSelectState = (el) => {
+    if (!el) return { value: '', text: '' };
+    const opt = el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+    return {
+      value: safe(el.value).trim(),
+      text: getText(opt)
+    };
+  };
+  const isClickableLike = (node) => {
+    if (!node || !visible(node)) return false;
+    const tag = safe(node.tagName);
+    const role = lower(node.getAttribute && node.getAttribute('role'));
+    const cls = lower(node.className || '');
+    const tabIndex = Number(node.tabIndex);
+    return tag === 'BUTTON'
+      || tag === 'A'
+      || tag === 'LABEL'
+      || role === 'button'
+      || role === 'radio'
+      || role === 'checkbox'
+      || tabIndex >= 0
+      || /button|btn|radio|toggle|choice|option|answer|pill|segment|chip|card/.test(cls);
+  };
+  const findClickableTarget = (node) => {
+    let current = node;
+    for (let depth = 0; depth < 7 && current; depth++, current = current.parentElement) {
+      if (isClickableLike(current)) return current;
+    }
+    return node;
+  };
+  const clickCenterEl = (el) => {
+    if (!el || !visible(el) || isDisabledLike(el)) return false;
+    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + (rect.width / 2);
+    const y = rect.top + (rect.height / 2);
+    const fromPoint = document.elementFromPoint(x, y);
+    const target = findClickableTarget(fromPoint && visible(fromPoint) ? fromPoint : el);
+    return clickEl(target || el, { preClickSequence: !!target && target !== el });
+  };
+  const isSelectedNode = (node) => {
+    if (!node) return false;
+    if (/^(INPUT|OPTION)$/i.test(safe(node.tagName)) && 'checked' in node && node.checked) return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-checked')) === 'true') return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-pressed')) === 'true') return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-selected')) === 'true') return true;
+    if (/selected|active|checked|current|chosen|pressed|on/.test(lower(node.className || ''))) return true;
+    if (/selected|active|checked|on|true/.test(lower(node.getAttribute && node.getAttribute('data-state')))) return true;
+    const checkedDescendant = node.querySelector && node.querySelector('input:checked,[aria-checked="true"],[aria-selected="true"],[aria-pressed="true"]');
+    return !!checkedDescendant;
+  };
+  const readInputLabel = (input) => {
+    if (!input) return '';
+    const inputId = safe(input.id);
+    if (inputId) {
+      const byFor = document.querySelector(`label[for="${cssEscape(inputId)}"]`);
+      if (byFor) return getText(byFor);
+    }
+    const parentLabel = input.closest('label');
+    if (parentLabel) return getText(parentLabel);
+    const row = input.closest('[class*=field],[class*=form],[class*=question],.l-grid__col,div');
+    if (row) {
+      const rowLabel = row.querySelector('label,.c-label,legend');
+      if (rowLabel) return getText(rowLabel);
+    }
+    return getText(input);
+  };
+  const getInputClickTarget = (input) => {
+    if (!input) return null;
+    const inputId = safe(input.id);
+    if (inputId) {
+      const byFor = document.querySelector(`label[for="${cssEscape(inputId)}"]`);
+      if (visible(byFor)) return findClickableTarget(byFor);
+    }
+    const parentLabel = input.closest('label');
+    if (visible(parentLabel)) return findClickableTarget(parentLabel);
+    let current = input.parentElement;
+    for (let depth = 0; depth < 6 && current; depth++, current = current.parentElement) {
+      if (!visible(current)) continue;
+      const text = normLower(getText(current));
+      if (text.includes('yes') || text.includes('no') || isClickableLike(current))
+        return current;
+    }
+    return visible(input) ? input : null;
+  };
+  const setRadioByName = (namePart, value) => {
+    const wanted = normUpper(value);
+    const radios = Array.from(document.querySelectorAll('input[type=radio]'));
+    const match = radios.find((el) => {
+      const nameHit = safe(el.name).includes(safe(namePart));
+      const valueHit = normUpper(el.value) === wanted || normUpper(readInputLabel(el)) === wanted;
+      return nameHit && valueHit;
+    });
+    if (!match) return { ok: false, method: 'no-radio-match' };
+    if (match.checked) return { ok: true, method: 'already-checked' };
+    const target = getInputClickTarget(match);
+    if (!target) return { ok: false, method: 'radio-target-missing' };
+    const clicked = clickCenterEl(target);
+    const verified = !!match.checked || isSelectedNode(match) || isSelectedNode(target);
+    return {
+      ok: clicked && verified,
+      method: target === match ? 'radio-input' : 'radio-associated-control'
+    };
+  };
+  const findQuestionContainers = (questionText) => {
+    const wanted = normLower(questionText);
+    if (!wanted) return [];
+    const seeds = Array.from(document.querySelectorAll('legend,label,.c-label,p,span,div,h1,h2,h3,h4,h5,h6'))
+      .filter(visible)
+      .filter((node) => {
+        const text = normLower(getText(node));
+        return !!text && text.includes(wanted) && text.length <= 220;
+      });
+    const out = [];
+    const seen = new Set();
+    for (const seed of seeds) {
+      let picked = seed;
+      for (let depth = 0, current = seed; depth < 6 && current; depth++, current = current.parentElement) {
+        if (!visible(current)) continue;
+        const text = normLower(getText(current));
+        if (!text.includes(wanted)) continue;
+        if (text.includes('yes') || text.includes('no') || current.querySelector('input[type=radio],button,[role=button],[role=radio]')) {
+          picked = current;
+          break;
+        }
+      }
+      const key = safe(picked && (picked.id || getText(picked)));
+      if (!picked || seen.has(key)) continue;
+      seen.add(key);
+      out.push(picked);
+    }
+    return out;
+  };
+  const answerTextMatches = (candidateText, wantedText) => {
+    const candidate = normLower(candidateText);
+    const wanted = normLower(wantedText);
+    if (!candidate || !wanted) return false;
+    return candidate === wanted
+      || candidate === `${wanted}:`
+      || candidate.startsWith(`${wanted} `)
+      || candidate.startsWith(`${wanted}: `);
+  };
+  const isCompoundYesNoText = (text) => {
+    const normalized = normLower(text);
+    return normalized.includes('yes') && normalized.includes('no');
+  };
+  const findSemanticAnswerTarget = (questionText, answerText) => {
+    const containers = findQuestionContainers(questionText);
+    for (const container of containers) {
+      const radios = Array.from(container.querySelectorAll('input[type=radio]'));
+      for (const radio of radios) {
+        const labelText = readInputLabel(radio) || safe(radio.value);
+        if (!answerTextMatches(labelText, answerText)) continue;
+        const target = getInputClickTarget(radio);
+        if (target) return target;
+      }
+      const nodes = Array.from(container.querySelectorAll('button,a,[role=button],[role=radio],label,span,div'))
+        .filter((node) => visible(node) && node !== container)
+        .map((node) => ({ node, text: getText(node) }))
+        .filter(({ text }) => text && !isCompoundYesNoText(text) && text.length <= Math.max(20, safe(answerText).length + 8) && answerTextMatches(text, answerText))
+        .sort((a, b) => a.text.length - b.text.length);
+      for (const candidate of nodes) {
+        const target = findClickableTarget(candidate.node);
+        if (target) return target;
+      }
+    }
+    return null;
+  };
+  const readSemanticAnswerState = (questionText) => {
+    const values = ['YES', 'NO'];
+    const containers = findQuestionContainers(questionText);
+    for (const container of containers) {
+      const radios = Array.from(container.querySelectorAll('input[type=radio]'));
+      for (const radio of radios) {
+        const labelText = normUpper(readInputLabel(radio) || radio.value);
+        const value = values.find((wanted) => answerTextMatches(labelText, wanted));
+        if (value && radio.checked) return { value, selected: true, source: 'radio' };
+      }
+      const nodes = Array.from(container.querySelectorAll('button,a,[role=button],[role=radio],label,span,div'))
+        .filter((node) => visible(node) && node !== container);
+      for (const node of nodes) {
+        const text = getText(node);
+        if (isCompoundYesNoText(text)) continue;
+        const value = values.find((wanted) => answerTextMatches(text, wanted));
+        if (!value) continue;
+        if (isSelectedNode(node)) return { value, selected: true, source: 'semantic' };
+      }
+    }
+    return { value: '', selected: false, source: containers.length ? 'question-found' : '' };
+  };
+  const answerValueMatches = (actual, wanted) => {
+    const actualNorm = normUpper(actual);
+    const wantedNorm = normUpper(wanted);
+    return !!wantedNorm && (actualNorm === wantedNorm || actualNorm.includes(wantedNorm) || wantedNorm.includes(actualNorm));
+  };
+  const readRadioGroupStateByName = (namePart) => {
+    const radios = Array.from(document.querySelectorAll('input[type=radio]'))
+      .filter((el) => safe(el.name).includes(safe(namePart)));
+    for (const radio of radios) {
+      if (!radio.checked) continue;
+      return {
+        value: safe(radio.value),
+        label: readInputLabel(radio),
+        selected: true,
+        source: 'radio-name'
+      };
+    }
+    return { value: '', label: '', selected: false, source: radios.length ? 'radio-name' : '' };
+  };
+  const normalizeVehicleText = (value) => normUpper(value)
+    .replace(/\bF[\s-]+(\d{3,4})\b/g, 'F$1')
+    .replace(/\bMODEL[\s-]+(\d)\b/g, 'MODEL $1');
+  const normalizeVehicleVin = (value) => normUpper(value).replace(/[^A-Z0-9]/g, '');
+  const parseVehicleListArg = (value) => {
+    if (Array.isArray(value)) return value.map((item) => safe(item).trim()).filter(Boolean);
+    return safe(value)
+      .split(/[|,;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+  const normalizeVehicleModelKey = (value) => normalizeVehicleText(value)
+    .replace(/\bCR\s+V\b/g, 'CRV')
+    .replace(/\bCX\s+30\b/g, 'CX30')
+    .replace(/\bGLE\s+350\b/g, 'GLE350')
+    .replace(/\b4\s+RUNNER\b/g, '4RUNNER')
+    .replace(/\bGRAND\s+CARAVN\b/g, 'GRAND CARAVAN')
+    .replace(/\bSILV\s*(1500|2500|3500)\b/g, 'SILVERADO $1')
+    .replace(/\bF\s+(150|250|350|450)\b/g, 'F$1')
+    .replace(/[^A-Z0-9]/g, '');
+  const vehicleTokenRegex = (token) => new RegExp(`(^|[^A-Z0-9])${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Z0-9]|$)`);
+  const vehicleMakeMatches = (haystack, match) => {
+    const labels = (match.allowedMakeLabels || []).map(normalizeVehicleText).filter(Boolean);
+    if (labels.length)
+      return labels.some((label) => vehicleTokenRegex(label).test(haystack));
+    return !!match.make && haystack.includes(match.make);
+  };
+  const vehicleStrictModelMatches = (haystack, expectedModel) => {
+    const model = normalizeVehicleText(expectedModel);
+    const key = normalizeVehicleModelKey(expectedModel);
+    if (!model || !key) return false;
+    const haystackKey = normalizeVehicleModelKey(haystack);
+    if (key === 'PRIUS' && /(^|[^A-Z0-9])PRIUS\s+PRIME([^A-Z0-9]|$)/.test(haystack)) return false;
+    if (key === 'TRANSIT' && /(^|[^A-Z0-9])TRANSIT\s+(CONN|CONNECT)([^A-Z0-9]|$)/.test(haystack)) return false;
+    if (key === 'EXPRESS' && /(^|[^A-Z0-9])CITY\s+EXPRESS([^A-Z0-9]|$)/.test(haystack)) return false;
+    if (/^F(150|250|350|450)$/.test(key)) return vehicleTokenRegex(key).test(haystack);
+    if (/^SILVERADO(1500|2500|3500)$/.test(key)) {
+      const series = key.match(/(1500|2500|3500)$/)[1];
+      return haystackKey.includes(`SILVERADO${series}`);
+    }
+    if (key === 'GRANDCARAVAN')
+      return haystackKey.includes('GRANDCARAVAN');
+    return vehicleTokenRegex(model).test(haystack);
+  };
+  const getVehicleMatchArgs = (source = {}) => {
+    const vin = normalizeVehicleVin(source.vin);
+    const vinSuffix = normalizeVehicleVin(source.vinSuffix || (vin ? vin.slice(-6) : ''));
+    return {
+      year: safe(source.year).trim(),
+      make: normalizeVehicleText(source.make),
+      model: normalizeVehicleText(source.model),
+      trim: normalizeVehicleText(source.trim || source.trimHint),
+      vin,
+      vinSuffix,
+      allowedMakeLabels: parseVehicleListArg(source.allowedMakeLabels || source.makeAliases || source.advisorMakeLabels),
+      strictModelMatch: safe(source.strictModelMatch) === '1' || source.strictModelMatch === true
+    };
+  };
+  const scoreVehicleCandidate = (cardText, source = {}) => {
+    const match = getVehicleMatchArgs(source);
+    const haystack = normalizeVehicleText(cardText);
+    const yearMatch = !!match.year && new RegExp(`(^|\\s)${match.year}(\\s|$)`).test(haystack);
+    const makeMatch = vehicleMakeMatches(haystack, match);
+    const modelMatch = !!match.model && (match.strictModelMatch ? vehicleStrictModelMatches(haystack, match.model) : haystack.includes(match.model));
+    const trimMatch = !!match.trim && haystack.includes(match.trim);
+    const vinMatch = !!match.vin && haystack.includes(match.vin);
+    const vinSuffixMatch = !vinMatch && !!match.vinSuffix && haystack.includes(match.vinSuffix);
+    let score = 0;
+    if (yearMatch) score += 40;
+    if (makeMatch) score += 30;
+    if (modelMatch) score += 30;
+    if (trimMatch) score += 10;
+    if (vinMatch || vinSuffixMatch) score += 50;
+    return {
+      score,
+      threshold: 90,
+      yearMatch,
+      makeMatch,
+      modelMatch,
+      trimMatch,
+      vinMatch,
+      vinSuffixMatch
+    };
+  };
+  const pickVehicleCard = (seed) => {
+    let fallback = null;
+    for (let depth = 0, current = seed; depth < 8 && current; depth++, current = current.parentElement) {
+      if (!visible(current)) continue;
+      const text = getText(current);
+      if (!text || text.length < 20 || text.length > 500) continue;
+      if (!fallback)
+        fallback = current;
+      const idClass = lower(`${safe(current.id)} ${safe(current.className)}`);
+      const hasActionButtons = Array.from(current.querySelectorAll('button,a,[role=button]')).some((node) => {
+        const textValue = getText(node);
+        return visible(node) && (answerTextMatches(textValue, 'Confirm') || answerTextMatches(textValue, 'Remove'));
+      });
+      if (/cartruck|vehicle|card|tile|panel|item|row/.test(idClass) || hasActionButtons)
+        return current;
+    }
+    return fallback;
+  };
+  const findVehicleMatchCandidates = (source = {}) => {
+    const seeds = Array.from(document.querySelectorAll('h3,button,a,div,span'))
+      .filter(visible);
+    const candidates = [];
+    const seen = new Set();
+    for (const seed of seeds) {
+      const card = pickVehicleCard(seed);
+      if (!card) continue;
+      const cardText = getText(card);
+      const key = lower(cardText);
+      if (!key || seen.has(key)) continue;
+      const details = scoreVehicleCandidate(cardText, source);
+      if (details.score < details.threshold) continue;
+      seen.add(key);
+      candidates.push({ card, cardText, details });
+    }
+    candidates.sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    return candidates;
+  };
+  const findVehicleMatchCards = (source = {}) => findVehicleMatchCandidates(source).map((candidate) => candidate.card);
+  const vehicleCandidatesAreAmbiguous = (candidates = []) => {
+    if (candidates.length < 2) return false;
+    return (candidates[0].details.score - candidates[1].details.score) <= 10;
+  };
+  const findCardButtonByText = (card, text) => Array.from((card && card.querySelectorAll('button,a,[role=button]')) || [])
+    .find((node) => visible(node) && answerTextMatches(getText(node), text));
+  const vehicleTitleCount = (text) => {
+    const matches = normalizeVehicleText(text).match(/\b(?:19|20)\d{2}\b\s+[A-Z][A-Z0-9./-]*(?:\s+[A-Z][A-Z0-9./-]*){0,5}/g) || [];
+    const distinct = new Set(matches.map((value) => value.replace(/\s+/g, ' ').trim()).filter(Boolean));
+    return distinct.size;
+  };
+  const potentialVehicleCandidateScope = (candidate) => {
+    const card = candidate && candidate.card;
+    const cardText = getText(card);
+    const text = normLower(cardText);
+    const confirmButtons = Array.from((card && card.querySelectorAll('button,a,[role=button]')) || [])
+      .filter((node) => visible(node) && answerTextMatches(getText(node), 'Confirm'));
+    const removeButtons = Array.from((card && card.querySelectorAll('button,a,[role=button]')) || [])
+      .filter((node) => visible(node) && answerTextMatches(getText(node), 'Remove'));
+    const titleCount = vehicleTitleCount(cardText);
+    if (!safe(candidate && candidate.details && candidate.details.yearMatch))
+      return { ok: false, candidateScope: 'rejected', rejectedReason: 'year-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (!safe(candidate && candidate.details && candidate.details.makeMatch))
+      return { ok: false, candidateScope: 'rejected', rejectedReason: 'make-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (!safe(candidate && candidate.details && candidate.details.modelMatch))
+      return { ok: false, candidateScope: 'rejected', rejectedReason: 'model-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (text.includes('confirmed vehicles') && text.includes('potential vehicles'))
+      return { ok: false, candidateScope: 'broad-section', rejectedReason: 'broad-container', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (confirmButtons.length !== 1)
+      return { ok: false, candidateScope: confirmButtons.length > 1 ? 'broad-section' : 'rejected', rejectedReason: confirmButtons.length > 1 ? 'multiple-confirm-buttons' : 'confirm-button-missing', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (titleCount > 1)
+      return { ok: false, candidateScope: 'broad-section', rejectedReason: 'multiple-vehicle-titles', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (text.includes('add car or truck'))
+      return { ok: false, candidateScope: 'broad-section', rejectedReason: 'add-vehicle-container', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    if (!text.includes('potential vehicles') && removeButtons.length < 1)
+      return { ok: false, candidateScope: 'rejected', rejectedReason: 'not-potential-card', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
+    return { ok: true, candidateScope: 'single-card', rejectedReason: '', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount, confirmBtn: confirmButtons[0] };
+  };
+  const parseExpectedVehicles = (source = {}) => {
+    const raw = Array.isArray(source.expectedVehicles) ? source.expectedVehicles : [];
+    const fromString = safe(source.expectedVehiclesText)
+      .split('||')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const parts = item.split('|');
+        return { year: parts[0] || '', make: parts[1] || '', model: parts[2] || '', vin: parts[3] || '' };
+      });
+    return raw.concat(fromString)
+      .map((vehicle) => ({
+        year: safe(vehicle && vehicle.year).trim(),
+        make: safe(vehicle && vehicle.make).trim(),
+        model: safe(vehicle && vehicle.model).trim(),
+        vin: safe(vehicle && vehicle.vin).trim(),
+        vinSuffix: safe(vehicle && vehicle.vinSuffix).trim(),
+        allowedMakeLabels: vehicle && (vehicle.allowedMakeLabels || vehicle.makeAliases || vehicle.advisorMakeLabels) || '',
+        strictModelMatch: vehicle && vehicle.strictModelMatch
+      }))
+      .filter((vehicle) => vehicle.year || vehicle.make || vehicle.model || vehicle.vin || vehicle.vinSuffix);
+  };
+  const vehicleLabel = (vehicle) => [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ').trim();
+  const confirmedVehicleCandidates = () => {
+    const nodes = Array.from(document.querySelectorAll('div,section,article,li,tr,fieldset'))
+      .filter(visible);
+    const seen = new Set();
+    const candidates = [];
+    for (const node of nodes) {
+      const text = getText(node);
+      const lowerText = normLower(text);
+      if (!lowerText.includes('confirmed')) continue;
+      if (!/\b(?:19|20)\d{2}\b/.test(text)) continue;
+      const titleCount = vehicleTitleCount(text);
+      const hasAction = Array.from(node.querySelectorAll('button,a,[role=button]'))
+        .some((action) => visible(action) && (answerTextMatches(getText(action), 'Edit') || answerTextMatches(getText(action), 'Remove')));
+      if (lowerText.includes('potential vehicles') || titleCount > 1 || (!hasAction && !lowerText.includes('confirmed vehicles')))
+        continue;
+      const key = lower(text);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ card: node, cardText: text });
+    }
+    const narrowed = [];
+    for (const candidate of candidates.sort((a, b) => a.cardText.length - b.cardText.length)) {
+      const candidateKey = lower(candidate.cardText);
+      if (narrowed.some((existing) => candidateKey.includes(lower(existing.cardText))))
+        continue;
+      narrowed.push(candidate);
+    }
+    return narrowed;
+  };
+  const gatherConfirmedVehiclesStatus = (source = {}) => {
+    const expectedAll = parseExpectedVehicles(source);
+    const expected = expectedAll.filter((vehicle) => safe(vehicle.year).trim() !== '');
+    const unresolved = expectedAll.filter((vehicle) => safe(vehicle.year).trim() === '');
+    const cards = confirmedVehicleCandidates();
+    const matchedLabels = [];
+    const missingLabels = [];
+    const matchedCardIndexes = new Set();
+    expected.forEach((vehicle) => {
+      const matchedIndex = cards.findIndex((candidate, index) => !matchedCardIndexes.has(index) && scoreVehicleCandidate(candidate.cardText, vehicle).score >= 90);
+      if (matchedIndex >= 0) {
+        matchedCardIndexes.add(matchedIndex);
+        matchedLabels.push(vehicleLabel(vehicle));
+      } else {
+        missingLabels.push(vehicleLabel(vehicle));
+      }
+    });
+    const unexpected = cards
+      .filter((_, index) => !matchedCardIndexes.has(index))
+      .map((candidate) => compact(candidate.cardText, 120));
+    const result = unexpected.length ? 'UNEXPECTED' : (cards.length ? 'OK' : 'NONE');
+    return linesOut({
+      result,
+      confirmedCount: String(cards.length),
+      expectedCount: String(expected.length),
+      matchedExpectedCount: String(matchedLabels.length),
+      unexpectedCount: String(unexpected.length),
+      unexpectedVehicles: unexpected.join(' || '),
+      matchedVehicles: matchedLabels.join(' || '),
+      missingExpectedVehicles: missingLabels.join(' || '),
+      unresolvedLeadVehicles: unresolved.map(vehicleLabel).join(' || '),
+      method: 'confirmed-vehicle-cards'
+    });
+  };
+  const summarizeVehicleCandidate = (candidate) => compact(candidate && candidate.cardText, 140);
+  const isVehicleAlreadyListedMatch = (source = {}) => {
+    const listed = findVehicleMatchCandidates(source).filter((candidate) => {
+      const text = lower(candidate.cardText);
+      if (!text) return false;
+      if (text.includes('added to quote') || text.includes(' confirmed')) return true;
+      return !findCardButtonByText(candidate.card, 'Confirm');
+    });
+    if (!listed.length || vehicleCandidatesAreAmbiguous(listed))
+      return false;
+    return true;
+  };
+  const startQuotingSectionMatches = (node) => {
+    const text = normLower(getText(node));
+    return !!text
+      && text.includes('start quoting')
+      && (text.includes('create quotes')
+        || text.includes('order reports')
+        || text.includes('add product')
+        || text.includes('rating state')
+        || text.includes('auto'));
+  };
+  const findStartQuotingSection = (source = {}) => {
+    const selectors = getSelectorArgs(source);
+    const anchors = [
+      document.getElementById(selectors.createQuotesButtonId || 'consentModalTrigger'),
+      document.getElementById(selectors.quoteBlockAddProductId || 'quotesButton'),
+      document.getElementById('ConsumerReports.Auto.RatingState'),
+      document.getElementById('ConsumerReports.Auto.Product-intel#102')
+    ].filter(Boolean);
+    for (const anchor of anchors) {
+      for (let depth = 0, current = anchor; depth < 8 && current; depth++, current = current.parentElement) {
+        if (!visible(current)) continue;
+        if (startQuotingSectionMatches(current)) return current;
+      }
+    }
+    const seeds = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,label,p,span,div,section,article'))
+      .filter(visible)
+      .filter((node) => normLower(getText(node)).includes('start quoting'));
+    for (const seed of seeds) {
+      for (let depth = 0, current = seed; depth < 8 && current; depth++, current = current.parentElement) {
+        if (!visible(current)) continue;
+        if (startQuotingSectionMatches(current)) return current;
+      }
+    }
+    return null;
+  };
+  const startsWithTextToken = (candidateText, wantedText) => {
+    const candidate = normLower(candidateText);
+    const wanted = normLower(wantedText);
+    if (!candidate || !wanted) return false;
+    return candidate === wanted
+      || candidate.startsWith(`${wanted} `)
+      || candidate.startsWith(`${wanted}:`)
+      || candidate.startsWith(`${wanted}-`);
+  };
+  const optionLooksSelected = (node) => isSelectedNode(node) || isSelectedNode(findClickableTarget(node));
+  const findStartQuotingAutoCandidate = (section) => {
+    const root = section || document;
+    const candidates = Array.from(root.querySelectorAll('input,button,a,[role=button],[role=radio],[role=checkbox],label,span,div'))
+      .filter((node) => visible(node) && node !== section)
+      .map((node) => ({ node, text: getText(node) }))
+      .filter(({ text }) => {
+        const textNorm = normLower(text);
+        return startsWithTextToken(text, 'Auto')
+          && text.length <= 48
+          && !textNorm.includes('create quotes')
+          && !textNorm.includes('order reports')
+          && !textNorm.includes('rating state')
+          && !textNorm.includes('add product');
+      })
+      .sort((a, b) => a.text.length - b.text.length);
+    for (const candidate of candidates) {
+      const target = safe(candidate.node.tagName) === 'INPUT'
+        ? (getInputClickTarget(candidate.node) || candidate.node)
+        : findClickableTarget(candidate.node);
+      if (target) {
+        return {
+          node: candidate.node,
+          target,
+          text: candidate.text,
+          selected: optionLooksSelected(candidate.node) || optionLooksSelected(target)
+        };
+      }
+    }
+    return null;
+  };
+  const readStartQuotingAutoState = (source = {}) => {
+    const section = findStartQuotingSection(source);
+    const stableInput = document.getElementById('ConsumerReports.Auto.Product-intel#102');
+    let present = false;
+    let selected = false;
+    let stateSource = '';
+    let text = '';
+    if (stableInput) {
+      present = true;
+      const target = getInputClickTarget(stableInput);
+      selected = !!stableInput.checked || optionLooksSelected(target);
+      stateSource = stableInput.checked ? 'stable-input' : (selected ? 'stable-associated-control' : 'stable-input');
+      text = getText(target) || 'Auto';
+    }
+    if (!selected) {
+      const semantic = findStartQuotingAutoCandidate(section);
+      if (semantic) {
+        present = true;
+        selected = !!semantic.selected;
+        stateSource = semantic.selected ? 'semantic-selected' : 'semantic-present';
+        text = semantic.text || text;
+      }
+    }
+    if (!present && section && includesText(normLower(getText(section)), 'auto')) {
+      present = true;
+      stateSource = 'section-text';
+      text = 'Auto';
+    }
+    return {
+      present,
+      selected,
+      source: stateSource,
+      text
+    };
+  };
+  const setKnownCheckboxChecked = (input) => {
+    if (!input || isDisabledLike(input)) return false;
+    try { input.checked = true; } catch {}
+    try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+    try { input.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    return input.checked === true;
+  };
+  const ensureStartQuotingAutoCheckbox = () => {
+    const input = document.getElementById('ConsumerReports.Auto.Product-intel#102');
+    const before = !!(input && input.checked);
+    let method = 'missing';
+    let clicked = false;
+    let directSetUsed = false;
+    if (!input) {
+      return lineResult({
+        result: 'FAILED',
+        autoPresent: '0',
+        autoCheckedBefore: '0',
+        autoCheckedAfter: '0',
+        clicked: '0',
+        directSetUsed: '0',
+        method,
+        failedFields: ['auto'],
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+    if (before) {
+      return linesOut({
+        result: 'OK',
+        autoPresent: '1',
+        autoCheckedBefore: '1',
+        autoCheckedAfter: '1',
+        clicked: '0',
+        directSetUsed: '0',
+        method: 'stable-checkbox-already',
+        failedFields: '',
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+    const target = getInputClickTarget(input);
+    if (target && clickCenterEl(target)) {
+      clicked = true;
+      method = target === input ? 'stable-checkbox-input' : 'stable-checkbox-label';
+    }
+    let after = input.checked === true;
+    if (!after) {
+      directSetUsed = true;
+      method = method === 'missing' ? 'stable-checkbox-direct' : `${method}|stable-checkbox-direct`;
+      after = setKnownCheckboxChecked(input);
+    }
+    return lineResult({
+      result: after ? 'OK' : 'FAILED',
+      autoPresent: '1',
+      autoCheckedBefore: before ? '1' : '0',
+      autoCheckedAfter: after ? '1' : '0',
+      clicked: clicked ? '1' : '0',
+      directSetUsed: directSetUsed ? '1' : '0',
+      method,
+      failedFields: after ? '' : 'auto',
+      alerts: collectVisibleAlerts().join(' || ')
+    });
+  };
+  const ratingStateMatches = (value, text, wanted) => {
+    const wantedNorm = normUpper(wanted);
+    return !!wantedNorm && (normUpper(value) === wantedNorm || normUpper(text) === wantedNorm || normUpper(text).includes(wantedNorm));
+  };
+  const findStartQuotingRatingControl = (section) => {
+    const stable = document.getElementById('ConsumerReports.Auto.RatingState');
+    if (stable) return { element: stable, source: 'stable-select' };
+    const containers = findQuestionContainers('Rating State').filter((container) => !section || section.contains(container));
+    for (const container of containers) {
+      const select = container.querySelector('select');
+      if (select) return { element: select, source: 'semantic-select' };
+      const trigger = Array.from(container.querySelectorAll('button,a,[role=button],[role=combobox],label,span,div'))
+        .filter(visible)
+        .find((node) => {
+          const text = getText(node);
+          return !!text && text.length <= 32 && !startsWithTextToken(text, 'Rating State');
+        });
+      if (trigger) return { element: trigger, source: 'semantic-trigger' };
+    }
+    return { element: null, source: '' };
+  };
+  const readStartQuotingRatingState = (source = {}) => {
+    const section = findStartQuotingSection(source);
+    const ratingControl = findStartQuotingRatingControl(section);
+    const el = ratingControl.element;
+    if (!el) return { value: '', text: '', source: '', disabled: false };
+    if (safe(el.tagName) === 'SELECT') {
+      const state = readSelectState(el);
+      return {
+        value: state.value,
+        text: state.text,
+        source: ratingControl.source,
+        disabled: !!el.disabled
+      };
+    }
+    const text = getText(el);
+    return {
+      value: text,
+      text,
+      source: ratingControl.source,
+      disabled: safe(el.getAttribute && el.getAttribute('aria-disabled')) === 'true' || !!el.disabled
+    };
+  };
+  const setSemanticRatingState = (section, ratingState) => {
+    const containers = findQuestionContainers('Rating State').filter((container) => !section || section.contains(container));
+    for (const container of containers) {
+      const trigger = Array.from(container.querySelectorAll('button,a,[role=button],[role=combobox],label,span,div'))
+        .filter(visible)
+        .find((node) => {
+          const text = getText(node);
+          if (!text || text.length > 32) return false;
+          const role = lower(node.getAttribute && node.getAttribute('role'));
+          return role === 'combobox'
+            || role === 'button'
+            || startsWithTextToken(text, 'Select One')
+            || ratingStateMatches('', text, ratingState);
+        });
+      if (!trigger) continue;
+      if (!clickCenterEl(trigger)) continue;
+      const option = Array.from(document.querySelectorAll('[role=option],li,button,a,div,span,label'))
+        .filter(visible)
+        .find((node) => {
+          const text = getText(node);
+          return !!text && text.length <= 20 && ratingStateMatches('', text, ratingState);
+        });
+      if (!option) return { ok: false, method: 'semantic-option-missing' };
+      return { ok: clickCenterEl(option), method: 'semantic-option' };
+    }
+    return { ok: false, method: 'rating-state-target-missing' };
+  };
+  const ensureStartQuotingRatingState = (source = {}, ratingState) => {
+    const section = findStartQuotingSection(source);
+    const ratingControl = findStartQuotingRatingControl(section);
+    const el = ratingControl.element;
+    if (!el) return { ok: false, method: 'rating-state-missing' };
+    if (safe(el.tagName) === 'SELECT') {
+      const current = readSelectState(el);
+      if (ratingStateMatches(current.value, current.text, ratingState))
+        return { ok: true, method: el.disabled ? 'stable-select-readonly-match' : 'stable-select-already' };
+      if (!el.disabled && setSelectValue(el, ratingState, false))
+        return { ok: true, method: ratingControl.source };
+      if (el.disabled)
+        return { ok: false, method: 'stable-select-disabled-mismatch' };
+    }
+    return setSemanticRatingState(section, ratingState);
+  };
+  const findCreateQuotesButton = (source = {}) => {
+    const selectors = getSelectorArgs(source);
+    const section = findStartQuotingSection(source);
+    const stable = document.getElementById(selectors.createQuotesButtonId || 'consentModalTrigger');
+    if (stable && visible(stable))
+      return stable;
+    const root = section || document;
+    return Array.from(root.querySelectorAll('button,a,[role=button]'))
+      .filter(visible)
+      .find((node) => startsWithTextToken(getText(node), 'Create Quotes & Order Reports')) || null;
+  };
+  const findStartQuotingAddProductLink = (source = {}) => {
+    const selectors = getSelectorArgs(source);
+    const section = findStartQuotingSection(source);
+    const stable = document.getElementById(selectors.quoteBlockAddProductId || 'quotesButton');
+    if (stable && visible(stable) && (!section || section.contains(stable)))
+      return stable;
+    const root = section || document;
+    return Array.from(root.querySelectorAll('button,a,[role=button]'))
+      .filter(visible)
+      .find((node) => startsWithTextToken(getText(node), 'Add product')) || null;
+  };
+  const buildStartQuotingStatus = (source = {}) => {
+    const section = findStartQuotingSection(source);
+    const autoState = readStartQuotingAutoState(source);
+    const ratingState = readStartQuotingRatingState(source);
+    const createBtn = findCreateQuotesButton(source);
+    const addProductLink = findStartQuotingAddProductLink(source);
+    const stableAuto = document.getElementById('ConsumerReports.Auto.Product-intel#102');
+    const hasStartQuotingText = !!section || bodyText().includes('start quoting');
+    const ratingStatePresent = !!(ratingState.value || ratingState.text || ratingState.source);
+    const missing = [];
+    if (!hasStartQuotingText) missing.push('startQuotingText');
+    if (!section) missing.push('startQuotingSection');
+    if (!autoState.present) missing.push('autoProduct');
+    if (!ratingStatePresent) missing.push('ratingState');
+    if (!createBtn) missing.push('createQuotes');
+    const evidence = [
+      section ? 'start-quoting-section' : '',
+      autoState.source ? `auto:${autoState.source}` : '',
+      ratingState.source ? `rating:${ratingState.source}` : '',
+      createBtn ? 'create-quotes' : '',
+      addProductLink ? 'add-product' : ''
+    ].filter(Boolean).join('|');
+    return {
+      hasStartQuotingText: hasStartQuotingText ? '1' : '0',
+      startQuotingSectionPresent: section ? '1' : '0',
+      autoProductPresent: autoState.present ? '1' : '0',
+      autoProductChecked: autoState.selected ? '1' : '0',
+      autoProductSelected: autoState.selected ? '1' : '0',
+      autoProductSource: autoState.source,
+      autoCheckboxId: stableAuto ? safe(stableAuto.id) : '',
+      ratingStatePresent: ratingStatePresent ? '1' : '0',
+      ratingStateValue: ratingState.value,
+      ratingStateText: ratingState.text,
+      ratingStateSource: ratingState.source,
+      createQuoteButtonPresent: createBtn ? '1' : '0',
+      createQuoteButtonEnabled: createBtn && !createBtn.disabled ? '1' : '0',
+      addProductLinkPresent: addProductLink ? '1' : '0',
+      createQuotesPresent: createBtn ? '1' : '0',
+      createQuotesEnabled: createBtn && !createBtn.disabled ? '1' : '0',
+      addProductPresent: addProductLink ? '1' : '0',
+      evidence: compact(evidence, 240),
+      missing: missing.join('|'),
+      alerts: collectVisibleAlerts().join(' || ')
+    };
+  };
+  const findProductOverviewSubnavTargetFromRapport = (source = {}) => {
+    const urls = getUrlArgs(source);
+    const url = pageUrl();
+    const text = bodyText();
+    const onRapport = (!!urls.rapportContains && url.includes(urls.rapportContains))
+      || (url.includes('/apps/intel/102/') && includesText(text, 'gather data'));
+    if (!onRapport) return { target: null, reason: 'wrong-page' };
+    const candidates = Array.from(document.querySelectorAll('button,a,[role=button],[tabindex]'))
+      .filter(visible)
+      .filter((node) => !isDisabledLike(node))
+      .map((node) => ({ node, text: compact(getText(node), 80), cls: safe(node.className), id: safe(node.id) }))
+      .filter(({ text: itemText, id }) => {
+        const upper = normUpper(itemText);
+        return upper === 'SELECT PRODUCT'
+          && upper !== 'ADD PRODUCT'
+          && !upper.includes('ADD PRODUCT')
+          && lower(id) !== 'addproduct';
+      });
+    if (!candidates.length) return { target: null, reason: 'no-select-product' };
+    candidates.sort((a, b) => {
+      const aClass = lower(a.cls);
+      const bClass = lower(b.cls);
+      const aScore = (aClass.includes('c-sub-nav__item') ? 50 : 0) + (safe(a.node.tagName) === 'A' ? 10 : 0);
+      const bScore = (bClass.includes('c-sub-nav__item') ? 50 : 0) + (safe(b.node.tagName) === 'A' ? 10 : 0);
+      return bScore - aScore;
+    });
+    return { target: candidates[0].node, reason: 'select-product-subnav' };
+  };
+  const clickProductOverviewSubnavFromRapport = (source = {}) => {
+    const match = findProductOverviewSubnavTargetFromRapport(source);
+    if (match.reason === 'wrong-page') {
+      return linesOut({
+        result: 'WRONG_PAGE',
+        clicked: '0',
+        targetText: '',
+        targetClass: '',
+        targetTag: '',
+        urlBefore: compact(pageUrl(), 240),
+        evidence: 'not-rapport'
+      });
+    }
+    const target = match.target;
+    if (!target) {
+      return linesOut({
+        result: 'NO_LINK',
+        clicked: '0',
+        targetText: '',
+        targetClass: '',
+        targetTag: '',
+        urlBefore: compact(pageUrl(), 240),
+        evidence: match.reason || 'no-select-product'
+      });
+    }
+    const clicked = clickCenterEl(target);
+    return linesOut({
+      result: clicked ? 'OK' : 'CLICK_FAILED',
+      clicked: clicked ? '1' : '0',
+      targetText: compact(getText(target), 120),
+      targetClass: compact(safe(target.className), 160),
+      targetTag: safe(target.tagName),
+      urlBefore: compact(pageUrl(), 240),
+      evidence: match.reason || 'select-product-subnav'
+    });
+  };
+  const buildSelectProductStatus = (source = {}) => {
+    const selectors = getSelectorArgs(source);
+    const questionText = safe(source.currentInsuredQuestionText || 'Is the customer currently insured?');
+    const ratingSelect = findByStableId(source.selectProductRatingStateId || selectors.selectProductRatingStateId || 'SelectProduct.RatingState');
+    const productSelect = findByStableId(source.selectProductProductId || selectors.selectProductProductId || 'SelectProduct.Product');
+    const continueBtn = findByStableId(selectors.selectProductContinueId || source.selectProductContinueId || 'selectProductContinue');
+    const ratingState = readSelectState(ratingSelect);
+    const product = readSelectState(productSelect);
+    const currentInsuredByName = readRadioGroupStateByName('SelectProduct.CustomerCurrentInsured');
+    const semanticCurrentInsured = readSemanticAnswerState(questionText);
+    const currentInsured = currentInsuredByName.selected
+      ? {
+          value: currentInsuredByName.label || currentInsuredByName.value,
+          selected: true,
+          source: currentInsuredByName.source
+        }
+      : semanticCurrentInsured;
+    const ownOrRentByName = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
+    const body = bodyText();
+    const currentInsuredAlert = body.includes(lower(questionText)) && body.includes('this is required');
+    return {
+      ratingStateValue: ratingState.value,
+      ratingStateText: ratingState.text,
+      productValue: product.value,
+      productText: product.text,
+      currentInsuredValue: currentInsured.value,
+      currentInsuredSelected: currentInsured.selected ? '1' : '0',
+      currentInsuredSource: currentInsured.source,
+      currentInsuredAlert: currentInsuredAlert ? '1' : '0',
+      ownOrRentValue: ownOrRentByName.label || ownOrRentByName.value,
+      ownOrRentSelected: ownOrRentByName.selected ? '1' : '0',
+      ownOrRentSource: ownOrRentByName.source,
+      alerts: collectVisibleAlerts().join(' || '),
+      continuePresent: continueBtn ? '1' : '0',
+      continueEnabled: continueBtn && !continueBtn.disabled ? '1' : '0'
+    };
+  };
+  const extractStreetNumber = (value) => ((normalizeAddressText(value).match(/^\d+/) || [])[0]) || '';
+  const hasWholeNormalizedToken = (haystack, token) => {
+    const text = normalizeAddressText(haystack);
+    const wanted = normalizeAddressText(token);
+    return !!wanted && new RegExp(`(^|\\s)${wanted}(\\s|$)`).test(text);
+  };
+  const buildDuplicateCandidate = (radio, source = {}) => {
+    const container = radio.closest('.sfmOption,.l-tile,[role=row],div') || radio.parentElement;
+    const containerIsBody = container && safe(container.tagName) === 'BODY';
+    const summaryText = containerIsBody ? '' : (getText(container) || getText(radio.parentElement));
+    const text = normalizeAddressText(summaryText);
+    if (!text) return null;
+    const firstName = normalizeAddressText(source.firstName);
+    const lastName = normalizeAddressText(source.lastName);
+    const street = normalizeAddressText(source.street);
+    const city = normalizeAddressText(source.city);
+    const state = normalizeAddressText(source.state);
+    const zip = normalizeAddressText(source.zip);
+    const streetNumber = extractStreetNumber(source.street);
+    const dob = normalizeDobKey(source.dob);
+    const phone = normalizePhoneKey(source.phone);
+    const email = normalizeEmailKey(source.email);
+    const firstNameMatch = !!firstName && hasWholeNormalizedToken(text, firstName);
+    const lastNameMatch = !!lastName && hasWholeNormalizedToken(text, lastName);
+    const streetTokens = street.split(' ')
+      .filter((token) => token && token !== streetNumber && !/^(N|S|E|W|NE|NW|SE|SW|ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|LN|LANE|BLVD|BOULEVARD|CT|COURT|PL|PLACE|PKWY|PARKWAY|WAY|CIR|CIRCLE|TER|TERRACE)$/i.test(token));
+    const streetNameMatch = streetTokens.length
+      ? streetTokens.every((token) => hasWholeNormalizedToken(text, token))
+      : (!!street && text.includes(street));
+    const addressMatch = (!!street || !!zip || !!city || !!state)
+      && (!streetNumber || hasWholeNormalizedToken(text, streetNumber))
+      && (!street || streetNameMatch)
+      && (!zip || text.includes(zip))
+      && (!city || text.includes(city))
+      && (!state || hasWholeNormalizedToken(text, state));
+    const dobMatch = !!dob && normalizeDobKey(summaryText).includes(dob);
+    const phoneMatch = !!phone && normalizePhoneKey(summaryText).includes(phone);
+    const emailMatch = !!email && normalizeEmailKey(summaryText).includes(email);
+    const sameNamedPerson = firstNameMatch && lastNameMatch;
+    const optionType = /CREATE\s+NEW\s+PROFILE|CREATE\s+NEW\s+profile|USING\s+DATA\s+YOU\s+ENTERED/i.test(summaryText)
+      ? 'create-new-profile'
+      : (/EXISTING\s+PROFILE|EXISTING\s+profile/i.test(summaryText) ? 'existing-profile' : 'unknown');
+    const strongAddressIdentity = sameNamedPerson && addressMatch;
+    const strongIdentity = sameNamedPerson && (addressMatch || dobMatch || phoneMatch || emailMatch);
+    let score = 0;
+    if (strongAddressIdentity) score += 100;
+    if (dobMatch) score += 90;
+    if (phoneMatch) score += 90;
+    if (emailMatch) score += 90;
+    if (addressMatch) score += 20;
+    if (lastNameMatch) score += 10;
+    if (firstNameMatch) score += 10;
+    return {
+      radio,
+      container,
+      summary: compact(summaryText, 140),
+      score,
+      strongIdentity,
+      sameNamedPerson,
+      optionType,
+      firstNameMatch,
+      lastNameMatch,
+      addressMatch,
+      dobMatch,
+      phoneMatch,
+      emailMatch
+    };
+  };
+  const duplicateCandidatesAreAmbiguous = (candidates = []) => {
+    if (candidates.length < 2) return false;
+    return (candidates[0].score - candidates[1].score) <= 15;
+  };
+  const findDuplicateContinueButton = () => Array.from(document.querySelectorAll('button,a,input[type=button],input[type=submit]'))
+    .filter(visible)
+    .find((el) => /continue|use existing|use selected/i.test(safe(el.innerText || el.textContent || el.value).trim())) || null;
+  const findCreateNewProspectButton = () => Array.from(document.querySelectorAll('button,a,input[type=button],input[type=submit]'))
+    .filter(visible)
+    .find((el) => {
+      const text = normUpper(safe(el.innerText || el.textContent || el.value).trim());
+      return text.includes('CREATE NEW PROSPECT') || text.includes('CREATE NEW') || text.includes('NEW PROSPECT');
+    }) || null;
+  const duplicateOptionCandidate = (radio, optionType, summary = '') => {
+    if (!radio) return null;
+    const container = radio.closest('.sfmOption,.l-tile,[role=row],div') || radio.parentElement || radio;
+    return {
+      radio,
+      container,
+      summary: compact(summary || getText(container) || getText(radio.parentElement) || '', 140),
+      optionType,
+      score: 0,
+      strongIdentity: false,
+      sameNamedPerson: false,
+      firstNameMatch: false,
+      lastNameMatch: false,
+      addressMatch: false,
+      dobMatch: false,
+      phoneMatch: false,
+      emailMatch: false
+    };
+  };
+  const duplicatePageHasCreateNewProfileText = () => includesText(bodyText(), 'Create NEW profile using data you entered');
+  const duplicatePageHasExistingProfileText = () => includesText(bodyText(), 'Use EXISTING profile found');
+  const findCreateNewDuplicateOption = (allCandidates = [], radios = []) => {
+    const byRowText = allCandidates.find((candidate) => candidate.optionType === 'create-new-profile');
+    if (byRowText) return byRowText;
+    const sfmRadios = radios.filter((radio) => safe(radio.name) === 'sfmOption');
+    if (sfmRadios.length === 2 && duplicatePageHasExistingProfileText() && duplicatePageHasCreateNewProfileText()) {
+      const valueZero = sfmRadios.find((radio) => safe(radio.value) === '0');
+      return duplicateOptionCandidate(valueZero || sfmRadios[1], 'create-new-profile', 'Create NEW profile using data you entered');
+    }
+    return null;
+  };
+  const setDuplicateRadioChecked = (radio) => {
+    if (!radio || isDisabledLike(radio)) return false;
+    try {
+      Array.from(document.querySelectorAll('input[type=radio]')).forEach((other) => {
+        if (other !== radio && safe(other.name) === safe(radio.name))
+          other.checked = false;
+      });
+    } catch {}
+    try { radio.checked = true; } catch {}
+    try { radio.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    return radio.checked === true;
+  };
+  const selectDuplicateRadio = (candidate) => {
+    if (!candidate || !candidate.radio) return { selected: false, radioSelected: false };
+    const target = getInputClickTarget(candidate.radio) || candidate.radio;
+    let clicked = clickCenterEl(target);
+    if (!(candidate.radio.checked || isSelectedNode(candidate.radio) || isSelectedNode(candidate.container)))
+      clicked = clickCenterEl(candidate.radio) || clicked;
+    if (!(candidate.radio.checked || isSelectedNode(candidate.radio) || isSelectedNode(candidate.container)))
+      setDuplicateRadioChecked(candidate.radio);
+    const radioSelected = candidate.radio.checked === true;
+    return {
+      clicked,
+      selected: radioSelected || isSelectedNode(candidate.radio) || isSelectedNode(candidate.container),
+      radioSelected
+    };
+  };
+  const readDuplicateContinueState = () => {
+    const button = findDuplicateContinueButton();
+    return {
+      button,
+      present: button ? '1' : '0',
+      enabled: button && !isDisabledLike(button) ? '1' : '0'
+    };
+  };
+  const waitForDuplicateContinueEnabled = (timeoutMs = 700) => {
+    const start = Date.now();
+    let state = readDuplicateContinueState();
+    while (state.present === '1' && state.enabled !== '1' && (Date.now() - start) < timeoutMs)
+      state = readDuplicateContinueState();
+    return state;
+  };
+  const selectDuplicateRadioAndContinue = (candidate, method, extra = {}) => {
+    const selection = selectDuplicateRadio(candidate);
+    const radioValue = candidate && candidate.radio ? safe(candidate.radio.value) : '';
+    const selected = selection.selected;
+    if (!selected) {
+      return lineResult(Object.assign({
+        result: 'FAILED',
+        method: method === 'create-new-radio' ? 'create-new-radio-target-missing' : `${method}-click-failed`,
+        candidateCount: '1',
+        rowCount: '1',
+        candidateSummaries: candidate.summary,
+        radioValue,
+        radioSelected: selection.radioSelected ? '1' : '0',
+        failedFields: ['duplicateSelection']
+      }, extra));
+    }
+    const continueState = waitForDuplicateContinueEnabled();
+    if (continueState.button && continueState.enabled === '1' && clickCenterEl(continueState.button)) {
+      return lineResult(Object.assign({
+        result: method === 'select-existing-radio' ? 'SELECT_EXISTING' : 'CREATE_NEW',
+        method,
+        candidateSummaries: candidate.summary,
+        radioValue,
+        radioSelected: '1',
+        continueButtonPresent: continueState.present,
+        continueButtonEnabled: continueState.enabled,
+        continueClicked: '1'
+      }, extra));
+    }
+    if (method === 'select-existing-radio') {
+      return lineResult(Object.assign({
+        result: 'SELECTED_NO_CONTINUE',
+        method: 'select-existing-no-continue',
+        candidateSummaries: candidate.summary,
+        radioValue,
+        radioSelected: '1',
+        continueButtonPresent: continueState.present,
+        continueButtonEnabled: continueState.enabled,
+        continueClicked: '0'
+      }, extra));
+    }
+    return lineResult(Object.assign({
+      result: 'FAILED',
+      method: 'create-new-radio-continue-disabled',
+      candidateSummaries: candidate.summary,
+      radioValue,
+      radioSelected: '1',
+      continueButtonPresent: continueState.present,
+      continueButtonEnabled: continueState.enabled,
+      continueClicked: '0',
+      failedFields: ['continueWithSelected']
+    }, extra));
+  };
+
+  const addressVerificationRawText = () => safe(document.body ? (document.body.innerText || document.body.textContent) : '').replace(/\s+/g, ' ').trim();
+  const addressVerificationEvidence = () => {
+    const text = addressVerificationRawText();
+    const radios = Array.from(document.querySelectorAll('input[name="snaOption"]')).filter(visible);
+    const continueButton = findAddressVerificationContinueButton();
+    return {
+      hasHeading: /Address Verification/i.test(text),
+      hasEntered: /You Entered/i.test(text),
+      hasSuggestions: /Did You Mean/i.test(text),
+      radioCount: radios.length,
+      continueButton,
+      found: /Address Verification/i.test(text) && /You Entered/i.test(text) && /Did You Mean/i.test(text) && radios.length > 0 && !!continueButton
+    };
+  };
+  const isAddressVerificationPage = () => addressVerificationEvidence().found;
+  const findAddressVerificationContinueButton = () => Array.from(document.querySelectorAll('button,input,a,[role=button]'))
+    .filter(visible)
+    .find((el) => includesText(lower(el.innerText || el.textContent || el.value || el.getAttribute('aria-label')), 'Continue with Selected')) || null;
+  const addressVerificationFallbackText = () => {
+    const text = addressVerificationRawText();
+    const enteredMatch = text.match(/You Entered\s+(.+?)\s+Did You Mean\??/i);
+    const suggestionMatch = text.match(/Did You Mean\??\s+(.+?)\s+Continue with Selected/i);
+    const suggestionChunk = suggestionMatch ? suggestionMatch[1] : '';
+    const suggestions = [];
+    const addressPattern = /\d{1,6}\s+.*?\b[A-Z]{2}\s+\d{5}(?:-\d{4})?/gi;
+    let match;
+    while ((match = addressPattern.exec(suggestionChunk)) !== null) {
+      const suggestion = safe(match[0]).replace(/\s+/g, ' ').trim();
+      if (suggestion) suggestions.push(suggestion);
+    }
+    return {
+      entered: enteredMatch ? safe(enteredMatch[1]).replace(/\s+/g, ' ').trim() : '',
+      suggestions
+    };
+  };
+  const cleanAddressVerificationOptionText = (text) => safe(text)
+    .replace(/\bAddress Verification\b/ig, ' ')
+    .replace(/\bYou Entered\b/ig, ' ')
+    .replace(/\bDid You Mean\??\b/ig, ' ')
+    .replace(/\bContinue with Selected\b/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const addressVerificationOptionContainer = (radio) => {
+    if (!radio) return null;
+    const candidates = [];
+    let cur = radio.parentElement;
+    for (let depth = 0; cur && depth < 5; depth += 1, cur = cur.parentElement)
+      candidates.push(cur);
+    const scored = candidates.map((el) => {
+      const text = safe(el && (el.innerText || el.textContent));
+      const broad = /Address Verification/i.test(text) && /You Entered/i.test(text) && /Did You Mean/i.test(text);
+      return {
+        el,
+        text,
+        score: (text ? 10 : 0) - (broad ? 100 : 0) - Math.max(0, text.length - 220)
+      };
+    }).filter((item) => item.el && item.text);
+    scored.sort((a, b) => b.score - a.score);
+    return (scored[0] && scored[0].score > -50) ? scored[0].el : (getInputClickTarget(radio) || radio.parentElement || radio);
+  };
+  const collectAddressVerificationOptions = () => {
+    const radios = Array.from(document.querySelectorAll('input[name="snaOption"]')).filter(visible);
+    const fallback = addressVerificationFallbackText();
+    const seenTexts = new Map();
+    const initial = radios.map((radio, index) => {
+      const container = addressVerificationOptionContainer(radio);
+      const value = safe(radio.value);
+      const numeric = Number(value);
+      const kind = value === '0' || index === 0 ? 'entered' : 'suggestion';
+      const rawText = safe(container && (container.innerText || container.textContent));
+      const broad = /Address Verification/i.test(rawText) && /You Entered/i.test(rawText) && /Did You Mean/i.test(rawText);
+      let text = broad ? '' : cleanAddressVerificationOptionText(rawText);
+      if (!text) {
+        if (kind === 'entered') text = fallback.entered;
+        else text = fallback.suggestions[Math.max(0, Number.isFinite(numeric) ? numeric - 1 : index - 1)] || fallback.suggestions[index - 1] || '';
+      }
+      return { radio, container, index, value, kind, text: safe(text).replace(/\s+/g, ' ').trim() };
+    });
+    for (const option of initial) {
+      const key = option.text.toLowerCase();
+      seenTexts.set(key, (seenTexts.get(key) || 0) + 1);
+    }
+    return initial.map((option) => {
+      if (option.text && seenTexts.get(option.text.toLowerCase()) === 1) return option;
+      if (option.kind === 'entered' && fallback.entered) option.text = fallback.entered;
+      if (option.kind === 'suggestion') {
+        const numeric = Number(option.value);
+        option.text = fallback.suggestions[Math.max(0, Number.isFinite(numeric) ? numeric - 1 : option.index - 1)] || fallback.suggestions[option.index - 1] || option.text;
+      }
+      return option;
+    });
+  };
+  const addressSuffixMap = {
+    STREET: 'ST', ST: 'ST',
+    COURT: 'CT', CT: 'CT',
+    AVENUE: 'AVE', AVE: 'AVE', AV: 'AVE',
+    DRIVE: 'DR', DR: 'DR',
+    ROAD: 'RD', RD: 'RD',
+    TERRACE: 'TER', TER: 'TER',
+    BOULEVARD: 'BLVD', BLVD: 'BLVD',
+    WAY: 'WAY',
+    PLACE: 'PL', PL: 'PL',
+    PARKWAY: 'PKWY', PKWY: 'PKWY',
+    LANE: 'LN', LN: 'LN',
+    CIRCLE: 'CIR', CIR: 'CIR',
+    HIGHWAY: 'HWY', HWY: 'HWY'
+  };
+  const addressDirections = new Set(['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW']);
+  const addressStateTokens = new Set('AL AK AZ AR CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY DC'.split(' '));
+  const normalizeAddressWord = (word) => safe(word).toUpperCase().replace(/[^A-Z0-9#]/g, '');
+  const parseAddressForVerification = (raw, fallback = {}) => {
+    const text = safe(raw);
+    const norm = normUpper(text);
+    const tokens = norm.split(/\s+/).map(normalizeAddressWord).filter(Boolean);
+    const zipMatch = text.match(/\b(\d{5})(?:-(\d{4}))?\b/) || norm.match(/\b(\d{5})(?:\s+(\d{4}))?\b/);
+    const numberIndex = tokens.findIndex((token) => /^\d{1,6}$/.test(token));
+    const number = numberIndex >= 0 ? tokens[numberIndex] : '';
+    let cursor = numberIndex >= 0 ? numberIndex + 1 : 0;
+    const direction = addressDirections.has(tokens[cursor]) ? tokens[cursor++] : '';
+    let suffixIndex = -1;
+    for (let i = cursor; i < tokens.length; i += 1) {
+      if (addressSuffixMap[tokens[i]]) {
+        suffixIndex = i;
+        break;
+      }
+      if (addressStateTokens.has(tokens[i]) || /^\d{5}/.test(tokens[i])) break;
+    }
+    const streetNameTokens = suffixIndex >= 0 ? tokens.slice(cursor, suffixIndex) : tokens.slice(cursor, cursor + 1);
+    const suffix = suffixIndex >= 0 ? addressSuffixMap[tokens[suffixIndex]] : '';
+    let unit = safe(fallback.unit || fallback.aptSuite || '');
+    const unitIndex = tokens.findIndex((token) => ['APT', 'APARTMENT', 'UNIT', 'STE', 'SUITE', '#'].includes(token));
+    if (unitIndex >= 0 && tokens[unitIndex + 1]) unit = tokens[unitIndex + 1];
+    return {
+      raw: text,
+      norm,
+      number,
+      direction,
+      streetName: streetNameTokens.join(' '),
+      suffix,
+      city: normUpper(fallback.city || ''),
+      state: normUpper(fallback.state || ''),
+      zip5: zipMatch ? zipMatch[1] : safe(fallback.zip || '').match(/\d{5}/)?.[0] || '',
+      zip4: zipMatch ? safe(zipMatch[2]) : '',
+      unit: normalizeAddressWord(unit)
+    };
+  };
+  const buildLeadAddressForVerification = (args) => {
+    const street = safe(args.street || args.addressLine || args.address || args.ADDRESS_1);
+    const unit = safe(args.unit || args.aptSuite || args.apartment || args.APT_SUITE);
+    const city = safe(args.city || args.CITY);
+    const state = safe(args.state || args.STATE);
+    const zip = safe(args.zip || args.ZIP);
+    return parseAddressForVerification([street, unit, city, state, zip].filter(Boolean).join(' '), { unit, city, state, zip });
+  };
+  const optionHasLeadText = (optionNorm, value) => {
+    const wanted = normUpper(value);
+    return !wanted || optionNorm.includes(wanted);
+  };
+  const scoreAddressVerificationOption = (option, lead) => {
+    const parts = parseAddressForVerification(option.text);
+    const optionNorm = normUpper(option.text);
+    let score = 0;
+    const matchedBy = [];
+    const reject = (reason) => ({ option, parts, safe: false, rejectedReason: reason, score: -999, matchedBy: [reason].join(',') });
+    if (lead.number && parts.number !== lead.number) return reject('streetNumberMismatch');
+    if (lead.streetName && parts.streetName !== lead.streetName) return reject('streetNameMismatch');
+    if (lead.suffix && parts.suffix && parts.suffix !== lead.suffix) return reject('suffixMismatch');
+    if (lead.zip5 && parts.zip5 && parts.zip5 !== lead.zip5) return reject('zipMismatch');
+    if (lead.number && parts.number === lead.number) { score += 40; matchedBy.push('streetNumber'); }
+    if (lead.streetName && parts.streetName === lead.streetName) { score += 40; matchedBy.push('streetName'); }
+    if (lead.direction && parts.direction === lead.direction) { score += 10; matchedBy.push('direction'); }
+    if (lead.suffix && parts.suffix === lead.suffix) { score += 35; matchedBy.push('suffix'); }
+    if (lead.suffix && !parts.suffix) { score -= 35; matchedBy.push('missingSuffix'); }
+    if (optionHasLeadText(optionNorm, lead.city)) { score += 15; matchedBy.push('city'); }
+    else if (lead.city) return reject('cityMismatch');
+    if (optionHasLeadText(optionNorm, lead.state)) { score += 15; matchedBy.push('state'); }
+    else if (lead.state) return reject('stateMismatch');
+    if (lead.zip5 && parts.zip5 === lead.zip5) { score += 15; matchedBy.push('zip5'); }
+    if (option.kind === 'suggestion' && parts.zip4 && (!lead.zip5 || parts.zip5 === lead.zip5)) { score += 4; matchedBy.push('zip4'); }
+    if (option.kind === 'suggestion') { score += 3; matchedBy.push('suggestedStandardized'); }
+    let unitDroppedOrNotShown = '0';
+    if (lead.unit) {
+      if (parts.unit && parts.unit === lead.unit) { score += 12; matchedBy.push('unit'); }
+      else if (parts.unit && parts.unit !== lead.unit) return reject('unitMismatch');
+      else { unitDroppedOrNotShown = '1'; matchedBy.push('unitDroppedOrNotShown'); }
+    }
+    const suffixOk = !lead.suffix || parts.suffix === lead.suffix;
+    const safeMatch = !!(lead.number && parts.number === lead.number && lead.streetName && parts.streetName === lead.streetName && suffixOk
+      && optionHasLeadText(optionNorm, lead.city) && optionHasLeadText(optionNorm, lead.state)
+      && (!lead.zip5 || !parts.zip5 || parts.zip5 === lead.zip5));
+    return {
+      option,
+      parts,
+      safe: safeMatch,
+      score,
+      matchedBy: matchedBy.join(','),
+      unitDroppedOrNotShown,
+      rejectedReason: safeMatch ? '' : 'insufficientMatch'
+    };
+  };
+  const chooseAddressVerificationOption = (args) => {
+    const options = collectAddressVerificationOptions().filter((option) => option.radio);
+    const lead = buildLeadAddressForVerification(args);
+    const scored = options.map((option) => scoreAddressVerificationOption(option, lead));
+    const safeSuggestions = scored.filter((item) => item.safe && item.option.kind === 'suggestion').sort((a, b) => b.score - a.score);
+    const safeEntered = scored.filter((item) => item.safe && item.option.kind === 'entered').sort((a, b) => b.score - a.score);
+    const safePool = safeSuggestions.length ? safeSuggestions : safeEntered;
+    if (!safePool.length) {
+      return {
+        result: 'FAILED',
+        method: 'address-match-no-safe-option',
+        options,
+        scored,
+        selected: null,
+        failedFields: ['addressMatch']
+      };
+    }
+    const top = safePool[0];
+    const tied = safePool.filter((item) => item.score === top.score);
+    if (tied.length > 1) {
+      return {
+        result: 'AMBIGUOUS',
+        method: 'address-match-ambiguous',
+        options,
+        scored,
+        selected: top,
+        failedFields: ['ambiguousAddress']
+      };
+    }
+    return {
+      result: 'SELECTED',
+      method: top.option.kind === 'suggestion' ? 'suggested-address-radio' : 'you-entered-radio',
+      options,
+      scored,
+      selected: top,
+      failedFields: []
+    };
+  };
+  const setAddressVerificationRadioChecked = (radio) => {
+    if (!radio || isDisabledLike(radio)) return false;
+    try {
+      Array.from(document.querySelectorAll('input[name="snaOption"]')).forEach((other) => {
+        if (other !== radio) other.checked = false;
+      });
+    } catch {}
+    try { radio.checked = true; } catch {}
+    try { radio.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    return radio.checked === true;
+  };
+  const selectAddressVerificationRadio = (option) => {
+    if (!option || !option.radio) return { selected: false, radioSelected: false };
+    const clickTarget = option.container || getInputClickTarget(option.radio) || option.radio;
+    let clicked = clickCenterEl(clickTarget);
+    if (!option.radio.checked) clicked = clickCenterEl(option.radio) || clicked;
+    if (!option.radio.checked) setAddressVerificationRadioChecked(option.radio);
+    return {
+      clicked,
+      selected: option.radio.checked === true || isSelectedNode(option.container),
+      radioSelected: option.radio.checked === true
+    };
+  };
+  const readAddressVerificationContinueState = () => {
+    const button = findAddressVerificationContinueButton();
+    return {
+      button,
+      present: button ? '1' : '0',
+      enabled: button && !isDisabledLike(button) ? '1' : '0'
+    };
+  };
+  const waitForAddressVerificationContinueEnabled = (timeoutMs = 700) => {
+    const start = Date.now();
+    let state = readAddressVerificationContinueState();
+    while (state.present === '1' && state.enabled !== '1' && (Date.now() - start) < timeoutMs)
+      state = readAddressVerificationContinueState();
+    return state;
+  };
+  const addressVerificationStatusFields = () => {
+    const evidence = addressVerificationEvidence();
+    const options = collectAddressVerificationOptions();
+    const entered = (options.find((option) => option.kind === 'entered') || {}).text || '';
+    const suggestions = options.filter((option) => option.kind === 'suggestion').map((option) => `${option.value}:${option.text}`).join(' || ');
+    const selected = options.find((option) => option.radio && option.radio.checked);
+    const missing = [];
+    if (!evidence.hasHeading) missing.push('heading');
+    if (!evidence.hasEntered) missing.push('youEntered');
+    if (!evidence.hasSuggestions) missing.push('didYouMean');
+    if (!evidence.radioCount) missing.push('snaOption');
+    if (!evidence.continueButton) missing.push('continueWithSelected');
+    return {
+      result: evidence.found ? 'FOUND' : 'NOT_FOUND',
+      modalPresent: evidence.found ? '1' : '0',
+      radioCount: String(evidence.radioCount),
+      continuePresent: evidence.continueButton ? '1' : '0',
+      continueEnabled: evidence.continueButton && !isDisabledLike(evidence.continueButton) ? '1' : '0',
+      enteredText: entered,
+      suggestionCount: String(options.filter((option) => option.kind === 'suggestion').length),
+      suggestions,
+      selectedValue: selected ? safe(selected.value) : '',
+      evidence: [evidence.hasHeading ? 'heading' : '', evidence.hasEntered ? 'youEntered' : '', evidence.hasSuggestions ? 'didYouMean' : '', evidence.radioCount ? 'snaOption' : '', evidence.continueButton ? 'continueWithSelected' : ''].filter(Boolean).join(','),
+      missing,
+      url: pageUrl()
+    };
+  };
+  const vehicleFieldId = (index, fieldName) => `ConsumerData.Assets.Vehicles[${index}].${fieldName}`;
+  const vehicleField = (index, fieldName) => document.getElementById(vehicleFieldId(index, fieldName));
+  const vehicleRowIndexes = () => {
+    const ids = new Set();
+    for (const el of document.querySelectorAll('input[id],select[id]')) {
+      if (!safe(el.id).includes('ConsumerData.Assets.Vehicles[')) continue;
+      const m = safe(el.id).match(/ConsumerData\.Assets\.Vehicles\[(\d+)\]/);
+      if (m) ids.add(Number(m[1]));
+    }
+    return Array.from(ids).sort((a, b) => a - b);
+  };
+  const readVehicleRow = (index) => {
+    const vehicleType = vehicleField(index, 'VehTypeCd');
+    const year = vehicleField(index, 'ModelYear');
+    const manufacturer = vehicleField(index, 'Manufacturer');
+    const model = vehicleField(index, 'Model');
+    const subModel = vehicleField(index, 'SubModel');
+    return { vehicleType, year, manufacturer, model, subModel };
+  };
+  const vehicleFieldValue = (el) => safe(el && el.value).trim();
+  const vehicleFieldReady = (el) => !!(el && visible(el) && !isDisabledLike(el) && !el.readOnly);
+  const vehicleRowComplete = (row) => !!(
+    vehicleFieldValue(row.year)
+    && vehicleFieldValue(row.manufacturer)
+    && vehicleFieldValue(row.model)
+    && vehicleFieldValue(row.subModel)
+  );
+  const findUsableVehicleRowIndex = (wantedYear = '') => {
+    const indexes = vehicleRowIndexes();
+    const wanted = safe(wantedYear).trim();
+    let fallback = -1;
+    for (const idx of indexes) {
+      const row = readVehicleRow(idx);
+      if (!vehicleFieldReady(row.year)) continue;
+      if (vehicleRowComplete(row)) continue;
+      const rowYear = vehicleFieldValue(row.year);
+      if (!rowYear || (wanted && rowYear === wanted)) return idx;
+      if (fallback < 0) fallback = idx;
+    }
+    return fallback;
+  };
+  const vehicleOptionText = (opt) => safe(opt && (opt.text || opt.innerText || opt.textContent || opt.value)).trim();
+  const vehicleOptionValue = (opt) => safe(opt && opt.value).trim();
+  const validVehicleOption = (opt) => {
+    if (!opt || opt.disabled) return false;
+    const text = normUpper(vehicleOptionText(opt));
+    const value = normUpper(vehicleOptionValue(opt));
+    if (!text && !value) return false;
+    return !['SELECT', 'SELECT ONE', 'PLEASE SELECT', 'CHOOSE', 'CHOOSE ONE'].includes(text);
+  };
+  const vehicleOptionSummary = (select, max = 12) => Array.from((select && select.options) || [])
+    .filter(validVehicleOption)
+    .slice(0, max)
+    .map((opt) => compact(vehicleOptionText(opt), 40))
+    .join('|');
+  const vehicleAliasValues = (wantedText) => {
+    const wanted = normUpper(wantedText);
+    const groups = [
+      ['CHEVROLET', 'CHEVY', 'CHEVY TRUCKS'],
+      ['TOYOTA', 'TOY', 'TOYOTA TRUCKS'],
+      ['FORD', 'FORD TRUCKS'],
+      ['HONDA']
+    ];
+    for (const group of groups) {
+      if (group.includes(wanted)) return new Set(group);
+    }
+    return new Set([wanted]);
+  };
+  const findVehicleDropdownOption = (select, fieldName, wantedText, allowFirstNonEmpty = false) => {
+    const options = Array.from((select && select.options) || []).filter(validVehicleOption);
+    const wanted = normUpper(wantedText);
+    const field = safe(fieldName);
+    if (!options.length) return null;
+    if (field === 'ModelYear') {
+      const wantedYear = normalizeDigits(wantedText);
+      if (!wantedYear) return null;
+      return options.find((opt) => normalizeDigits(vehicleOptionValue(opt)) === wantedYear)
+        || options.find((opt) => normalizeDigits(vehicleOptionText(opt)) === wantedYear)
+        || null;
+    }
+    if (wanted) {
+      let match = options.find((opt) => normUpper(vehicleOptionValue(opt)) === wanted) || null;
+      if (match) return match;
+      match = options.find((opt) => normUpper(vehicleOptionText(opt)) === wanted) || null;
+      if (match) return match;
+      const aliases = vehicleAliasValues(wanted);
+      match = options.find((opt) => aliases.has(normUpper(vehicleOptionValue(opt))) || aliases.has(normUpper(vehicleOptionText(opt)))) || null;
+      if (match) return match;
+      const containsMatches = options.filter((opt) => {
+        const text = normUpper(vehicleOptionText(opt));
+        const value = normUpper(vehicleOptionValue(opt));
+        return (text && (text.includes(wanted) || wanted.includes(text)))
+          || (value && (value.includes(wanted) || wanted.includes(value)));
+      });
+      if (containsMatches.length === 1) return containsMatches[0];
+    }
+    if (allowFirstNonEmpty)
+      return options[0] || null;
+    return null;
+  };
+  const applyVehicleDropdownOption = (select, option) => {
+    if (!select || !option) return false;
+    try { select.focus(); } catch {}
+    try {
+      Array.from(select.options || []).forEach((opt) => { opt.selected = opt === option; });
+    } catch {}
+    if (!setNativeValue(select, option.value)) {
+      try { select.value = option.value; } catch {}
+    }
+    try { select.value = option.value; } catch {}
+    fireFieldEvents(select);
+    return safe(select.value) === safe(option.value);
+  };
+  const vehicleManufacturerState = (index) => {
+    const manufacturer = vehicleField(index, 'Manufacturer');
+    const options = Array.from((manufacturer && manufacturer.options) || []).filter(validVehicleOption);
+    return {
+      el: manufacturer,
+      enabled: !!(manufacturer && visible(manufacturer) && !isDisabledLike(manufacturer)),
+      optionCount: options.length,
+      options: options.map((opt) => compact(vehicleOptionText(opt), 40)).join('|')
+    };
+  };
+  const dispatchVehicleYearEvent = (el, type, events, extra = {}) => {
+    try {
+      const Ctor = /^key/.test(type) ? (globalThis.KeyboardEvent || Event) : Event;
+      el.dispatchEvent(new Ctor(type, Object.assign({ bubbles: true, cancelable: true }, extra)));
+      events.push(type);
+      return true;
+    } catch {
+      try {
+        el.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+        events.push(type);
+        return true;
+      } catch {}
+    }
+    return false;
+  };
+  const setVehicleYearControlled = (input, year, attempt, manufacturer) => {
+    const events = [];
+    const methodParts = [];
+    try { input.focus(); methodParts.push('focus'); } catch {}
+    try { if (typeof input.select === 'function') input.select(); } catch {}
+    if (attempt > 1) {
+      setNativeValue(input, '');
+      dispatchVehicleYearEvent(input, 'keydown', events, { key: 'Backspace' });
+      dispatchVehicleYearEvent(input, 'input', events);
+      dispatchVehicleYearEvent(input, 'keyup', events, { key: 'Backspace' });
+      methodParts.push('clear');
+    }
+    dispatchVehicleYearEvent(input, 'keydown', events, { key: safe(year).slice(-1) || '0' });
+    if (!setNativeValue(input, year)) {
+      try { input.value = year; } catch {}
+    }
+    dispatchVehicleYearEvent(input, 'input', events);
+    dispatchVehicleYearEvent(input, 'change', events);
+    dispatchVehicleYearEvent(input, 'keyup', events, { key: safe(year).slice(-1) || '0' });
+    if (attempt > 1) {
+      dispatchVehicleYearEvent(input, 'blur', events);
+      try { if (typeof input.blur === 'function') input.blur(); } catch {}
+      dispatchVehicleYearEvent(input, 'focusout', events);
+      methodParts.push('blur-focusout');
+    }
+    if (attempt > 2 && manufacturer) {
+      try { manufacturer.focus(); methodParts.push('manufacturer-focus'); } catch {}
+      dispatchVehicleYearEvent(manufacturer, 'focus', events);
+    }
+    return {
+      method: methodParts.concat([attempt > 1 ? 'retry-controlled-input' : 'controlled-input']).join('|'),
+      events
+    };
+  };
+  const setVehicleYearAndWaitManufacturer = (source = {}) => {
+    const index = Number(source.index);
+    const year = safe(source.year).trim();
+    const input = vehicleField(index, 'ModelYear');
+    const manufacturer = vehicleField(index, 'Manufacturer');
+    const failed = [];
+    let yearVerified = '0';
+    let method = '';
+    let eventsFired = [];
+    let attempts = 1;
+    if (!input || !visible(input) || isDisabledLike(input) || input.readOnly) {
+      failed.push('year');
+      const state = vehicleManufacturerState(index);
+      return lineResult({
+        result: 'FAILED',
+        index: String(source.index ?? ''),
+        yearWanted: year,
+        yearValue: vehicleFieldValue(input),
+        yearVerified,
+        manufacturerEnabled: state.enabled ? '1' : '0',
+        manufacturerOptionCount: String(state.optionCount),
+        manufacturerOptions: state.options,
+        method: 'year-input-unavailable',
+        eventsFired: '',
+        attempts: '0',
+        failedFields: failed,
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+    const readyBefore = vehicleManufacturerState(index);
+    if (readyBefore.enabled && readyBefore.optionCount > 0 && normalizeDigits(input.value) === normalizeDigits(year)) {
+      return linesOut({
+        result: 'OK',
+        index: String(index),
+        yearWanted: year,
+        yearValue: vehicleFieldValue(input),
+        yearVerified: '1',
+        manufacturerEnabled: '1',
+        manufacturerOptionCount: String(readyBefore.optionCount),
+        manufacturerOptions: readyBefore.options,
+        method: 'already-ready',
+        eventsFired: '',
+        attempts: '0',
+        failedFields: '',
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+    const sequence = setVehicleYearControlled(input, year, 2, manufacturer);
+    method = sequence.method;
+    eventsFired = sequence.events;
+    yearVerified = normalizeDigits(input.value) === normalizeDigits(year) ? '1' : '0';
+    if (yearVerified !== '1') {
+      failed.push('year');
+    }
+    const finalState = vehicleManufacturerState(index);
+    if (yearVerified === '1' && finalState.enabled && finalState.optionCount > 0) {
+      return linesOut({
+        result: 'OK',
+        index: String(index),
+        yearWanted: year,
+        yearValue: vehicleFieldValue(input),
+        yearVerified,
+        manufacturerEnabled: '1',
+        manufacturerOptionCount: String(finalState.optionCount),
+        manufacturerOptions: finalState.options,
+        method,
+        eventsFired: eventsFired.join('|'),
+        attempts: String(attempts),
+        failedFields: '',
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+    if (yearVerified === '1') failed.push('manufacturer');
+    return lineResult({
+      result: 'FAILED',
+      index: String(Number.isNaN(index) ? safe(source.index) : index),
+      yearWanted: year,
+      yearValue: vehicleFieldValue(input),
+      yearVerified,
+      manufacturerEnabled: finalState.enabled ? '1' : '0',
+      manufacturerOptionCount: String(finalState.optionCount),
+      manufacturerOptions: finalState.options,
+      method,
+      eventsFired: eventsFired.join('|'),
+      attempts: String(attempts),
+      failedFields: Array.from(new Set(failed)),
+      alerts: collectVisibleAlerts().join(' || ')
+    });
+  };
+  const findGatherAddVehicleButton = () => {
+    const candidates = Array.from(document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]'))
+      .filter(visible)
+      .filter((el) => !isDisabledLike(el));
+    const wanted = ['ADD CAR OR TRUCK', 'ADD VEHICLE', 'ADD ANOTHER VEHICLE', 'ADD CAR', 'ADD TRUCK'];
+    return candidates.find((el) => {
+      const text = normUpper([getText(el), safe(el.value), safe(el.getAttribute('aria-label')), safe(el.id)].join(' '));
+      return wanted.some((needle) => text.includes(needle));
+    }) || null;
+  };
+  const waitForUsableVehicleRow = (wantedYear = '', timeoutMs = 900) => {
+    const start = Date.now();
+    let idx = findUsableVehicleRowIndex(wantedYear);
+    while (idx < 0 && (Date.now() - start) < timeoutMs)
+      idx = findUsableVehicleRowIndex(wantedYear);
+    return idx;
+  };
+  const gatherVehicleRowStatus = (source = {}) => {
+    try {
+      const requested = safe(source.index).trim();
+      let rowIndex = requested !== '' && !Number.isNaN(Number(requested)) ? Number(requested) : findUsableVehicleRowIndex(source.year);
+      if (rowIndex < 0) {
+        const indexes = vehicleRowIndexes();
+        rowIndex = indexes.length ? indexes[0] : -1;
+      }
+      const addButton = findGatherAddVehicleButton();
+      if (rowIndex < 0) {
+        return {
+          result: addButton ? 'NO_ROW' : 'NO_ADD_BUTTON',
+          rowIndex: '',
+          hasVehicleType: '0',
+          hasYear: '0',
+          hasManufacturer: '0',
+          hasModel: '0',
+          hasSubModel: '0',
+          vehicleTypeValue: '',
+          yearValue: '',
+          manufacturerValue: '',
+          modelValue: '',
+          subModelValue: '',
+          yearOptions: '',
+          manufacturerOptions: '',
+          modelOptions: '',
+          subModelOptions: '',
+          addButtonPresent: addButton ? '1' : '0',
+          addButtonText: compact(addButton ? getText(addButton) : '', 80),
+          alerts: collectVisibleAlerts().join(' || ')
+        };
+      }
+      const row = readVehicleRow(rowIndex);
+      const hasYear = !!row.year && visible(row.year);
+      const ready = hasYear && !isDisabledLike(row.year) && !row.year.readOnly;
+      return {
+        result: ready ? 'READY' : 'PARTIAL',
+        rowIndex: String(rowIndex),
+        hasVehicleType: row.vehicleType && visible(row.vehicleType) ? '1' : '0',
+        hasYear: hasYear ? '1' : '0',
+        hasManufacturer: row.manufacturer && visible(row.manufacturer) ? '1' : '0',
+        hasModel: row.model && visible(row.model) ? '1' : '0',
+        hasSubModel: row.subModel && visible(row.subModel) ? '1' : '0',
+        vehicleTypeValue: vehicleFieldValue(row.vehicleType),
+        yearValue: vehicleFieldValue(row.year),
+        manufacturerValue: vehicleFieldValue(row.manufacturer),
+        modelValue: vehicleFieldValue(row.model),
+        subModelValue: vehicleFieldValue(row.subModel),
+        yearOptions: vehicleOptionSummary(row.year),
+        manufacturerOptions: vehicleOptionSummary(row.manufacturer),
+        modelOptions: vehicleOptionSummary(row.model),
+        subModelOptions: vehicleOptionSummary(row.subModel),
+        addButtonPresent: addButton ? '1' : '0',
+        addButtonText: compact(addButton ? getText(addButton) : '', 80),
+        alerts: collectVisibleAlerts().join(' || ')
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        rowIndex: '',
+        hasVehicleType: '0',
+        hasYear: '0',
+        hasManufacturer: '0',
+        hasModel: '0',
+        hasSubModel: '0',
+        vehicleTypeValue: '',
+        yearValue: '',
+        manufacturerValue: '',
+        modelValue: '',
+        subModelValue: '',
+        yearOptions: '',
+        manufacturerOptions: '',
+        modelOptions: '',
+        subModelOptions: '',
+        addButtonPresent: '0',
+        addButtonText: '',
+        alerts: compact(err && err.message, 160)
+      };
+    }
+  };
+  const gatherVehicleAddStatus = (source = {}) => {
+    const matchArgs = getVehicleMatchArgs(source);
+    const year = normUpper(source.year);
+    const candidates = findVehicleMatchCandidates(source);
+    const candidateTexts = candidates.slice(0, 5).map((candidate) => compact(candidate.cardText, 120));
+    const isConfirmedVehicleCandidate = (candidate) => {
+      if (!candidate || !candidate.details || !candidate.details.yearMatch || !candidate.details.makeMatch || !candidate.details.modelMatch)
+        return false;
+      const cardText = normLower(candidate.cardText);
+      if (!cardText.includes('confirmed')) return false;
+      if (cardText.includes('potential vehicles') || cardText.includes('unknown vehicles')) return false;
+      if (cardText.includes('confirm remove') && !cardText.includes('confirmed vehicles')) return false;
+      const sectionEvidence = cardText.includes('cars and trucks') || cardText.includes('confirmed vehicles');
+      const actionEvidence = cardText.includes('edit') || cardText.includes('remove');
+      return sectionEvidence || actionEvidence;
+    };
+    const confirmed = candidates.find(isConfirmedVehicleCandidate) || null;
+    const matched = confirmed || candidates[0] || null;
+    const matchedText = matched ? compact(matched.cardText, 180) : '';
+    const matchedNorm = normUpper(matchedText);
+    const yearMatched = !!matched && !!matched.details && !!matched.details.yearMatch;
+    const makeMatched = !!matched && !!matched.details && !!matched.details.makeMatch;
+    const modelMatched = !!matched && !!matched.details && !!matched.details.modelMatch;
+    const vinMatched = !!matched && !!matched.details && (!!matched.details.vinMatch || !!matched.details.vinSuffixMatch);
+    const vehicleMatched = !!matched && yearMatched && makeMatched && modelMatched;
+    const confirmedVehicleMatched = !!confirmed;
+    const confirmedStatusMatched = !!confirmed && normLower(confirmed.cardText).includes('confirmed');
+    const rowIndexArg = safe(source.index).trim();
+    const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
+    const indexes = vehicleRowIndexes();
+    const hasAnyRow = indexes.length > 0;
+    const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
+    const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
+    const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
+    const rowIncomplete = rowOpen && !rowComplete;
+    const rowGone = !rowOpen && !hasAnyRow;
+    const addButton = findGatherAddVehicleButton();
+    const text = bodyText();
+    const warningStillPresent = includesText(text, 'confirm or add at least 1 car or truck') || includesText(text, 'auto originally asked for');
+    const alerts = collectVisibleAlerts();
+    const alertText = lower(alerts.join(' || '));
+    const failedAlert = /incomplete|required|invalid|error/.test(alertText);
+    let result = 'MISSING';
+    let method = 'no-vehicle-evidence';
+    if (confirmedVehicleMatched) {
+      result = 'ADDED';
+      method = 'confirmed-vehicle-card';
+    } else if (vehicleMatched && /added to quote/.test(lower(matchedText)) && !findCardButtonByText(matched.card, 'Confirm')) {
+      result = 'IN_PROGRESS';
+      method = 'vehicle-card-added-unconfirmed';
+    } else if (vehicleMatched) {
+      result = 'IN_PROGRESS';
+      method = 'vehicle-text-unconfirmed';
+    } else if (rowComplete) {
+      result = 'READY_ROW';
+      method = 'row-complete';
+    } else if (failedAlert) {
+      result = 'FAILED';
+      method = 'validation-alert';
+    } else if (rowIncomplete || (rowGone && warningStillPresent)) {
+      result = 'IN_PROGRESS';
+      method = rowIncomplete ? 'row-incomplete' : 'row-gone-warning-present';
+    } else if (rowGone && !warningStillPresent) {
+      result = 'IN_PROGRESS';
+      method = 'row-gone-no-vehicle-text';
+    }
+    return linesOut({
+      result,
+      vehicleMatched: vehicleMatched ? '1' : '0',
+      confirmedVehicleMatched: confirmedVehicleMatched ? '1' : '0',
+      confirmedStatusMatched: confirmedStatusMatched ? '1' : '0',
+      yearMatched: yearMatched ? '1' : '0',
+      makeMatched: makeMatched ? '1' : '0',
+      modelMatched: modelMatched ? '1' : '0',
+      vinMatched: (matchArgs.vin || matchArgs.vinSuffix) && vinMatched ? '1' : '0',
+      rowOpen: rowOpen ? '1' : '0',
+      rowIndex: rowIndex >= 0 ? String(rowIndex) : '',
+      rowComplete: rowComplete ? '1' : '0',
+      rowIncomplete: rowIncomplete ? '1' : '0',
+      rowGone: rowGone ? '1' : '0',
+      addButtonPresent: addButton ? '1' : '0',
+      warningStillPresent: warningStillPresent ? '1' : '0',
+      matchedText,
+      candidateTexts: candidateTexts.join(' || '),
+      alerts: alerts.join(' || '),
+      method
+    });
+  };
+  const vehicleEditField = (fieldNames = []) => {
+    const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+    for (const name of names) {
+      const exact = document.getElementById(`CommonComponent.Vehicle[0].${name}`);
+      if (exact && visible(exact)) return exact;
+    }
+    const controls = Array.from(document.querySelectorAll('input[id],select[id],textarea[id]')).filter(visible);
+    for (const name of names) {
+      const suffix = `.${name}`;
+      const found = controls.find((el) => safe(el.id).includes('CommonComponent.Vehicle') && safe(el.id).endsWith(suffix));
+      if (found) return found;
+    }
+    return null;
+  };
+  const readVehicleEditField = (el) => {
+    if (!el || !visible(el)) return { value: '', text: '' };
+    if (el.tagName === 'SELECT') {
+      const selected = Array.from(el.options || []).find((opt) => opt.selected) || (el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null);
+      return {
+        value: safe(el.value).trim(),
+        text: vehicleOptionText(selected || { text: el.value, value: el.value })
+      };
+    }
+    return { value: safe(el.value).trim(), text: safe(el.value).trim() };
+  };
+  const findVehicleEditUpdateButton = () => {
+    const exact = document.getElementById('submitButtonVehicleComponent_0');
+    if (exact && visible(exact)) return exact;
+    return Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],a,[role=button]'))
+      .filter(visible)
+      .find((el) => answerTextMatches(getText(el) || safe(el.value) || safe(el.getAttribute('aria-label')), 'Update')) || null;
+  };
+  const vehicleEditOptionSummary = (select, max = 12) => Array.from((select && select.options) || [])
+    .filter(validVehicleOption)
+    .slice(0, max)
+    .map((opt) => compact(vehicleOptionText(opt), 80))
+    .join('|');
+  const readVehicleEditStatusFields = () => {
+    const body = safe((document.body && (document.body.innerText || document.body.textContent)) || '');
+    const bodyNorm = normUpper(body);
+    const subModel = vehicleEditField('SubModel');
+    const year = vehicleEditField(['ModelYear', 'Year']);
+    const vin = vehicleEditField(['VIN', 'Vin', 'VehicleIdentificationNumber', 'VehIdentificationNumber']);
+    const manufacturer = vehicleEditField(['Manufacturer', 'Make']);
+    const model = vehicleEditField(['Model']);
+    const vehicleType = vehicleEditField(['VehTypeCd', 'VehicleType']);
+    const updateButton = findVehicleEditUpdateButton();
+    const subModelState = readVehicleEditField(subModel);
+    const validOptions = Array.from((subModel && subModel.options) || []).filter(validVehicleOption);
+    const selectedOption = Array.from((subModel && subModel.options) || []).find((opt) => opt.selected) || null;
+    const selectedValid = !!(selectedOption && validVehicleOption(selectedOption) && safe(subModel && subModel.value).trim());
+    const modalEvidence = !!subModel || !!updateButton || bodyNorm.includes('EDIT VEHICLE');
+    const requiredEvidence = bodyNorm.includes('SUB-MODEL') || bodyNorm.includes('SUB MODEL') || !!subModel;
+    const evidence = [
+      bodyNorm.includes('EDIT VEHICLE') ? 'editVehicleText' : '',
+      subModel ? 'subModelSelect' : '',
+      updateButton ? 'updateButton' : '',
+      requiredEvidence ? 'subModelRequiredText' : ''
+    ].filter(Boolean).join(',');
+    const missing = [];
+    if (!modalEvidence) missing.push('editVehicleModal');
+    if (modalEvidence && !subModel) missing.push('subModel');
+    if (modalEvidence && !updateButton) missing.push('updateButton');
+    let result = 'NO_MODAL';
+    if (modalEvidence && !subModel) result = 'NO_SUBMODEL';
+    else if (modalEvidence && selectedValid) result = 'SUBMODEL_SELECTED';
+    else if (modalEvidence && subModel && validOptions.length > 0) result = 'SUBMODEL_REQUIRED';
+    else if (modalEvidence && subModel) result = 'READY';
+    return {
+      result,
+      vehicleText: compact([readVehicleEditField(year).text, readVehicleEditField(manufacturer).text, readVehicleEditField(model).text, readVehicleEditField(vin).text].filter(Boolean).join(' '), 180),
+      vehicleTypeValue: readVehicleEditField(vehicleType).value,
+      yearValue: readVehicleEditField(year).value || readVehicleEditField(year).text,
+      vinValue: readVehicleEditField(vin).value || readVehicleEditField(vin).text,
+      manufacturerValue: readVehicleEditField(manufacturer).value || readVehicleEditField(manufacturer).text,
+      modelValue: readVehicleEditField(model).value || readVehicleEditField(model).text,
+      subModelPresent: subModel ? '1' : '0',
+      subModelValue: subModelState.value,
+      subModelText: subModelState.text,
+      subModelOptionCount: String(validOptions.length),
+      subModelOptions: vehicleEditOptionSummary(subModel),
+      updateButtonPresent: updateButton ? '1' : '0',
+      updateButtonEnabled: updateButton && !isDisabledLike(updateButton) ? '1' : '0',
+      alerts: collectVisibleAlerts().join(' || '),
+      evidence,
+      missing
+    };
+  };
+  const escapeRegexText = (value) => safe(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const vinPatternCompatible = (vinValue, optionText) => {
+    const vin = normalizeVehicleVin(vinValue);
+    if (!vin) return false;
+    const optionPatternText = safe(optionText).toUpperCase().replace(/[^A-Z0-9*]/g, ' ');
+    const patterns = (optionPatternText.match(/[A-Z0-9*]{6,17}/g) || [])
+      .filter((token) => token.includes('*') && /\d/.test(token));
+    return patterns.some((pattern) => {
+      const regex = new RegExp(pattern.split('*').map(escapeRegexText).join('[A-Z0-9]*'));
+      return regex.test(vin);
+    });
+  };
+  const vehicleEditHintMatches = (optionText, hint) => {
+    const wanted = normalizeVehicleText(hint);
+    if (!wanted) return false;
+    const optionNorm = normalizeVehicleText(optionText);
+    const tokens = wanted.split(/\s+/).filter((token) => token.length > 1);
+    if (!tokens.length) return false;
+    return tokens.every((token) => new RegExp(`(^|[^A-Z0-9])${escapeRegexText(token)}([^A-Z0-9]|$)`).test(optionNorm));
+  };
+  const chooseVehicleEditSubModelOption = (select, source = {}, status = {}) => {
+    const options = Array.from((select && select.options) || []).filter(validVehicleOption);
+    if (!options.length) return { option: null, method: '', count: 0 };
+    const vin = safe(source.vin || status.vinValue);
+    if (vin) {
+      const vinMatches = options.filter((opt) => vinPatternCompatible(vin, vehicleOptionText(opt)));
+      if (vinMatches.length)
+        return { option: vinMatches[0], method: 'vin-pattern', count: options.length };
+    }
+    const hints = [
+      source.trim,
+      source.trimHint,
+      source.drivetrain,
+      source.body,
+      source.bodyStyle
+    ].map((value) => safe(value).trim()).filter(Boolean);
+    for (const hint of hints) {
+      const matches = options.filter((opt) => vehicleEditHintMatches(vehicleOptionText(opt), hint));
+      if (matches.length === 1)
+        return { option: matches[0], method: 'trim-match', count: options.length };
+    }
+    return { option: options[0], method: 'first-valid', count: options.length };
+  };
+  const handleVehicleEditModal = (source = {}) => {
+    const status = readVehicleEditStatusFields();
+    if (status.result === 'NO_MODAL') {
+      return lineResult({
+        result: 'NO_MODAL',
+        method: 'vehicle-edit-not-found',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: '',
+        subModelSelectedText: '',
+        subModelSelectionMethod: '',
+        subModelOptionCount: status.subModelOptionCount,
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: '0',
+        failedFields: status.missing,
+        evidence: status.evidence
+      });
+    }
+    const subModel = vehicleEditField('SubModel');
+    if (!subModel || !visible(subModel)) {
+      return lineResult({
+        result: 'NO_ACTION_NEEDED',
+        method: 'submodel-not-present',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: '',
+        subModelSelectedText: '',
+        subModelSelectionMethod: '',
+        subModelOptionCount: status.subModelOptionCount,
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: '0',
+        failedFields: '',
+        evidence: status.evidence
+      });
+    }
+    const selectedOption = Array.from(subModel.options || []).find((opt) => opt.selected) || null;
+    if (selectedOption && validVehicleOption(selectedOption) && safe(subModel.value).trim()) {
+      return linesOut({
+        result: 'NO_ACTION_NEEDED',
+        method: 'submodel-already-selected',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: safe(subModel.value),
+        subModelSelectedText: vehicleOptionText(selectedOption),
+        subModelSelectionMethod: 'already-selected',
+        subModelOptionCount: status.subModelOptionCount,
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: '0',
+        failedFields: '',
+        evidence: status.evidence
+      });
+    }
+    const choice = chooseVehicleEditSubModelOption(subModel, source, status);
+    if (!choice.option) {
+      return lineResult({
+        result: 'NO_SUBMODEL_OPTIONS',
+        method: 'submodel-options-missing',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: '',
+        subModelSelectedText: '',
+        subModelSelectionMethod: '',
+        subModelOptionCount: status.subModelOptionCount,
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: '0',
+        failedFields: ['subModel'],
+        evidence: status.evidence
+      });
+    }
+    const selected = applyVehicleDropdownOption(subModel, choice.option);
+    const afterSelected = Array.from(subModel.options || []).find((opt) => opt.selected) || null;
+    if (!selected || !afterSelected || !validVehicleOption(afterSelected)) {
+      return lineResult({
+        result: 'FAILED',
+        method: 'submodel-selection-failed',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: safe(subModel.value),
+        subModelSelectedText: afterSelected ? vehicleOptionText(afterSelected) : '',
+        subModelSelectionMethod: choice.method,
+        subModelOptionCount: String(choice.count),
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: '0',
+        failedFields: ['subModel'],
+        evidence: status.evidence
+      });
+    }
+    const updateButton = findVehicleEditUpdateButton();
+    if (!updateButton || isDisabledLike(updateButton)) {
+      return lineResult({
+        result: 'FAILED',
+        method: 'update-button-unavailable',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: safe(subModel.value),
+        subModelSelectedText: vehicleOptionText(afterSelected),
+        subModelSelectionMethod: choice.method,
+        subModelOptionCount: String(choice.count),
+        updateButtonPresent: updateButton ? '1' : '0',
+        updateButtonEnabled: updateButton && !isDisabledLike(updateButton) ? '1' : '0',
+        updateClicked: '0',
+        failedFields: ['updateButton'],
+        evidence: status.evidence
+      });
+    }
+    const clicked = clickCenterEl(updateButton);
+    return lineResult({
+      result: clicked ? 'UPDATED' : 'FAILED',
+      method: clicked ? 'submodel-selected-update-clicked' : 'update-click-failed',
+      yearValue: status.yearValue,
+      vinValue: status.vinValue,
+      manufacturerValue: status.manufacturerValue,
+      modelValue: status.modelValue,
+      subModelSelectedValue: safe(subModel.value),
+      subModelSelectedText: vehicleOptionText(afterSelected),
+      subModelSelectionMethod: choice.method,
+      subModelOptionCount: String(choice.count),
+      updateButtonPresent: '1',
+      updateButtonEnabled: '1',
+      updateClicked: clicked ? '1' : '0',
+      failedFields: clicked ? '' : ['updateButton'],
+      evidence: status.evidence
+    });
+  };
+
+  switch (safe(op)) {
+    case 'detect_state': {
+      const url = pageUrl();
+      const text = bodyText();
+      const selectors = getSelectorArgs(args);
+      const isCustomerSummaryOverview = isCustomerSummaryOverviewPage(args);
+      const isRapport = isGatherDataPage(args);
+      const isProductOverview = isProductOverviewPage(args);
+      const isSelectProductForm = isSelectProductFormPage(args);
+      const isIncidents = isIncidentsPage(args);
+      const isAsc = isAscProductPage(args);
+
+      if (isCustomerSummaryOverview) return 'CUSTOMER_SUMMARY_OVERVIEW';
+      if (isDuplicatePage(args)) return 'DUPLICATE';
+      if (isRapport) return 'RAPPORT';
+      if (isProductOverview) return 'PRODUCT_OVERVIEW';
+      if (isSelectProductForm) return 'SELECT_PRODUCT';
+      if (isIncidents) return 'INCIDENTS';
+      if (isAsc) return 'ASC_PRODUCT';
+      if (safe(selectors.searchCreateNewProspectId) && findByStableId(selectors.searchCreateNewProspectId)) return 'BEGIN_QUOTING_SEARCH';
+      if (safe(selectors.beginQuotingContinueId) && findByStableId(selectors.beginQuotingContinueId)) return 'BEGIN_QUOTING_FORM';
+      if (safe(selectors.advisorQuotingButtonId) && findByStableId(selectors.advisorQuotingButtonId)) return 'ADVISOR_HOME';
+      if (url.includes('advisorpro.allstate.com')) return 'ADVISOR_OTHER';
+      if (text.includes('allstate advisor pro')) return 'GATEWAY';
+      return 'NO_CONTEXT';
+    }
+
+    case 'click_product_overview_tile': {
+      if (!isProductOverviewPage(args)) return 'NOT_OVERVIEW';
+      const state = readOverviewProductTileState(args);
+      if (state.result === 'NO_TILE') return 'NO_TILE';
+      if (state.selected === '1') return 'OK';
+      const tile = findOverviewProductTile(args.productText || 'Auto');
+      if (!tile) return 'NO_TILE';
+      const target = tile.clickableTarget || tile.tileContainer || tile.textNode;
+      return clickCenterEl(target) ? 'OK' : 'CLICK_FAILED';
+    }
+
+    case 'product_overview_tile_status':
+      return linesOut(readOverviewProductTileState(args));
+
+    case 'ensure_product_overview_tile_selected':
+      return linesOut(ensureOverviewProductTileSelected(args));
+
+    case 'click_product_overview_subnav_from_rapport':
+      return clickProductOverviewSubnavFromRapport(args);
+
+    case 'customer_summary_overview_status':
+      return linesOut(customerSummaryOverviewStatus(args));
+
+    case 'click_customer_summary_start_here': {
+      const match = findCustomerSummaryStartHereTarget(args);
+      const status = match.status || {};
+      const target = match.target;
+      if (status.urlMatched !== '1' || status.overviewMatched !== '1') {
+        return linesOut({
+          result: 'NO_CUSTOMER_SUMMARY',
+          clicked: '0',
+          targetText: '',
+          targetTag: '',
+          targetClass: '',
+          urlBefore: compact(pageUrl(), 240),
+          evidence: compact(status.evidence || '', 240)
+        });
+      }
+      if (!target) {
+        return linesOut({
+          result: 'NO_START_HERE',
+          clicked: '0',
+          targetText: '',
+          targetTag: '',
+          targetClass: '',
+          urlBefore: compact(pageUrl(), 240),
+          evidence: compact(status.evidence || '', 240)
+        });
+      }
+      const clicked = clickCenterEl(target);
+      return linesOut({
+        result: clicked ? 'OK' : 'CLICK_FAILED',
+        clicked: clicked ? '1' : '0',
+        targetText: customerSummaryActionText(target),
+        targetTag: safe(target.tagName),
+        targetClass: compact(safe(target.className), 160),
+        urlBefore: compact(pageUrl(), 240),
+        evidence: compact(status.evidence || '', 240)
+      });
+    }
+
+    case 'focus_prospect_first_input': {
+      const byIds = [
+        'ConsumerData.People[0].Name.GivenName',
+        'ConsumerData.People[0].Name.FirstName',
+        'ConsumerData.People[0].Personal.GivenName',
+        'FirstName', 'firstName', 'First_Name'
+      ];
+      for (const id of byIds) {
+        const el = document.getElementById(id);
+        if (visible(el)) {
+          try { el.focus(); el.click(); } catch {}
+          return '1';
+        }
+      }
+      const textInputs = Array.from(document.querySelectorAll('input[type=text],input:not([type])')).filter(visible);
+      if (textInputs.length) {
+        try { textInputs[0].focus(); textInputs[0].click(); } catch {}
+        return '1';
+      }
+      return '0';
+    }
+
+    case 'prospect_form_status': {
+      const selectors = args.selectors || {};
+      const readValue = (id) => {
+        const el = findByStableId(id);
+        if (!el || !visible(el)) return '';
+        if (el.tagName === 'SELECT') {
+          const opt = el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+          return safe(opt ? (opt.text || opt.innerText) : el.value).trim();
+        }
+        if (/^(checkbox|radio)$/i.test(safe(el.type)))
+          return el.checked ? safe(el.value).trim() : '';
+        return safe(el.value).trim();
+      };
+      const uniq = (items) => {
+        const seen = new Set();
+        const out = [];
+        for (const item of items) {
+          const text = safe(item).replace(/\s+/g, ' ').trim();
+          if (!text) continue;
+          const key = text.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(text);
+        }
+        return out;
+      };
+      const errorNodes = Array.from(document.querySelectorAll('[id^="message_"], .c-alert a, .c-alert__content a, .c-alert__content, .c-alert'))
+        .filter(visible);
+      const errors = uniq(
+        errorNodes
+          .map((el) => safe(el.innerText || el.textContent))
+          .flatMap((text) => text.split(/\r?\n/))
+          .map((line) => line.replace(/\s+/g, ' ').trim())
+          .filter((line) => line && !/^view all$/i.test(line))
+      );
+      const submit = findByStableId(selectors.beginQuotingContinueId || args.submitId);
+      const requiredIds = [
+        selectors.prospectFirstNameId,
+        selectors.prospectLastNameId,
+        selectors.prospectDobId,
+        selectors.prospectAddressId,
+        selectors.prospectCityId,
+        selectors.prospectStateId,
+        selectors.prospectZipId,
+        selectors.beginQuotingContinueId
+      ].filter(Boolean);
+      const ready = requiredIds.every((id) => {
+        const el = findByStableId(id);
+        return !!el && visible(el);
+      });
+      const lines = [
+        `ready=${ready ? '1' : '0'}`,
+        `firstName=${readValue(selectors.prospectFirstNameId)}`,
+        `lastName=${readValue(selectors.prospectLastNameId)}`,
+        `dob=${readValue(selectors.prospectDobId)}`,
+        `gender=${readValue(selectors.prospectGenderId)}`,
+        `address=${readValue(selectors.prospectAddressId)}`,
+        `city=${readValue(selectors.prospectCityId)}`,
+        `state=${readValue(selectors.prospectStateId)}`,
+        `zip=${readValue(selectors.prospectZipId)}`,
+        `phone=${readValue(selectors.prospectPhoneId)}`,
+        `submitPresent=${submit ? '1' : '0'}`,
+        `submitEnabled=${submit && !submit.disabled ? '1' : '0'}`,
+        `errors=${errors.join(' || ')}`
+      ];
+      return lines.join('\n');
+    }
+
+    case 'address_verification_status':
+      return lineResult(addressVerificationStatusFields());
+
+    case 'handle_address_verification': {
+      const status = addressVerificationStatusFields();
+      if (status.result !== 'FOUND') {
+        return lineResult({
+          result: 'NOT_FOUND',
+          method: 'address-verification-not-found',
+          radioSelected: '0',
+          continueButtonPresent: status.continuePresent,
+          continueButtonEnabledBefore: status.continueEnabled,
+          continueButtonEnabledAfter: status.continueEnabled,
+          continueClicked: '0',
+          enteredText: status.enteredText,
+          suggestions: status.suggestions,
+          failedFields: status.missing,
+          evidence: status.evidence
+        });
+      }
+      const choice = chooseAddressVerificationOption(args);
+      const selected = choice.selected;
+      const before = readAddressVerificationContinueState();
+      if (choice.result !== 'SELECTED' || !selected) {
+        return lineResult({
+          result: choice.result,
+          method: choice.method,
+          selectedValue: selected ? safe(selected.option.value) : '',
+          selectedText: selected ? selected.option.text : '',
+          selectedIndex: selected ? String(selected.option.index) : '',
+          radioSelected: '0',
+          continueButtonPresent: before.present,
+          continueButtonEnabledBefore: before.enabled,
+          continueButtonEnabledAfter: before.enabled,
+          continueClicked: '0',
+          enteredText: status.enteredText,
+          suggestions: status.suggestions,
+          matchScore: selected ? String(selected.score) : '',
+          matchedBy: selected ? selected.matchedBy : '',
+          failedFields: choice.failedFields,
+          evidence: status.evidence
+        });
+      }
+      const selection = selectAddressVerificationRadio(selected.option);
+      if (!selection.selected) {
+        return lineResult({
+          result: 'FAILED',
+          method: 'address-radio-selection-failed',
+          selectedValue: safe(selected.option.value),
+          selectedText: selected.option.text,
+          selectedIndex: String(selected.option.index),
+          radioSelected: selection.radioSelected ? '1' : '0',
+          continueButtonPresent: before.present,
+          continueButtonEnabledBefore: before.enabled,
+          continueButtonEnabledAfter: before.enabled,
+          continueClicked: '0',
+          enteredText: status.enteredText,
+          suggestions: status.suggestions,
+          matchScore: String(selected.score),
+          matchedBy: selected.matchedBy,
+          failedFields: ['snaOption'],
+          evidence: status.evidence
+        });
+      }
+      const after = waitForAddressVerificationContinueEnabled();
+      if (after.button && after.enabled === '1' && clickCenterEl(after.button)) {
+        return lineResult({
+          result: 'SELECTED',
+          method: choice.method,
+          selectedValue: safe(selected.option.value),
+          selectedText: selected.option.text,
+          selectedIndex: String(selected.option.index),
+          radioSelected: '1',
+          continueButtonPresent: after.present,
+          continueButtonEnabledBefore: before.enabled,
+          continueButtonEnabledAfter: after.enabled,
+          continueClicked: '1',
+          enteredText: status.enteredText,
+          suggestions: status.suggestions,
+          matchScore: String(selected.score),
+          matchedBy: selected.matchedBy,
+          unitDroppedOrNotShown: selected.unitDroppedOrNotShown || '0',
+          evidence: status.evidence
+        });
+      }
+      return lineResult({
+        result: 'FAILED',
+        method: 'address-radio-continue-disabled',
+        selectedValue: safe(selected.option.value),
+        selectedText: selected.option.text,
+        selectedIndex: String(selected.option.index),
+        radioSelected: '1',
+        continueButtonPresent: after.present,
+        continueButtonEnabledBefore: before.enabled,
+        continueButtonEnabledAfter: after.enabled,
+        continueClicked: '0',
+        enteredText: status.enteredText,
+        suggestions: status.suggestions,
+        matchScore: String(selected.score),
+        matchedBy: selected.matchedBy,
+        unitDroppedOrNotShown: selected.unitDroppedOrNotShown || '0',
+        failedFields: ['continueWithSelected'],
+        evidence: status.evidence
+      });
+    }
+
+    case 'handle_duplicate_prospect': {
+      const radios = Array.from(document.querySelectorAll('input[type=radio]')).filter(visible);
+      const allCandidates = radios
+        .map((radio) => buildDuplicateCandidate(radio, args))
+        .filter(Boolean);
+      const existingCandidates = allCandidates
+        .filter((candidate) => candidate.strongIdentity && candidate.optionType !== 'create-new-profile')
+        .sort((a, b) => b.score - a.score);
+      const sameAddressCandidates = existingCandidates.filter((candidate) => candidate.addressMatch);
+      const movedAddressCandidates = existingCandidates.filter((candidate) => !candidate.addressMatch && candidate.sameNamedPerson);
+      const createNewOption = findCreateNewDuplicateOption(allCandidates, radios);
+      const createNewProfileTextPresent = duplicatePageHasCreateNewProfileText();
+      const candidateSummaries = existingCandidates.slice(0, 3).map((candidate) => candidate.summary).join(' || ');
+      const allCandidateSummaries = allCandidates.slice(0, 4).map((candidate) => candidate.summary).join(' || ');
+
+      if (sameAddressCandidates.length && duplicateCandidatesAreAmbiguous(sameAddressCandidates)) {
+        return lineResult({
+          result: 'AMBIGUOUS_DUPLICATE',
+          method: 'same-address-ambiguous',
+          addressDecision: 'same-address-ambiguous',
+          existingAddressMatch: '1',
+          newProfileOptionFound: createNewOption ? '1' : '0',
+          candidateCount: String(sameAddressCandidates.length),
+          rowCount: String(radios.length),
+          candidateSummaries
+        });
+      }
+
+      if (sameAddressCandidates.length) {
+        const best = sameAddressCandidates[0];
+        return selectDuplicateRadioAndContinue(best, 'select-existing-radio', {
+          addressDecision: 'same-address-existing',
+          existingAddressMatch: '1',
+          newProfileOptionFound: createNewOption ? '1' : '0',
+          candidateCount: String(sameAddressCandidates.length),
+          rowCount: String(radios.length)
+        });
+      }
+
+      if (movedAddressCandidates.length) {
+        if (createNewOption) {
+          return selectDuplicateRadioAndContinue(createNewOption, 'create-new-radio', {
+            addressDecision: 'moved-address-create-new',
+            existingAddressMatch: '0',
+            newProfileOptionFound: '1',
+            candidateCount: String(movedAddressCandidates.length),
+            rowCount: String(radios.length),
+            existingCandidateSummaries: candidateSummaries
+          });
+        }
+        return lineResult({
+          result: 'FAILED',
+          method: createNewProfileTextPresent ? 'create-new-radio-target-missing' : 'moved-address-create-new-option-missing',
+          addressDecision: 'moved-address-create-new',
+          existingAddressMatch: '0',
+          newProfileOptionFound: createNewProfileTextPresent ? '1' : '0',
+          candidateCount: String(movedAddressCandidates.length),
+          rowCount: String(radios.length),
+          candidateSummaries,
+          failedFields: [createNewProfileTextPresent ? 'createNewRadio' : 'newProfileOption']
+        });
+      }
+
+      if (createNewOption) {
+        return selectDuplicateRadioAndContinue(createNewOption, 'create-new-radio', {
+          addressDecision: duplicatePageHasExistingProfileText() ? 'moved-address-create-new' : 'no-safe-existing-create-new',
+          existingAddressMatch: '0',
+          newProfileOptionFound: '1',
+          candidateCount: String(existingCandidates.length),
+          rowCount: String(radios.length),
+          existingCandidateSummaries: candidateSummaries
+        });
+      }
+
+      if (createNewProfileTextPresent) {
+        return lineResult({
+          result: 'FAILED',
+          method: 'create-new-radio-target-missing',
+          addressDecision: 'moved-address-create-new',
+          existingAddressMatch: '0',
+          newProfileOptionFound: '1',
+          candidateCount: String(existingCandidates.length),
+          rowCount: String(radios.length),
+          candidateSummaries: allCandidateSummaries,
+          failedFields: ['createNewRadio']
+        });
+      }
+
+      const createNewBtn = findCreateNewProspectButton();
+      if (createNewBtn && clickCenterEl(createNewBtn)) {
+        return lineResult({
+          result: 'CREATE_NEW',
+          method: 'create-new-button',
+          addressDecision: 'no-existing-match-create-new-button',
+          existingAddressMatch: '0',
+          newProfileOptionFound: '0',
+          continueClicked: '0',
+          candidateCount: String(existingCandidates.length),
+          rowCount: String(radios.length),
+          candidateSummaries: allCandidateSummaries
+        });
+      }
+
+      const fallbackContinue = findDuplicateContinueButton();
+      if (fallbackContinue && clickCenterEl(fallbackContinue)) {
+        return lineResult({
+          result: 'FALLBACK_CONTINUE',
+          method: 'fallback-continue',
+          addressDecision: 'fallback-continue',
+          existingAddressMatch: '0',
+          newProfileOptionFound: '0',
+          candidateCount: String(existingCandidates.length),
+          rowCount: String(radios.length),
+          candidateSummaries: allCandidateSummaries
+        });
+      }
+
+      return lineResult({
+        result: 'FAILED',
+        method: 'no-safe-duplicate-action',
+        addressDecision: 'no-safe-action',
+        existingAddressMatch: '0',
+        newProfileOptionFound: '0',
+        candidateCount: String(existingCandidates.length),
+        rowCount: String(radios.length),
+        candidateSummaries: allCandidateSummaries,
+        failedFields: ['duplicateSelection']
+      });
+    }
+
+    case 'fill_gather_defaults': {
+      const ownershipSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceOwnedRentedCd.SrcCd')) || null;
+      const homeTypeSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceTypeCd.SrcCd')) || null;
+      const emailInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Communications.EmailAddr')) || null;
+      const ageInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Driver.AgeFirstLicensed')) || null;
+      const ageWanted = safe(args.ageValue).trim();
+      const emailWanted = safe(args.emailValue).trim();
+      const ownershipWanted = safe(args.ownershipValue).trim();
+      const homeTypeWanted = safe(args.homeTypeValue).trim();
+
+      let ageMethod = 'not-requested';
+      if (ageWanted) {
+        const current = safe(ageInput && ageInput.value).trim();
+        if (!ageInput) ageMethod = 'age-missing';
+        else if (current === ageWanted) ageMethod = 'already-set';
+        else ageMethod = setInputValue(ageInput, ageWanted, false) ? 'input' : 'input-failed';
+      }
+
+      let emailMethod = 'not-requested';
+      if (emailWanted) {
+        const current = safe(emailInput && emailInput.value).trim();
+        if (!emailInput) emailMethod = 'email-missing';
+        else if (lower(current) === lower(emailWanted)) emailMethod = 'already-set';
+        else emailMethod = setInputValue(emailInput, emailWanted, false) ? 'input' : 'input-failed';
+      }
+
+      let ownershipMethod = 'not-requested';
+      if (ownershipWanted) {
+        const current = readSelectState(ownershipSelect);
+        if (!ownershipSelect) ownershipMethod = 'ownership-missing';
+        else if (matchesNormalizedValue(current.value, ownershipWanted) || matchesNormalizedValue(current.text, ownershipWanted)) ownershipMethod = 'already-set';
+        else ownershipMethod = setSelectValue(ownershipSelect, ownershipWanted, false) ? 'select' : 'select-failed';
+      }
+
+      let homeTypeMethod = 'not-requested';
+      if (homeTypeWanted) {
+        const current = readSelectState(homeTypeSelect);
+        if (!homeTypeSelect) homeTypeMethod = 'home-type-missing';
+        else if (matchesNormalizedValue(current.value, homeTypeWanted) || matchesNormalizedValue(current.text, homeTypeWanted)) homeTypeMethod = 'already-set';
+        else homeTypeMethod = setSelectValue(homeTypeSelect, homeTypeWanted, false) ? 'select' : 'select-failed';
+      }
+
+      const ownershipState = readSelectState(ownershipSelect);
+      const homeTypeState = readSelectState(homeTypeSelect);
+      const ageCurrent = safe(ageInput && ageInput.value).trim();
+      const emailCurrent = safe(emailInput && emailInput.value).trim();
+      const ageApplied = ageWanted ? (ageCurrent === ageWanted ? '1' : '0') : 'SKIP';
+      const emailApplied = emailWanted ? (lower(emailCurrent) === lower(emailWanted) ? '1' : '0') : 'SKIP';
+      const ownershipApplied = ownershipWanted
+        ? ((matchesNormalizedValue(ownershipState.value, ownershipWanted) || matchesNormalizedValue(ownershipState.text, ownershipWanted)) ? '1' : '0')
+        : 'SKIP';
+      const homeTypeApplied = homeTypeWanted
+        ? ((matchesNormalizedValue(homeTypeState.value, homeTypeWanted) || matchesNormalizedValue(homeTypeState.text, homeTypeWanted)) ? '1' : '0')
+        : 'SKIP';
+      const requiredChecks = [
+        ...(ageWanted ? [{ name: 'age', value: ageApplied }] : []),
+        ...(ownershipWanted ? [{ name: 'ownership', value: ownershipApplied }] : []),
+        ...(homeTypeWanted ? [{ name: 'homeType', value: homeTypeApplied }] : [])
+      ];
+      const optionalChecks = [
+        ...(emailWanted ? [{ name: 'email', value: emailApplied }] : [])
+      ];
+      const result = resultFromChecks(requiredChecks, optionalChecks);
+      return lineResult({
+        result,
+        method: `age:${ageMethod}|email:${emailMethod}|ownership:${ownershipMethod}|homeType:${homeTypeMethod}`,
+        ageApplied,
+        emailApplied,
+        ownershipApplied,
+        homeTypeApplied,
+        ageCurrent,
+        emailCurrent,
+        ownershipCurrentValue: ownershipState.value,
+        ownershipCurrentText: ownershipState.text,
+        homeTypeCurrentValue: homeTypeState.value,
+        homeTypeCurrentText: homeTypeState.text,
+        alerts: collectVisibleAlerts().join(' || '),
+        failedFields: failedCheckNames(requiredChecks.concat(optionalChecks))
+      });
+    }
+
+    case 'gather_defaults_status': {
+      const ageInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Driver.AgeFirstLicensed')) || null;
+      const emailInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Communications.EmailAddr')) || null;
+      const ownershipSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceOwnedRentedCd.SrcCd')) || null;
+      const homeTypeSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceTypeCd.SrcCd')) || null;
+      const licenseStateSelect = document.getElementById('ConsumerData.People[0].Driver.LicenseState');
+      const ownership = readSelectState(ownershipSelect);
+      const homeType = readSelectState(homeTypeSelect);
+      const licenseState = readSelectState(licenseStateSelect);
+      return linesOut({
+        ageFirstLicensed: safe(ageInput && ageInput.value).trim(),
+        email: safe(emailInput && emailInput.value).trim(),
+        ownershipTypeValue: ownership.value,
+        ownershipTypeText: ownership.text,
+        homeTypeValue: homeType.value,
+        homeTypeText: homeType.text,
+        licenseStateValue: licenseState.value,
+        licenseStateText: licenseState.text,
+        alerts: collectVisibleAlerts().join(' || ')
+      });
+    }
+
+    case 'vehicle_already_listed': {
+      return isVehicleAlreadyListedMatch(args) ? '1' : '0';
+    }
+
+    case 'confirm_potential_vehicle': {
+      if (!safe(args.year).trim())
+        return linesOut({
+          result: 'SKIP_MISSING_YEAR',
+          matches: '0',
+          cardText: '',
+          candidateScope: 'rejected',
+          confirmButtonCount: '0',
+          vehicleTitleCount: '0',
+          matchedCardText: '',
+          rejectedReason: 'lead-vehicle-year-missing',
+          confirmClicked: '0'
+        });
+      const scoped = findVehicleMatchCandidates(args)
+        .map((candidate) => ({ candidate, scope: potentialVehicleCandidateScope(candidate) }));
+      const candidates = scoped.filter((entry) => entry.scope.ok);
+      const rejected = scoped.find((entry) => entry.scope.rejectedReason) || null;
+      if (!candidates.length)
+        return linesOut({
+          result: 'NO_MATCH',
+          matches: '0',
+          cardText: '',
+          candidateScope: rejected ? rejected.scope.candidateScope : 'rejected',
+          confirmButtonCount: rejected ? String(rejected.scope.confirmButtonCount) : '0',
+          vehicleTitleCount: rejected ? String(rejected.scope.vehicleTitleCount) : '0',
+          matchedCardText: rejected ? compact(rejected.candidate.cardText, 180) : '',
+          rejectedReason: rejected ? rejected.scope.rejectedReason : '',
+          confirmClicked: '0'
+        });
+      if (vehicleCandidatesAreAmbiguous(candidates.map((entry) => entry.candidate)))
+        return linesOut({
+          result: 'AMBIGUOUS',
+          matches: String(candidates.length),
+          cards: candidates.slice(0, 3).map((entry) => summarizeVehicleCandidate(entry.candidate)).join(' || '),
+          candidateScope: 'single-card',
+          confirmButtonCount: '1',
+          vehicleTitleCount: '1',
+          rejectedReason: 'ambiguous-candidates',
+          confirmClicked: '0'
+        });
+      const entry = candidates[0];
+      const candidate = entry.candidate;
+      const confirmBtn = entry.scope.confirmBtn;
+      const cardText = candidate.cardText;
+      if (!confirmBtn)
+        return linesOut({
+          result: 'NO_MATCH',
+          matches: '0',
+          cardText: '',
+          candidateScope: 'rejected',
+          confirmButtonCount: '0',
+          vehicleTitleCount: String(entry.scope.vehicleTitleCount || 0),
+          matchedCardText: compact(cardText, 180),
+          rejectedReason: 'confirm-button-missing',
+          confirmClicked: '0'
+        });
+      const clicked = clickCenterEl(confirmBtn);
+      return linesOut({
+        result: clicked ? 'CONFIRMED' : 'CLICK_FAILED',
+        matches: '1',
+        cardText,
+        score: String(candidate.details.score),
+        candidateScope: 'single-card',
+        confirmButtonCount: '1',
+        vehicleTitleCount: String(entry.scope.vehicleTitleCount || 1),
+        matchedCardText: compact(cardText, 180),
+        rejectedReason: '',
+        confirmClicked: clicked ? '1' : '0'
+      });
+    }
+
+    case 'prepare_vehicle_row': {
+      const year = safe(args.year);
+      if (!year) return '-1';
+      let target = findUsableVehicleRowIndex(year);
+      if (target < 0) {
+        const addButton = findGatherAddVehicleButton();
+        if (!addButton || !clickCenterEl(addButton)) return '-1';
+        target = waitForUsableVehicleRow(year);
+      }
+      if (target < 0) return '-1';
+      const row = readVehicleRow(target);
+      const input = row.year;
+      if (!input || !visible(input) || input.disabled || input.readOnly) return '-1';
+      if (row.vehicleType && visible(row.vehicleType) && !isDisabledLike(row.vehicleType) && !vehicleFieldValue(row.vehicleType)) {
+        const typeOption = findVehicleDropdownOption(row.vehicleType, 'VehTypeCd', 'Car or Truck', true);
+        if (typeOption) applyVehicleDropdownOption(row.vehicleType, typeOption);
+      }
+      if (safe(input.tagName).toUpperCase() === 'SELECT') {
+        const yearOption = findVehicleDropdownOption(input, 'ModelYear', year, false);
+        if (!yearOption || !applyVehicleDropdownOption(input, yearOption)) return '-1';
+      } else {
+        try { input.focus(); } catch {}
+        input.value = year;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (normalizeDigits(input.value) !== normalizeDigits(year)) return '-1';
+      return String(target);
+    }
+
+    case 'wait_vehicle_select_enabled': {
+      const index = Number(args.index);
+      const fieldName = safe(args.fieldName);
+      const minOptions = Number(args.minOptions || 1);
+      const el = document.getElementById(`ConsumerData.Assets.Vehicles[${index}].${fieldName}`);
+      if (!el) return '0';
+      if (el.disabled) return '0';
+      if ((el.options || []).length < minOptions) return '0';
+      return '1';
+    }
+
+    case 'select_vehicle_dropdown_option': {
+      const index = Number(args.index);
+      const fieldName = safe(args.fieldName);
+      const allowFirstNonEmpty = String(args.allowFirstNonEmpty || '') === '1' || args.allowFirstNonEmpty === true;
+      const select = vehicleField(index, fieldName);
+      if (!select || select.disabled) return 'NO_SELECT';
+      const best = findVehicleDropdownOption(select, fieldName, args.wantedText, allowFirstNonEmpty);
+      if (!best) return 'NO_OPTION';
+      return applyVehicleDropdownOption(select, best) ? 'OK' : 'NO_OPTION';
+    }
+
+    case 'gather_vehicle_row_status': {
+      return linesOut(gatherVehicleRowStatus(args));
+    }
+
+    case 'set_vehicle_year_and_wait_manufacturer': {
+      return setVehicleYearAndWaitManufacturer(args);
+    }
+
+    case 'gather_vehicle_add_status': {
+      return gatherVehicleAddStatus(args);
+    }
+
+    case 'gather_vehicle_edit_status': {
+      return linesOut(readVehicleEditStatusFields());
+    }
+
+    case 'handle_vehicle_edit_modal': {
+      return handleVehicleEditModal(args);
+    }
+
+    case 'gather_confirmed_vehicles_status': {
+      return gatherConfirmedVehiclesStatus(args);
+    }
+
+    case 'gather_start_quoting_status': {
+      return linesOut(buildStartQuotingStatus(args));
+    }
+
+    case 'ensure_start_quoting_auto_checkbox': {
+      return ensureStartQuotingAutoCheckbox(args);
+    }
+
+    case 'ensure_auto_start_quoting_state': {
+      const ratingState = safe(args.ratingState);
+      const beforeAuto = readStartQuotingAutoState(args);
+      let autoMethod = beforeAuto.source || 'missing';
+      let autoApplied = beforeAuto.selected ? '1' : '0';
+      if (!beforeAuto.selected) {
+        const stableInput = document.getElementById('ConsumerReports.Auto.Product-intel#102');
+        const stableTarget = getInputClickTarget(stableInput);
+        if (stableTarget && clickCenterEl(stableTarget)) {
+          autoApplied = '1';
+          autoMethod = 'stable-associated-control';
+        } else {
+          const semantic = findStartQuotingAutoCandidate(findStartQuotingSection(args));
+          if (semantic && clickCenterEl(semantic.target)) {
+            autoApplied = '1';
+            autoMethod = 'semantic-target';
+          } else {
+            autoMethod = semantic ? 'semantic-click-failed' : 'auto-target-missing';
+          }
+        }
+      }
+      const ratingResult = ensureStartQuotingRatingState(args, ratingState);
+      const afterStatus = buildStartQuotingStatus(args);
+      const ready = afterStatus.hasStartQuotingText === '1'
+        && afterStatus.autoProductSelected === '1'
+        && ratingStateMatches(afterStatus.ratingStateValue, afterStatus.ratingStateText, ratingState)
+        && afterStatus.createQuoteButtonPresent === '1'
+        && afterStatus.createQuoteButtonEnabled === '1';
+      return linesOut({
+        result: ready ? 'OK' : 'FAILED',
+        autoApplied,
+        autoMethod,
+        ratingStateApplied: ratingResult.ok ? '1' : '0',
+        ratingStateMethod: ratingResult.method,
+        ...afterStatus
+      });
+    }
+
+    case 'click_create_quotes_order_reports': {
+      const btn = findCreateQuotesButton(args);
+      if (!btn) return 'NO_BUTTON';
+      if (btn.disabled) return 'DISABLED';
+      return clickCenterEl(btn) ? 'OK' : 'CLICK_FAILED';
+    }
+
+    case 'click_start_quoting_add_product': {
+      const btn = findStartQuotingAddProductLink(args);
+      if (!btn) return 'NO_BUTTON';
+      if (btn.disabled) return 'DISABLED';
+      return clickCenterEl(btn) ? 'OK' : 'CLICK_FAILED';
+    }
+
+    case 'set_select_product_defaults': {
+      const selectors = getSelectorArgs(args);
+      const questionText = safe(args.currentInsuredQuestionText || 'Is the customer currently insured?');
+      const answerText = safe(args.currentInsuredAnswerText || args.currentInsured || 'Yes');
+      const ratingSelect = findByStableId(args.selectProductRatingStateId || selectors.selectProductRatingStateId || 'SelectProduct.RatingState');
+      const productSelect = findByStableId(args.selectProductProductId || selectors.selectProductProductId || 'SelectProduct.Product');
+      const productWanted = safe(args.productValue || 'AUTO');
+      const ratingStateWanted = safe(args.ratingState);
+
+      let productMethod = 'product-missing';
+      if (productSelect) {
+        const current = readSelectState(productSelect);
+        if (matchesNormalizedValue(current.value, productWanted) || matchesNormalizedValue(current.text, productWanted))
+          productMethod = 'already-selected';
+        else
+          productMethod = setSelectValue(productSelect, productWanted, false) ? 'stable-select' : 'select-failed';
+      }
+
+      let ratingStateMethod = 'rating-state-missing';
+      if (ratingSelect) {
+        const current = readSelectState(ratingSelect);
+        if (ratingStateMatches(current.value, current.text, ratingStateWanted))
+          ratingStateMethod = 'already-selected';
+        else
+          ratingStateMethod = setSelectValue(ratingSelect, ratingStateWanted, false) ? 'stable-select' : 'select-failed';
+      }
+
+      let currentInsuredSet = 'SKIP';
+      let currentInsuredMethod = 'not-requested';
+      if (safe(args.currentInsured)) {
+        const currentState = readRadioGroupStateByName('SelectProduct.CustomerCurrentInsured');
+        if (currentState.selected && answerValueMatches(currentState.label || currentState.value, args.currentInsured)) {
+          currentInsuredSet = '1';
+          currentInsuredMethod = 'already-selected';
+        } else {
+          const radioResult = setRadioByName('SelectProduct.CustomerCurrentInsured', args.currentInsured);
+          currentInsuredSet = radioResult.ok ? '1' : '0';
+          currentInsuredMethod = radioResult.method;
+          if (!radioResult.ok) {
+            const semanticTarget = findSemanticAnswerTarget(questionText, answerText);
+            if (semanticTarget) {
+              currentInsuredSet = clickCenterEl(semanticTarget) ? '1' : '0';
+              currentInsuredMethod = 'semantic-center';
+            }
+          }
+        }
+      }
+
+      let ownOrRentSet = 'SKIP';
+      let ownOrRentMethod = 'not-requested';
+      if (safe(args.ownOrRent)) {
+        const ownOrRentState = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
+        if (ownOrRentState.selected && answerValueMatches(ownOrRentState.label || ownOrRentState.value, args.ownOrRent)) {
+          ownOrRentSet = '1';
+          ownOrRentMethod = 'already-selected';
+        } else {
+          const ownOrRentResult = setRadioByName('SelectProduct.CustomerOwnOrRent', args.ownOrRent);
+          ownOrRentSet = ownOrRentResult.ok ? '1' : '0';
+          ownOrRentMethod = ownOrRentResult.method;
+        }
+      }
+
+      const afterStatus = buildSelectProductStatus(args);
+      const productSet = (matchesNormalizedValue(afterStatus.productValue, productWanted) || matchesNormalizedValue(afterStatus.productText, productWanted)) ? '1' : '0';
+      const ratingStateSet = ratingStateMatches(afterStatus.ratingStateValue, afterStatus.ratingStateText, ratingStateWanted) ? '1' : '0';
+      if (safe(args.currentInsured))
+        currentInsuredSet = (afterStatus.currentInsuredSelected === '1' && answerValueMatches(afterStatus.currentInsuredValue, args.currentInsured)) ? '1' : '0';
+      if (safe(args.ownOrRent))
+        ownOrRentSet = (afterStatus.ownOrRentSelected === '1' && answerValueMatches(afterStatus.ownOrRentValue, args.ownOrRent)) ? '1' : '0';
+
+      const requiredChecks = [
+        { name: 'product', value: productSet },
+        { name: 'ratingState', value: ratingStateSet },
+        ...(safe(args.currentInsured) ? [{ name: 'currentInsured', value: currentInsuredSet }] : [])
+      ];
+      const optionalChecks = [
+        ...(safe(args.ownOrRent) ? [{ name: 'ownOrRent', value: ownOrRentSet }] : [])
+      ];
+      const result = resultFromChecks(requiredChecks, optionalChecks);
+
+      return lineResult({
+        result,
+        method: `product:${productMethod}|ratingState:${ratingStateMethod}|currentInsured:${currentInsuredMethod}|ownOrRent:${ownOrRentMethod}`,
+        productSet,
+        productMethod,
+        ratingStateSet,
+        ratingStateMethod,
+        currentInsuredSet,
+        currentInsuredMethod,
+        ownOrRentSet,
+        ownOrRentMethod,
+        ...afterStatus,
+        failedFields: failedCheckNames(requiredChecks.concat(optionalChecks))
+      });
+    }
+
+    case 'select_product_status': {
+      return linesOut(buildSelectProductStatus(args));
+    }
+
+    case 'list_driver_slugs': {
+      const ids = new Set();
+      for (const btn of Array.from(document.querySelectorAll('button[id]')).filter(visible)) {
+        const id = safe(btn.id);
+        if (!id) continue;
+        if (/^\d{4}-/.test(id)) continue;
+        if (!/-addToQuote$/.test(id) && !/-add$/.test(id) && !/-remove$/.test(id)) continue;
+        const slug = id.replace(/-(addToQuote|add|remove)$/i, '');
+        if (!slug) continue;
+        ids.add(slug);
+      }
+      return Array.from(ids).join('||');
+    }
+
+    case 'driver_is_already_added': {
+      const slug = safe(args.slug);
+      const editBtn = document.getElementById(slug + '-edit');
+      const addBtn = document.getElementById(slug + '-addToQuote') || document.getElementById(slug + '-add');
+      if (editBtn && !addBtn) return '1';
+      if (editBtn) {
+        const card = editBtn.closest('div');
+        const text = lower((card && card.innerText) || '');
+        if (text.includes('added to quote')) return '1';
+      }
+      return '0';
+    }
+
+    case 'vehicle_marked_added': {
+      const year = normUpper(args.year);
+      const make = normUpper(args.make);
+      const model = normUpper(args.model);
+      const cards = Array.from(document.querySelectorAll('div'));
+      for (const card of cards) {
+        const text = normUpper(card.innerText || card.textContent || '');
+        if (!text.includes('ADDED TO QUOTE')) continue;
+        if (year && !text.includes(year)) continue;
+        if (make && !text.includes(make)) continue;
+        if (model && !text.includes(model)) continue;
+        return '1';
+      }
+      return '0';
+    }
+
+    case 'find_vehicle_add_button': {
+      const candidates = Array.from(document.querySelectorAll('button[id]')).filter((btn) => {
+        const id = safe(btn.id);
+        return id.endsWith('-add') || id.endsWith('-addToQuote');
+      });
+      const scored = candidates
+        .filter(visible)
+        .map((btn) => {
+          const contextText = [
+            safe(btn.id).replace(/-/g, ' '),
+            getText(btn),
+            getText(btn.parentElement),
+            getText(btn.closest('div'))
+          ].join(' ');
+          return { btn, details: scoreVehicleCandidate(contextText, args) };
+        })
+        .filter(({ details }) => details.score >= details.threshold)
+        .sort((a, b) => b.details.score - a.details.score);
+      if (!scored.length)
+        return '';
+      if (vehicleCandidatesAreAmbiguous(scored.map((entry) => ({ details: entry.details }))))
+        return 'AMBIGUOUS';
+      return safe(scored[0].btn.id);
+    }
+
+    case 'any_vehicle_already_added': {
+      return bodyText().includes('added to quote') ? '1' : '0';
+    }
+
+    case 'modal_exists': {
+      const saveButtonId = safe(args.saveButtonId);
+      return document.getElementById(saveButtonId) ? '1' : '0';
+    }
+
+    case 'fill_participant_modal': {
+      const setSelect = (id, value) => {
+        const el = document.getElementById(safe(id));
+        if (!value) return { applied: 'SKIP', method: 'not-requested' };
+        if (!el || isDisabledLike(el)) return { applied: '0', method: 'select-missing' };
+        const current = readSelectState(el);
+        if (matchesNormalizedValue(current.value, value) || matchesNormalizedValue(current.text, value))
+          return { applied: '1', method: 'already-selected' };
+        const applied = setSelectValue(el, value, false);
+        const next = readSelectState(el);
+        return {
+          applied: (applied && (matchesNormalizedValue(next.value, value) || matchesNormalizedValue(next.text, value))) ? '1' : '0',
+          method: applied ? 'select' : 'select-failed'
+        };
+      };
+      const setDefaultInput = (id, value, onlyIfBlank = false, exact = false) => {
+        const wanted = safe(value).trim();
+        if (!wanted) return { applied: 'SKIP', method: 'not-requested' };
+        const el = document.getElementById(safe(id));
+        if (!el || isDisabledLike(el) || el.readOnly) return { applied: '0', method: 'input-missing' };
+        const before = safe(el.value).trim();
+        let method = 'already-set';
+        if (onlyIfBlank && before !== '') {
+          method = 'preserved-nonblank';
+        } else if (before !== wanted) {
+          method = setInputValue(el, wanted, false) ? 'input' : 'input-failed';
+        }
+        const after = safe(el.value).trim();
+        const applied = exact ? (after === wanted ? '1' : '0') : (after !== '' ? '1' : '0');
+        return { applied, method };
+      };
+
+      const age = setDefaultInput('ageFirstLicensed_ageFirstLicensed', args.ageFirstLicensed, true, true);
+      const email = setDefaultInput('emailAddress.emailAddress', args.email, true, false);
+      const military = safe(args.military)
+        ? (() => {
+            const result = setRadioByName('agreement.agreementParticipant.militaryInd', args.military);
+            return { applied: result.ok ? '1' : '0', method: result.method };
+          })()
+        : { applied: 'SKIP', method: 'not-requested' };
+      const violations = safe(args.violations)
+        ? (() => {
+            const result = setRadioByName('agreement.agreementParticipant.party.violationInd', args.violations);
+            return { applied: result.ok ? '1' : '0', method: result.method };
+          })()
+        : { applied: 'SKIP', method: 'not-requested' };
+      let defensiveDriving = { applied: 'SKIP', method: 'not-requested' };
+      if (safe(args.defensiveDriving)) {
+        const result = setRadioByName('agreement.agreementParticipant.defensiveDriverInd', args.defensiveDriving);
+        defensiveDriving = (result.method === 'no-radio-match')
+          ? { applied: 'SKIP', method: 'question-not-shown' }
+          : { applied: result.ok ? '1' : '0', method: result.method };
+      }
+      const propertyOwnership = setSelect('propertyOwnershipEntCd_option', args.propertyOwnership);
+
+      const male = document.getElementById('gender_1002');
+      const female = document.getElementById('gender_1001');
+      let genderFallback = { applied: 'SKIP', method: 'not-needed' };
+      if (male && female && !male.checked && !female.checked) {
+        const target = document.getElementById('gender_' + safe(args.oppositeGenderValue));
+        if (!target) {
+          genderFallback = { applied: '0', method: 'gender-target-missing' };
+        } else {
+          const clickTarget = getInputClickTarget(target) || target;
+          const applied = clickCenterEl(clickTarget) && (target.checked || isSelectedNode(target) || isSelectedNode(clickTarget));
+          genderFallback = { applied: applied ? '1' : '0', method: applied ? 'gender-fallback' : 'gender-click-failed' };
+        }
+      }
+
+      const spouseSelect = document.getElementById(safe(args.spouseSelectId));
+      const marriedRadio = document.getElementById('maritalStatusEntCd_0001');
+      let spouseSelection = { applied: 'SKIP', method: 'not-needed' };
+      if (spouseSelect && marriedRadio) {
+        const valid = Array.from(spouseSelect.options || []).map((o) => safe(o.value)).filter((v) => v && v !== 'NewDriver');
+        if (valid.length === 1) {
+          const marriedTarget = getInputClickTarget(marriedRadio) || marriedRadio;
+          const marriedApplied = clickCenterEl(marriedTarget) && (marriedRadio.checked || isSelectedNode(marriedRadio) || isSelectedNode(marriedTarget));
+          const spouseApplied = marriedApplied && setSelectValue(spouseSelect, valid[0], false) && safe(spouseSelect.value) === safe(valid[0]);
+          spouseSelection = { applied: spouseApplied ? '1' : '0', method: spouseApplied ? 'unique-spouse' : 'unique-spouse-failed' };
+        }
+      }
+      const requiredChecks = [
+        ...(safe(args.ageFirstLicensed) ? [{ name: 'ageFirstLicensed', value: age.applied }] : []),
+        ...(safe(args.email) ? [{ name: 'email', value: email.applied }] : []),
+        ...(safe(args.military) ? [{ name: 'military', value: military.applied }] : []),
+        ...(safe(args.violations) ? [{ name: 'violations', value: violations.applied }] : []),
+        ...(safe(args.propertyOwnership) ? [{ name: 'propertyOwnership', value: propertyOwnership.applied }] : []),
+        ...(genderFallback.applied !== 'SKIP' ? [{ name: 'genderFallback', value: genderFallback.applied }] : []),
+        ...(spouseSelection.applied !== 'SKIP' ? [{ name: 'spouseSelection', value: spouseSelection.applied }] : [])
+      ];
+      const optionalChecks = [
+        ...(safe(args.defensiveDriving) ? [{ name: 'defensiveDriving', value: defensiveDriving.applied, allowSkip: true }] : [])
+      ];
+      const result = resultFromChecks(requiredChecks, optionalChecks);
+      return lineResult({
+        result,
+        method: [
+          `age:${age.method}`,
+          `email:${email.method}`,
+          `military:${military.method}`,
+          `violations:${violations.method}`,
+          `defensiveDriving:${defensiveDriving.method}`,
+          `propertyOwnership:${propertyOwnership.method}`,
+          `genderFallback:${genderFallback.method}`,
+          `spouse:${spouseSelection.method}`
+        ].join('|'),
+        ageFirstLicensedSet: age.applied,
+        emailSet: email.applied,
+        militarySet: military.applied,
+        violationsSet: violations.applied,
+        defensiveDrivingSet: defensiveDriving.applied,
+        propertyOwnershipSet: propertyOwnership.applied,
+        genderFallbackSet: genderFallback.applied,
+        spouseSelectionSet: spouseSelection.applied,
+        failedFields: failedCheckNames(requiredChecks.concat(optionalChecks))
+      });
+    }
+
+    case 'select_remove_reason': {
+      const el = document.getElementById('nonDriverReasonOthers_' + safe(args.reasonCode));
+      if (!el) return 'NO_REASON';
+      return clickEl(el) ? 'OK' : 'NO_REASON';
+    }
+
+    case 'fill_vehicle_modal': {
+      const txt = safe((document.body && document.body.innerText) || '');
+      const m = txt.match(/\b(19|20)\d{2}\b/);
+      const year = m ? Number(m[0]) : 0;
+      const clickId = (id) => {
+        const el = document.getElementById(id);
+        if (!el || !visible(el) || isDisabledLike(el)) return { applied: '0', method: 'missing' };
+        if (el.checked) return { applied: '1', method: 'already-selected' };
+        const target = getInputClickTarget(el) || el;
+        const clicked = clickCenterEl(target);
+        const verified = !!el.checked || isSelectedNode(el) || isSelectedNode(target);
+        return { applied: clicked && verified ? '1' : '0', method: clicked ? 'click' : 'click-failed' };
+      };
+      const garaging = clickId('garagingAddressSameAsOther-control-item-0');
+      const purchaseDate = clickId('purchaseDate_false');
+      const threshold = Number(args.threshold || 2015);
+      const ownership = year > threshold
+        ? clickId('vehicleOwnershipCd_0007')
+        : { applied: 'SKIP', method: 'not-required' };
+      const requiredChecks = [
+        { name: 'garagingAddressSameAsOther', value: garaging.applied },
+        { name: 'purchaseDateFalse', value: purchaseDate.applied },
+        ...(year > threshold ? [{ name: 'ownership', value: ownership.applied }] : [])
+      ];
+      const result = resultFromChecks(requiredChecks, []);
+      return lineResult({
+        result,
+        method: `garaging:${garaging.method}|purchaseDate:${purchaseDate.method}|ownership:${ownership.method}`,
+        garagingAddressSameAsOtherClicked: garaging.applied,
+        purchaseDateFalseClicked: purchaseDate.applied,
+        ownershipClicked: ownership.applied,
+        detectedYear: String(year),
+        failedFields: failedCheckNames(requiredChecks)
+      });
+    }
+
+    case 'handle_incidents': {
+      const target = lower(args.reasonText).replace(/\s+/g, ' ').trim();
+      let hits = 0;
+      const boxes = Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible);
+      for (const box of boxes) {
+        const label = (box.closest('label') && box.closest('label').innerText) || box.getAttribute('aria-label') || '';
+        const text = lower(label).replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+        if (!text.includes(target)) continue;
+        if (!box.checked) clickEl(box);
+        hits++;
+      }
+      if (hits <= 0) return 'NO_REASON';
+      const cont = document.getElementById(safe(args.incidentContinueId));
+      if (cont && !cont.disabled) {
+        clickEl(cont);
+        return 'OK';
+      }
+      const fallback = Array.from(document.querySelectorAll('button,a')).find((el) => visible(el) && /continue/i.test(safe(el.innerText || el.textContent).trim()));
+      if (fallback) {
+        clickEl(fallback);
+        return 'OK';
+      }
+      return 'NO_CONTINUE';
+    }
+
+    case 'click_by_id': {
+      const el = findByStableId(args.id);
+      if (!el) return 'NO';
+      return clickEl(el) ? 'OK' : 'NO';
+    }
+
+    case 'click_by_text': {
+      const wanted = lower(args.text);
+      const tagSelector = safe(args.tagSelector || 'button,a');
+      const list = Array.from(document.querySelectorAll(tagSelector)).filter(visible);
+      const match = list.find((el) => lower(el.innerText || el.textContent || '').includes(wanted));
+      if (!match) return 'NO';
+      return clickEl(match) ? 'OK' : 'NO';
+    }
+
+    case 'scan_current_page': {
+      const normalize = (value) => safe(value).replace(/\s+/g, ' ').trim();
+      const escAttr = (value) => safe(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const getLabel = (el) => {
+        const id = safe(el.id);
+        if (id) {
+          const byFor = document.querySelector('label[for="' + escAttr(id) + '"]');
+          if (byFor) return normalize(byFor.innerText || byFor.textContent);
+        }
+        const parentLabel = el.closest('label');
+        if (parentLabel) return normalize(parentLabel.innerText || parentLabel.textContent);
+        const row = el.closest('[class*=field],[class*=form],[class*=question],.l-grid__col,div');
+        if (row) {
+          const rowLabel = row.querySelector('label,.c-label,legend');
+          if (rowLabel) return normalize(rowLabel.innerText || rowLabel.textContent);
+        }
+        return normalize(el.getAttribute('aria-label') || el.placeholder || '');
+      };
+      const getSelectOptions = (el) => Array.from(el.options || []).map((opt, idx) => ({
+        index: idx,
+        value: safe(opt.value),
+        text: normalize(opt.text || opt.innerText || ''),
+        isCurrent: !!opt.selected,
+        disabled: !!opt.disabled
+      }));
+      const headingNode = document.querySelector('h1,h2,h3');
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3')).filter(visible).slice(0, 30).map((el) => ({
+        tag: el.tagName,
+        id: safe(el.id),
+        text: normalize(el.innerText || el.textContent || '')
+      }));
+      const fields = Array.from(document.querySelectorAll('input,select,textarea')).filter(visible).map((el) => {
+        const tag = el.tagName;
+        const base = {
+          tag,
+          id: safe(el.id),
+          name: safe(el.name),
+          type: safe(el.type),
+          label: getLabel(el),
+          disabled: !!el.disabled,
+          class: safe(el.className)
+        };
+        if (tag === 'SELECT') {
+          const opts = getSelectOptions(el);
+          const selectedIndex = Number(el.selectedIndex);
+          let selectedText = '';
+          if (selectedIndex >= 0 && selectedIndex < opts.length) selectedText = opts[selectedIndex].text;
+          return Object.assign(base, {
+            value: safe(el.value),
+            selectedIndex,
+            selectedText,
+            options: opts
+          });
+        }
+        if (tag === 'TEXTAREA')
+          return Object.assign(base, { value: safe(el.value) });
+        const isToggle = /^(radio|checkbox)$/i.test(safe(el.type));
+        const out = Object.assign(base, { value: safe(el.value) });
+        if (isToggle) out.checked = !!el.checked;
+        return out;
+      });
+      const buttons = Array.from(document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')).filter(visible).map((el) => ({
+        tag: el.tagName,
+        id: safe(el.id),
+        name: safe(el.name),
+        text: normalize(el.innerText || el.textContent || el.value || ''),
+        value: safe(el.value),
+        class: safe(el.className),
+        disabled: !!el.disabled
+      }));
+      const radios = fields.filter((f) => lower(f.type) === 'radio').map((f) => ({
+        id: f.id, name: f.name, value: f.value, checked: !!f.checked, label: f.label
+      }));
+      const alerts = Array.from(document.querySelectorAll('[id^="message_"], .c-alert, .c-alert a, .c-alert__content, [role=alert], .error, .validation'))
+        .filter(visible)
+        .map((el) => normalize(el.innerText || el.textContent || ''))
+        .filter(Boolean);
+      const dialogs = Array.from(document.querySelectorAll('[role=dialog], .modal, .mesh-portal, .ReactModalPortal'))
+        .filter(visible)
+        .map((el) => normalize(el.innerText || el.textContent || ''))
+        .filter(Boolean);
+      const payload = {
+        capturedAt: new Date().toISOString(),
+        stepLabel: safe(args.label || ''),
+        scanReason: safe(args.reason || ''),
+        url: pageUrl(),
+        title: safe(document.title || ''),
+        heading: normalize(headingNode ? (headingNode.innerText || headingNode.textContent) : ''),
+        bodySample: normalize((document.body && document.body.innerText) || '').slice(0, 2500),
+        headings,
+        fields,
+        buttons,
+        radios,
+        alerts,
+        modalText: dialogs.join(' || ')
+      };
+      return JSON.stringify(payload, null, 2);
+    }
+
+    case 'wait_condition': {
+      const name = safe(args.name);
+      const url = pageUrl();
+      const text = bodyText();
+      switch (name) {
+        case 'post_prospect_submit':
+          return (url.includes(safe(args.rapportContains)) || url.includes(safe(args.selectProductContains)) || isCustomerSummaryOverviewPage(args) || isProductOverviewPage(args) || isDuplicatePage(args) || isAddressVerificationPage()) ? '1' : '0';
+        case 'prospect_form_ready': {
+          const selectors = args.selectors || {};
+          const requiredIds = [
+            selectors.prospectFirstNameId,
+            selectors.prospectLastNameId,
+            selectors.prospectDobId,
+            selectors.prospectAddressId,
+            selectors.prospectCityId,
+            selectors.prospectStateId,
+            selectors.prospectZipId,
+            selectors.beginQuotingContinueId
+          ].filter(Boolean);
+          return requiredIds.every((id) => {
+            const el = findByStableId(id);
+            return !!el && visible(el);
+          }) ? '1' : '0';
+        }
+        case 'duplicate_to_next':
+          return (isCustomerSummaryOverviewPage(args) || isGatherDataPage(args) || url.includes(safe(args.selectProductContains)) || isProductOverviewPage(args) || isSelectProductFormPage(args)) ? '1' : '0';
+        case 'gather_data':
+          return isGatherDataPage(args) ? '1' : '0';
+        case 'on_customer_summary_overview':
+          return isCustomerSummaryOverviewPage(args) ? '1' : '0';
+        case 'on_product_overview':
+          return isProductOverviewPage(args) ? '1' : '0';
+        case 'to_select_product':
+          return isSelectProductFormPage(args) ? '1' : '0';
+        case 'gather_start_quoting_transition':
+          return (isConsumerReportsPage(args) || isDriversAndVehiclesPage(args) || isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
+        case 'vehicle_added_tile':
+          return isVehicleAlreadyListedMatch(args) ? '1' : '0';
+        case 'vehicle_confirmed':
+          return isVehicleAlreadyListedMatch(args) ? '1' : '0';
+        case 'vehicle_select_enabled': {
+          const idx = Number(args.index);
+          const fieldName = safe(args.fieldName);
+          const minOptions = Number(args.minOptions || 1);
+          const el = document.getElementById(`ConsumerData.Assets.Vehicles[${idx}].${fieldName}`);
+          return (!!el && !el.disabled && (el.options || []).length >= minOptions) ? '1' : '0';
+        }
+        case 'on_select_product':
+          return isSelectProductFormPage(args) ? '1' : '0';
+        case 'select_product_to_consumer':
+          return (isConsumerReportsPage(args) || isDriversAndVehiclesPage(args) || isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
+        case 'consumer_reports_ready':
+          return isConsumerReportsPage(args) ? '1' : '0';
+        case 'drivers_or_incidents':
+          return (isDriversAndVehiclesPage(args) || isIncidentsPage(args)) ? '1' : '0';
+        case 'after_driver_vehicle_continue':
+          return (isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
+        case 'add_asset_modal_closed':
+          return document.getElementById(safe(args.addAssetSaveId)) ? '0' : '1';
+        case 'continue_enabled': {
+          const btn = document.getElementById(safe(args.buttonId));
+          return (!!btn && !btn.disabled) ? '1' : '0';
+        }
+        case 'incidents_done':
+          return isQuoteLandingPage(args) ? '1' : '0';
+        case 'quote_landing':
+          return isQuoteLandingPage(args) ? '1' : '0';
+        case 'is_duplicate':
+          return isDuplicatePage(args) ? '1' : '0';
+        case 'is_customer_summary_overview':
+          return isCustomerSummaryOverviewPage(args) ? '1' : '0';
+        case 'is_rapport':
+          return isGatherDataPage(args) ? '1' : '0';
+        case 'is_product_overview':
+          return isProductOverviewPage(args) ? '1' : '0';
+        case 'is_select_product':
+          return isSelectProductFormPage(args) ? '1' : '0';
+        case 'is_asc':
+          return isAscProductPage(args) ? '1' : '0';
+        case 'is_incidents':
+          return isIncidentsPage(args) ? '1' : '0';
+        default:
+          return '0';
+      }
+    }
+
+    default:
+      return '';
+  }
+  } catch (error) {
+    const clean = (value, max = 320) => String(value ?? '').replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+    return [
+      'result=ERROR',
+      `op=${clean(op, 80)}`,
+      `message=${clean((error && error.message) || error, 280)}`,
+      `stack=${clean((error && error.stack) || '', 600)}`,
+      `url=${clean((globalThis.location && location.href) || '', 240)}`
+    ].join('\n');
+  }
+})()));

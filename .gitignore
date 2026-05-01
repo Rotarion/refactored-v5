@@ -1,0 +1,62 @@
+# Secrets / environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Credentials / tokens / local auth
+*token*
+*secret*
+credentials*
+auth*
+
+# Local config - only commit examples/templates manually
+config/
+!config/.gitkeep
+!config/*.example
+!config/*.sample
+!config/*.template
+
+# Generated/local/customer data
+data/
+exports/
+backups/
+quo_backup/
+contacts_raw_*.json
+messages_raw_*.json
+conversations_raw_*.json
+*_raw_*.json
+*.csv
+*.xlsx
+
+# Logs / temp
+logs/
+*.log
+*.tmp
+*.bak
+*.old
+
+# Screenshots / images likely to contain customer data
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+out/
+.cache/
+coverage/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+agents/

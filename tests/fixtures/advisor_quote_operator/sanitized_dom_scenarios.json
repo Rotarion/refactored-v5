@@ -1,0 +1,774 @@
+{
+  "duplicate-page-after-prospect-submit": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect This Prospect May Already Exist Use EXISTING profile found Continue with Selected Create NEW profile using data you entered",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "sfmOption",
+        "text": "Alex Example 100 Test Ave Sample City FL 33101 555-0100 01/01/1980 Active",
+        "children": [
+          { "tag": "input", "type": "radio", "id": "duplicate-existing-safe", "name": "sfmOption", "value": "1" }
+        ]
+      },
+      { "tag": "button", "id": "duplicate-continue", "text": "Continue with Selected" },
+      { "tag": "button", "id": "outOfLocationCreateNewProspectButton", "text": "Create New Prospect" }
+    ]
+  },
+  "duplicate-moved-address-create-new": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect This Prospect May Already Exist Use EXISTING profile found Create NEW profile using data you entered Continue with Selected",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "sfmOption",
+        "text": "Use EXISTING profile found FIRST LAST STREET CITY STATE ZIP DOB STATUS Alex Example 456 Old Rd Oldtown FL 32801 01/01/1980 Prospect",
+        "children": [
+          { "tag": "input", "type": "radio", "id": "existing-old-address", "name": "sfmOption", "value": "1" }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "sfmOption",
+        "text": "Create NEW profile using data you entered FIRST LAST STREET CITY STATE ZIP DOB STATUS Alex Example 100 Test Ave Sample City FL 33101 01/01/1980",
+        "children": [
+          { "tag": "input", "type": "radio", "id": "create-new-entered-address", "name": "sfmOption", "value": "0" }
+        ]
+      },
+      { "tag": "button", "id": "duplicate-continue", "text": "Continue with Selected" },
+      { "tag": "button", "id": "outOfLocationCreateNewProspectButton", "text": "Create New Prospect" }
+    ]
+  },
+  "duplicate-live-shape-create-new-radio": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect This Prospect May Already Exist Use EXISTING profile found FIRST LAST STREET CITY STATE ZIP DOB STATUS Alex Example 456 Old Rd Oldtown FL 32801 01/01/1980 Prospect Create NEW profile using data you entered FIRST LAST STREET CITY STATE ZIP DOB STATUS Alex Example 100 Test Ave Sample City FL 33101 01/01/1980 Continue with Selected",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "existing-sfm", "name": "sfmOption", "value": "1" },
+      { "tag": "input", "type": "radio", "id": "create-new-sfm", "name": "sfmOption", "value": "0" },
+      { "tag": "button", "id": "duplicate-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-suffix-second": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Sample City FL 33101 Did You Mean? 100 NW 44th St Sample City, FL 33101-1111 100 NW 44th Ct Sample City, FL 33101-2222 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th St Sample City, FL 33101-1111", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "div", "text": "100 NW 44th Ct Sample City, FL 33101-2222", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-2", "name": "snaOption", "value": "2" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-suffix-first": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Sample City FL 33101 Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222 100 NW 44th St Sample City, FL 33101-1111 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "div", "text": "100 NW 44th St Sample City, FL 33101-1111", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-2", "name": "snaOption", "value": "2" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-usps-zip4": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Ct Sample City FL 33101 Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Ct Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-entered-safe": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Ct Sample City FL 33101 Did You Mean? 100 NW 44th St Sample City, FL 33101-1111 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Ct Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th St Sample City, FL 33101-1111", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-ambiguous": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Sample City FL 33101 Did You Mean? 100 NW 44th St Sample City, FL 33101-1111 100 NW 44th Ct Sample City, FL 33101-2222 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th St Sample City, FL 33101-1111", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "div", "text": "100 NW 44th Ct Sample City, FL 33101-2222", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-2", "name": "snaOption", "value": "2" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-no-safe-match": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Sample City FL 33101 Did You Mean? 100 NW 44th St Sample City, FL 33101-1111 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th St Sample City, FL 33101-1111", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "address-verification-continue-disabled": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Address Verification You Entered 100 NW 44th Sample City FL 33101 Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222 Continue with Selected",
+    "nodes": [
+      { "tag": "div", "text": "You Entered 100 NW 44th Sample City FL 33101", "children": [{ "tag": "input", "type": "radio", "id": "sna-entered", "name": "snaOption", "value": "0" }] },
+      { "tag": "div", "text": "Did You Mean? 100 NW 44th Ct Sample City, FL 33101-2222", "children": [{ "tag": "input", "type": "radio", "id": "sna-suggestion-1", "name": "snaOption", "value": "1" }] },
+      { "tag": "button", "id": "address-continue", "text": "Continue with Selected", "disabled": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "create-prospect-form-ready": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Current Home Address Contact Information",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "ConsumerData.People[0].Name.GivenName", "value": "Alex" },
+      { "tag": "input", "type": "text", "id": "ConsumerData.People[0].Name.Surname", "value": "Example" },
+      { "tag": "input", "type": "text", "id": "ConsumerData.People[0].Personal.BirthDt", "value": "01/01/1980" },
+      { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Properties[0].Addr.Addr1", "value": "100 Test Ave" },
+      { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Properties[0].Addr.City", "value": "Sample City" },
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Properties[0].Addr.StateProvCd.SrcCd",
+        "options": [
+          { "value": "FL", "text": "Florida", "selected": true }
+        ]
+      },
+      { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Properties[0].Addr.PostalCode", "value": "33101" },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Continue" }
+    ]
+  },
+  "customer-summary-overview": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "START HERE (Pre-fill included) Quote History Assets Details Add Product Customer Summary Sample Household"
+  },
+  "customer-summary-prefill-high-confidence": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "View Customer START HERE (Pre-fill included) Quote History Assets Details Contact Information",
+    "nodes": [
+      { "tag": "a", "id": "summary-start-sidebar", "text": "START HERE (Pre-fill included)" },
+      { "tag": "button", "id": "summary-start-main", "text": "START HERE (Pre-fill included)" },
+      { "tag": "button", "id": "summary-add-product", "text": "Add Product" }
+    ]
+  },
+  "customer-summary-prefill-medium-confidence": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "View Customer START HERE (Pre-fill included) Add Product",
+    "nodes": [
+      { "tag": "button", "id": "summary-start-main", "text": "START HERE (Pre-fill included)" },
+      { "tag": "button", "id": "summary-add-product", "text": "Add Product" }
+    ]
+  },
+  "customer-summary-not-detected": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "START HERE Select Product Auto Save & Continue to Gather Data"
+  },
+  "customer-summary-start-here-click": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "START HERE (Pre-fill included) Quote History Assets Details Add Product",
+    "nodes": [
+      { "tag": "a", "id": "summary-start-sidebar", "text": "START HERE (Pre-fill included)" },
+      { "tag": "button", "id": "summary-add-product", "text": "Add Product" },
+      { "tag": "button", "id": "summary-start-main", "text": "START HERE (Pre-fill included)" }
+    ]
+  },
+  "customer-summary-missing-start-here": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "View Customer Quote History Assets Details Add Product",
+    "nodes": [
+      { "tag": "button", "id": "summary-add-product", "text": "Add Product" }
+    ]
+  },
+  "customer-summary-add-product-decoy": {
+    "href": "https://advisorpro.allstate.com/#/apps/customer-summary/104/overview",
+    "bodyText": "View Customer START HERE Quote History Assets Details Add Product",
+    "nodes": [
+      { "tag": "button", "id": "summary-add-product", "text": "Add Product" },
+      { "tag": "button", "id": "summary-start-main", "text": "START HERE" }
+    ]
+  },
+  "product-overview": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile",
+            "children": [
+              { "tag": "span", "text": "Auto" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "product-overview-auto-selected": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile l-tile--selected",
+            "children": [
+              { "tag": "span", "text": "Auto" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "product-overview-auto-unselected": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile",
+            "children": [
+              { "tag": "span", "text": "Auto" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "product-overview-auto-unselected-save-enabled": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile",
+            "children": [
+              { "tag": "span", "text": "Auto" }
+            ]
+          }
+        ]
+      },
+      { "tag": "button", "id": "save-overview", "text": "Save & Continue to Gather Data" }
+    ]
+  },
+  "product-overview-auto-unselected-click-does-not-select": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile",
+            "children": [
+              { "tag": "span", "text": "Auto" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "product-overview-live-auto-nonbutton": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Home Renters PUP Condo Motorcycle ORV Boat Motorhome Landlords ManufacturedHome Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "product-grid",
+        "children": [
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Auto" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Home" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Renters" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "PUP" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Condo" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Motorcycle" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "ORV" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Boat" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Motorhome" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Landlords" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "ManufacturedHome" }] }
+        ]
+      },
+      { "tag": "button", "id": "save-overview", "text": "Save & Continue to Gather Data" }
+    ]
+  },
+  "product-overview-live-auto-nonbutton-selected": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Home Renters PUP Condo Motorcycle ORV Boat Motorhome Landlords ManufacturedHome Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "product-grid",
+        "children": [
+          { "tag": "div", "className": "product-card is-selected", "children": [{ "tag": "span", "text": "Auto" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Home" }] },
+          { "tag": "div", "className": "product-card", "children": [{ "tag": "span", "text": "Renters" }] }
+        ]
+      },
+      { "tag": "button", "id": "save-overview", "text": "Save & Continue to Gather Data" }
+    ]
+  },
+  "product-overview-auto-missing": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Select Product Auto Save & Continue to Gather Data",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "l-grid__col l-grid__col--3",
+        "children": [
+          {
+            "tag": "div",
+            "className": "l-tile",
+            "children": [
+              { "tag": "span", "text": "Home" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "product-overview-wrong-page": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Auto"
+  },
+  "gather-data-vehicle-tile-added": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Vehicles Start Quoting Auto Create Quotes & Order Reports",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-card", "text": "2022 Tesla Model 3 Added to quote" }
+    ]
+  },
+  "gather-data-add-car-or-truck-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Vehicles Auto originally asked for. Please Confirm or Add at least 1 car or truck. Add Car or Truck",
+    "nodes": [
+      { "tag": "button", "id": "add-car-or-truck", "text": "Add Car or Truck" },
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Vehicles[0].VehTypeCd",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "CAR_TRUCK", "text": "Car or Truck" }
+        ]
+      },
+      { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[0].ModelYear", "value": "" },
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Vehicles[0].Manufacturer",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "HONDA", "text": "Honda" }
+        ]
+      },
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Vehicles[0].Model",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "PILOT", "text": "Pilot" }
+        ]
+      },
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Vehicles[0].SubModel",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "EXL", "text": "EX-L AWD" }
+        ]
+      }
+    ]
+  },
+  "gather-data-year-set-manufacturer-disabled": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Vehicles Auto originally asked for. Add Car or Truck",
+    "nodes": [
+      {
+        "tag": "select",
+        "id": "ConsumerData.Assets.Vehicles[6].VehTypeCd",
+        "options": [
+          { "value": "10", "text": "Car/Truck", "selected": true }
+        ]
+      },
+      { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[6].ModelYear", "value": "2019" },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[6].Manufacturer", "disabled": true, "options": [] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[6].Model", "disabled": true, "options": [] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[6].SubModel", "disabled": true, "options": [] }
+    ]
+  },
+  "confirmed-potential-vehicle-card": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Vehicles",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-card", "text": "2022 Tesla Model 3 confirmed" }
+    ]
+  },
+  "confirmed-toy-trucks-highlander": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Toy. trucks HIGHLANDER 5TDKZRFH6KS554658 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-highlander-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-highlander-remove", "text": "Remove" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "confirmed-toyota-corolla": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Toyota COROLLA 2T1BURHE4KC199094 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-corolla-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-corolla-remove", "text": "Remove" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "confirmed-corolla-highlander-catalog": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Toyota COROLLA 2T1BURHE4KC199094 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-corolla-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-corolla-remove", "text": "Remove" }
+            ]
+          },
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Toy. trucks HIGHLANDER 5TDKZRFH6KS554658 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-highlander-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-highlander-remove", "text": "Remove" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "confirmed-prius-prime-mismatch": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Toyota Prius Prime JTDKARFP0K3000001 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-prime-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-prime-remove", "text": "Remove" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "potential-vehicle-card-with-confirm": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Potential vehicle",
+    "nodes": [
+      {
+        "tag": "div",
+        "className": "vehicle-card",
+        "text": "2022 Tesla Model 3 Long Range",
+        "children": [
+          { "tag": "button", "id": "confirm-potential-vehicle", "text": "Confirm" }
+        ]
+      }
+    ]
+  },
+  "select-product-form": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
+    "bodyText": "Select Product Is the customer currently insured? Yes",
+    "nodes": [
+      {
+        "tag": "select",
+        "id": "SelectProduct.Product",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "Auto", "text": "Auto", "selected": true }
+        ]
+      },
+      {
+        "tag": "select",
+        "id": "SelectProduct.RatingState",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "FL", "text": "Florida", "selected": true }
+        ]
+      },
+      { "tag": "input", "type": "radio", "id": "insured-yes", "name": "SelectProduct.CustomerCurrentInsured", "value": "YES", "checked": true },
+      { "tag": "input", "type": "radio", "id": "own-home", "name": "SelectProduct.CustomerOwnOrRent", "value": "OWN", "checked": true },
+      { "tag": "button", "id": "selectProductContinue", "text": "Continue" }
+    ]
+  },
+  "start-quoting-ready": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Start Quoting Auto Rating State Create Quotes & Order Reports Add Product",
+    "nodes": [
+      { "tag": "input", "type": "checkbox", "id": "ConsumerReports.Auto.Product-intel#102", "name": "auto-product", "value": "Auto", "checked": true },
+      {
+        "tag": "select",
+        "id": "ConsumerReports.Auto.RatingState",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "FL", "text": "Florida", "selected": true }
+        ]
+      },
+      { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports" },
+      { "tag": "button", "id": "quotesButton", "text": "Add Product" }
+    ]
+  },
+  "start-quoting-auto-unchecked": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Start Quoting Auto Rating State Create Quotes & Order Reports Add Product",
+    "nodes": [
+      { "tag": "input", "type": "checkbox", "id": "ConsumerReports.Auto.Product-intel#102", "name": "auto-product", "value": "Auto", "checked": false },
+      {
+        "tag": "select",
+        "id": "ConsumerReports.Auto.RatingState",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "FL", "text": "Florida", "selected": true }
+        ]
+      },
+      { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports" }
+    ]
+  },
+  "start-quoting-section-missing": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Confirmed Vehicles"
+  },
+  "rapport-select-product-subnav-with-add-product-decoy": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data SELECT PRODUCT GATHER DATA Add Product",
+    "nodes": [
+      { "tag": "a", "className": "c-sub-nav__item dd-privacy-allow", "text": "SELECT PRODUCT" },
+      { "tag": "a", "id": "addProduct", "className": "c-sidebar-item", "text": "Add Product" }
+    ]
+  },
+  "rapport-only-sidebar-add-product": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Add Product",
+    "nodes": [
+      { "tag": "a", "id": "addProduct", "className": "c-sidebar-item", "text": "Add Product" }
+    ]
+  },
+  "consumer-reports-page": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/consumer",
+    "bodyText": "Order consumer reports Consent",
+    "nodes": [
+      { "tag": "button", "id": "orderReportsConsent-yes-btn", "text": "Yes" }
+    ]
+  },
+  "drivers-and-vehicles-page": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "Drivers and vehicles profile summary",
+    "nodes": [
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Continue" }
+    ]
+  },
+  "incidents-page": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/incidents",
+    "bodyText": "Incidents Accident caused by being hit by animal or road debris",
+    "nodes": [
+      { "tag": "button", "id": "CONTINUE_OFFER-btn", "text": "Continue" }
+    ]
+  },
+  "quote-landing-page": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/quote",
+    "bodyText": "Personalized quote details coverages your quote"
+  },
+  "participant-modal": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "Driver details participant modal",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "" },
+      { "tag": "input", "type": "text", "id": "emailAddress.emailAddress", "value": "" },
+      { "tag": "input", "type": "radio", "id": "militaryFalse", "name": "agreement.agreementParticipant.militaryInd", "value": "false" },
+      { "tag": "input", "type": "radio", "id": "violationsFalse", "name": "agreement.agreementParticipant.party.violationInd", "value": "false" },
+      { "tag": "input", "type": "radio", "id": "defensiveFalse", "name": "agreement.agreementParticipant.defensiveDriverInd", "value": "false" },
+      {
+        "tag": "select",
+        "id": "propertyOwnershipEntCd_option",
+        "options": [
+          { "value": "", "text": "Select One" },
+          { "value": "0001_0120", "text": "Own home" }
+        ]
+      },
+      { "tag": "input", "type": "radio", "id": "gender_1002", "name": "gender", "value": "M", "checked": true },
+      { "tag": "input", "type": "radio", "id": "gender_1001", "name": "gender", "value": "F" },
+      {
+        "tag": "select",
+        "id": "maritalStatusWithSpouse_spouseName",
+        "options": [
+          { "value": "", "text": "Select One" }
+        ]
+      },
+      { "tag": "input", "type": "radio", "id": "maritalStatusEntCd_0001", "name": "marital", "value": "Married" },
+      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
+    ]
+  },
+  "vehicle-modal": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "2022 Tesla Model 3 vehicle details",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "garagingAddressSameAsOther-control-item-0", "name": "garaging", "value": "yes" },
+      { "tag": "input", "type": "radio", "id": "purchaseDate_false", "name": "purchaseDate", "value": "false" },
+      { "tag": "input", "type": "radio", "id": "vehicleOwnershipCd_0007", "name": "ownership", "value": "finance" },
+      { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" }
+    ]
+  },
+  "gather-vehicle-edit-submodel-required": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].ModelYear", "value": "2019" },
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].VIN", "value": "2T1BURHE4KC199094" },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].Manufacturer", "options": [{ "value": "TOYOTA", "text": "TOYOTA", "selected": true }] },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].Model", "options": [{ "value": "COROLLA", "text": "COROLLA", "selected": true }] },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "BASE", "text": "|SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" },
+        { "value": "LE", "text": "LE |SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" }
+    ]
+  },
+  "gather-vehicle-edit-vin-pattern": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].ModelYear", "value": "2019" },
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].VIN", "value": "2T1BURHE4KC199094" },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "BASE", "text": "|SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" },
+        { "value": "LE", "text": "LE |SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" }
+    ]
+  },
+  "gather-vehicle-edit-multiple-same-vin-pattern": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].ModelYear", "value": "2019" },
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].VIN", "value": "2T1BURHE4KC199094" },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "BASE", "text": "|SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" },
+        { "value": "LE", "text": "LE |SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" },
+        { "value": "SE", "text": "SE |SEDAN|GAS|FWD|04Cyl|4Dr|2T1BURHE*K" }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" }
+    ]
+  },
+  "gather-vehicle-edit-trim-match": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].ModelYear", "value": "2019" },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "BASE", "text": "|SEDAN|GAS|FWD|04Cyl|4Dr" },
+        { "value": "LE", "text": "LE |SEDAN|GAS|FWD|04Cyl|4Dr" },
+        { "value": "SE", "text": "SE |SEDAN|GAS|FWD|04Cyl|4Dr" }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" }
+    ]
+  },
+  "gather-vehicle-edit-no-valid-options": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [{ "value": "", "text": "Select One", "selected": true }] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" }
+    ]
+  },
+  "gather-vehicle-edit-update-disabled": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
+    "nodes": [
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "BASE", "text": "|SEDAN|GAS|FWD|04Cyl|4Dr" }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update", "disabled": true }
+    ]
+  },
+  "gather-vehicle-edit-no-modal": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks"
+  },
+  "vehicle-add-card-ambiguity": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "Drivers and vehicles 2023 Ford F-150",
+    "nodes": [
+      { "tag": "button", "id": "2023-ford-f150-add", "text": "Add" },
+      { "tag": "button", "id": "2023-ford-f150-addToQuote", "text": "Add" }
+    ]
+  },
+  "scan-current-page-rich": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect sanitized body sample with enough content to verify scanner shape without raw customer data.",
+    "nodes": [
+      { "tag": "h1", "text": "Begin Quoting" },
+      { "tag": "input", "type": "text", "id": "ConsumerData.People[0].Name.GivenName", "value": "Alex" },
+      { "tag": "input", "type": "radio", "id": "genderMale", "name": "gender", "value": "Male", "checked": true },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Continue" },
+      { "tag": "div", "className": "c-alert", "text": "Synthetic validation message" }
+    ]
+  }
+}
