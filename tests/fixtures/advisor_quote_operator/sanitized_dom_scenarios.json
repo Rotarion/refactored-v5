@@ -794,6 +794,44 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "gather-confirmed-honda-crv": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-confirmed-honda-crv-with-duplicate-add-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+        { "value": "CAR_TRUCK", "text": "Car or Truck", "selected": true }
+      ] },
+      { "tag": "input", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2019" },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [
+        { "value": "HONDA", "text": "Honda", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
+    ]
+  },
   "scan-current-page-rich": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
     "bodyText": "Begin Quoting Create New Prospect sanitized body sample with enough content to verify scanner shape without raw customer data.",

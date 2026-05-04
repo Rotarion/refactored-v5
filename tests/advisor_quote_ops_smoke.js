@@ -1819,6 +1819,115 @@ function testVehicleContracts() {
   assert.strictEqual(catalogCorollaAddedStatus.confirmedVehicleMatched, '1');
   assert.strictEqual(catalogCorollaAddedStatus.makeMatched, '1');
   assert.strictEqual(catalogCorollaAddedStatus.modelMatched, '1');
+  const crvConfirmedStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'confirmedStatusMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'expectedModelKey']);
+  assert.strictEqual(crvConfirmedStatus.result, 'ADDED');
+  assert.strictEqual(crvConfirmedStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.confirmedStatusMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.yearMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.makeMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.modelMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.expectedModelKey, 'CRV');
+  const crvCardWithoutHyphenStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CR-V',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CRV FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(crvCardWithoutHyphenStatus.result, 'ADDED');
+  assert.strictEqual(crvCardWithoutHyphenStatus.modelMatched, '1');
+  const crvSpaceVariantStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CR V',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(crvSpaceVariantStatus.result, 'ADDED');
+  assert.strictEqual(crvSpaceVariantStatus.modelMatched, '1');
+  const hrvPositiveStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'HRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda HR-V FAKEHRV1*******02 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(hrvPositiveStatus.result, 'ADDED');
+  assert.strictEqual(hrvPositiveStatus.modelMatched, '1');
+  const crvDoesNotMatchHrvStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda HR-V FAKEHRV1*******02 Edit Remove CONFIRMED'
+  })), ['result', 'vehicleMatched', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.notStrictEqual(crvDoesNotMatchHrvStatus.result, 'ADDED');
+  assert.strictEqual(crvDoesNotMatchHrvStatus.confirmedVehicleMatched, '0');
+  const fordF250Status = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2021',
+    make: 'Ford',
+    model: 'F 250',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2021 Ford Trucks F-250 FAKEF250*******03 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(fordF250Status.result, 'ADDED');
+  assert.strictEqual(fordF250Status.modelMatched, '1');
+  const duplicateAddRowDoc = confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  });
+  appendVehicleInputRow(duplicateAddRowDoc, 5, '2019');
+  duplicateAddRowDoc.getElementById('ConsumerData.Assets.Vehicles[5].Manufacturer').value = 'HONDA';
+  const duplicateAddRowStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, duplicateAddRowDoc), ['result', 'confirmedVehicleMatched', 'rowIncomplete', 'duplicateAddRowOpenForConfirmedVehicle', 'duplicateAddRowDetails']);
+  assert.strictEqual(duplicateAddRowStatus.result, 'ADDED');
+  assert.strictEqual(duplicateAddRowStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(duplicateAddRowStatus.rowIncomplete, '1');
+  assert.strictEqual(duplicateAddRowStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  assert.match(duplicateAddRowStatus.duplicateAddRowDetails, /model=/);
+  const crvFixture = fixtureScenario('gather-confirmed-honda-crv');
+  const crvFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, crvFixture.doc, crvFixture.href), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.strictEqual(crvFixtureStatus.result, 'ADDED');
+  assert.strictEqual(crvFixtureStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(crvFixtureStatus.modelMatched, '1');
+  const duplicateFixture = fixtureScenario('gather-confirmed-honda-crv-with-duplicate-add-row');
+  const duplicateFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, duplicateFixture.doc, duplicateFixture.href), ['result', 'duplicateAddRowOpenForConfirmedVehicle']);
+  assert.strictEqual(duplicateFixtureStatus.result, 'ADDED');
+  assert.strictEqual(duplicateFixtureStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
   const potentialVehicleStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', { year: '2019', make: 'Honda', model: 'Pilot' }, new FakeDocument([
     textNode('POTENTIAL VEHICLES'),
     new FakeElement('div', { className: 'vehicle-card', text: '2019 Honda PILOT Confirm Remove' })
@@ -1894,6 +2003,23 @@ function testVehicleContracts() {
   assert.strictEqual(priusPrimeMismatchStatus.unexpectedCount, '1');
   assert.match(priusPrimeMismatchStatus.unexpectedVehicles, /Prius Prime/);
   assert.match(priusPrimeMismatchStatus.missingExpectedVehicles, /Prius/);
+  const transitConnectMismatchStatus = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
+    expectedVehicles: [
+      {
+        year: '2020',
+        make: 'Ford',
+        model: 'Transit',
+        allowedMakeLabels: 'FORD|FORD VANS',
+        strictModelMatch: '1'
+      }
+    ]
+  }, confirmedVehicleCardsDoc([
+    '2020 Ford Vans Transit Connect FAKEVAN1*******04 Edit Remove CONFIRMED'
+  ])), ['result', 'matchedExpectedCount', 'unexpectedCount', 'missingExpectedVehicles']);
+  assert.strictEqual(transitConnectMismatchStatus.result, 'UNEXPECTED');
+  assert.strictEqual(transitConnectMismatchStatus.matchedExpectedCount, '0');
+  assert.strictEqual(transitConnectMismatchStatus.unexpectedCount, '1');
+  assert.match(transitConnectMismatchStatus.missingExpectedVehicles, /Transit/);
   const unresolvedConfirmedStatus = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
     expectedVehiclesText: '|Toyota|Prius Prime|'
   }, new FakeDocument()), ['result', 'expectedCount', 'unresolvedLeadVehicles']);

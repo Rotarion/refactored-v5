@@ -121,6 +121,10 @@ AdvisorCanonicalizeVehicleModelAndTrim(model, trimHint := "") {
         remainingTrim := (m.Count >= 1) ? m[1] : ""
         normalizedModel := "CRV"
         normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "HR" && RegExMatch(normalizedTrim, "^V(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "HRV"
+        normalizedTrim := Trim(String(remainingTrim))
     } else if (normalizedModel = "CX" && RegExMatch(normalizedTrim, "^(\d{2})(?:\s+(.*))?$", &m)) {
         remainingTrim := (m.Count >= 2) ? m[2] : ""
         normalizedModel := "CX" m[1]
