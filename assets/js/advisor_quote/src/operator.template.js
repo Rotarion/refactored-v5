@@ -896,6 +896,7 @@ copy(String((() => {
   };
   const normalizeVehicleModelKey = (value) => normalizeVehicleText(value)
     .replace(/\bCR\s+V\b/g, 'CRV')
+    .replace(/\bHR\s+V\b/g, 'HRV')
     .replace(/\bCX\s+30\b/g, 'CX30')
     .replace(/\bGLE\s+350\b/g, 'GLE350')
     .replace(/\b4\s+RUNNER\b/g, '4RUNNER')
@@ -904,6 +905,21 @@ copy(String((() => {
     .replace(/\bF\s+(150|250|350|450)\b/g, 'F$1')
     .replace(/[^A-Z0-9]/g, '');
   const vehicleTokenRegex = (token) => new RegExp(`(^|[^A-Z0-9])${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Z0-9]|$)`);
+  const vehicleCompactModelRegex = (key) => {
+    if (/^(CR|HR)V$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])${key.slice(0, 1)}[\\s-]*R[\\s-]*V([^A-Z0-9]|$)`);
+    if (/^CX\d{2}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])C[\\s-]*X[\\s-]*${key.slice(2)}([^A-Z0-9]|$)`);
+    if (/^QX\d{2}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])Q[\\s-]*X[\\s-]*${key.slice(2)}([^A-Z0-9]|$)`);
+    if (/^GLE\d{3}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])GLE[\\s-]*${key.slice(3)}([^A-Z0-9]|$)`);
+    if (/^F\d{3,4}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])F[\\s-]*${key.slice(1)}([^A-Z0-9]|$)`);
+    if (key === '4RUNNER')
+      return /(^|[^A-Z0-9])4[\s-]*RUNNER([^A-Z0-9]|$)/;
+    return null;
+  };
   const vehicleMakeMatches = (haystack, match) => {
     const labels = (match.allowedMakeLabels || []).map(normalizeVehicleText).filter(Boolean);
     if (labels.length)
@@ -918,13 +934,14 @@ copy(String((() => {
     if (key === 'PRIUS' && /(^|[^A-Z0-9])PRIUS\s+PRIME([^A-Z0-9]|$)/.test(haystack)) return false;
     if (key === 'TRANSIT' && /(^|[^A-Z0-9])TRANSIT\s+(CONN|CONNECT)([^A-Z0-9]|$)/.test(haystack)) return false;
     if (key === 'EXPRESS' && /(^|[^A-Z0-9])CITY\s+EXPRESS([^A-Z0-9]|$)/.test(haystack)) return false;
-    if (/^F(150|250|350|450)$/.test(key)) return vehicleTokenRegex(key).test(haystack);
     if (/^SILVERADO(1500|2500|3500)$/.test(key)) {
       const series = key.match(/(1500|2500|3500)$/)[1];
       return haystackKey.includes(`SILVERADO${series}`);
     }
     if (key === 'GRANDCARAVAN')
       return haystackKey.includes('GRANDCARAVAN');
+    const compactRegex = vehicleCompactModelRegex(key);
+    if (compactRegex) return compactRegex.test(haystack);
     return vehicleTokenRegex(model).test(haystack);
   };
   const getVehicleMatchArgs = (source = {}) => {
@@ -966,6 +983,29 @@ copy(String((() => {
       vinMatch,
       vinSuffixMatch
     };
+  };
+  const vehicleVinEvidenceText = (text) => {
+    const tokens = safe(text).toUpperCase().match(/[A-HJ-NPR-Z0-9*]{8,20}/g) || [];
+    return tokens.find((token) => /[A-Z]/.test(token) && /\d/.test(token) && (token.length === 17 || token.includes('*'))) || '';
+  };
+  const partialVehicleModelTextFromCard = (cardText, match) => {
+    const text = normalizeVehicleText(cardText);
+    const labels = (match.allowedMakeLabels || []).concat([match.make]).map(normalizeVehicleText).filter(Boolean);
+    const year = safe(match.year).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!year || !labels.length) return '';
+    for (const label of labels) {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${year}\\b[\\s\\S]{0,120}?\\b${escapedLabel}\\b\\s+([A-Z0-9][A-Z0-9\\s./*-]{0,100})`, 'i');
+      const m = text.match(regex);
+      if (!m) continue;
+      let model = safe(m[1]);
+      model = model.replace(/\bVIN\b[\s\S]*$/i, '');
+      model = model.replace(/\b[A-HJ-NPR-Z0-9*]{8,20}\b[\s\S]*$/i, '');
+      model = model.replace(/\b(?:EDIT|REMOVE|CONFIRMED|ADDED|TO|QUOTE)\b[\s\S]*$/i, '');
+      model = model.replace(/\s+/g, ' ').trim();
+      if (model) return model;
+    }
+    return '';
   };
   const pickVehicleCard = (seed) => {
     let fallback = null;
@@ -1124,6 +1164,640 @@ copy(String((() => {
       missingExpectedVehicles: missingLabels.join(' || '),
       unresolvedLeadVehicles: unresolved.map(vehicleLabel).join(' || '),
       method: 'confirmed-vehicle-cards'
+    });
+  };
+  const ascProductRouteId = () => {
+    const match = pageUrl().match(/\/apps\/ASCPRODUCT\/([^/?#]+)/i);
+    return match ? safe(match[1]) : '';
+  };
+  const isAscProductRoute = () => ascProductRouteId() !== '';
+  const ascDriversVehiclesTextEvidence = () => {
+    const text = bodyText();
+    const normalized = normLower(text);
+    const evidence = [];
+    if (normalized.includes('drivers and vehicles')) evidence.push('text:Drivers and vehicles');
+    if (normalized.includes("let's get some more details") || normalized.includes('lets get some more details')) evidence.push('text:more-details');
+    if (normalized.includes('add drivers')) evidence.push('text:Add drivers');
+    if (normalized.includes('add vehicles')) evidence.push('text:Add vehicles');
+    if (normalized.includes('save and continue')) evidence.push('text:Save and Continue');
+    if (normalized.includes('consumer reports')) evidence.push('text:Consumer Reports');
+    if (normalized.includes('coverages')) evidence.push('text:Coverages');
+    return evidence;
+  };
+  const findAscSaveButton = () => document.getElementById('profile-summary-submitBtn')
+    || Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button]'))
+      .filter(visible)
+      .find((node) => answerTextMatches(getText(node) || node.value, 'Save and Continue')) || null;
+  const findAscSpouseSelect = () => document.getElementById('maritalStatusWithSpouse_spouseName')
+    || document.querySelector('select[name="agreement.agreementParticipant.party.spouse.id"]')
+    || Array.from(document.querySelectorAll('select')).find((select) => /spouse/i.test(`${safe(select.id)} ${safe(select.name)}`)) || null;
+  const findAscMaritalControls = () => {
+    const radios = Array.from(document.querySelectorAll('input[type=radio]'))
+      .filter((radio) => /marital/i.test(`${safe(radio.id)} ${safe(radio.name)}`));
+    const selects = Array.from(document.querySelectorAll('select'))
+      .filter((select) => /marital/i.test(`${safe(select.id)} ${safe(select.name)}`));
+    return { radios, selects };
+  };
+  const maritalCandidateText = (node) => normUpper(`${safe(node && node.id)} ${safe(node && node.name)} ${safe(node && node.value)} ${readInputLabel(node)}`);
+  const maritalWantedMatches = (text, wanted) => {
+    const normalized = normUpper(wanted);
+    if (normalized === 'SINGLE')
+      return /\bSINGLE\b|\bUNMARRIED\b|0002/.test(text);
+    if (normalized === 'MARRIED')
+      return /\bMARRIED\b|0001/.test(text);
+    return normalized && text.includes(normalized);
+  };
+  const readAscMaritalStatus = () => {
+    const controls = findAscMaritalControls();
+    for (const radio of controls.radios) {
+      if (!radio.checked) continue;
+      const text = maritalCandidateText(radio);
+      if (maritalWantedMatches(text, 'Single')) return { value: safe(radio.value), text: 'Single', source: 'radio' };
+      if (maritalWantedMatches(text, 'Married')) return { value: safe(radio.value), text: 'Married', source: 'radio' };
+      return { value: safe(radio.value), text: readInputLabel(radio), source: 'radio' };
+    }
+    for (const select of controls.selects) {
+      const state = readSelectState(select);
+      if (state.value || state.text) return { value: state.value, text: state.text, source: 'select' };
+    }
+    return { value: '', text: '', source: controls.radios.length || controls.selects.length ? 'present' : '' };
+  };
+  const setAscMaritalStatus = (wanted) => {
+    const controls = findAscMaritalControls();
+    const wantedText = normUpper(wanted);
+    const current = readAscMaritalStatus();
+    if (maritalWantedMatches(normUpper(`${current.value} ${current.text}`), wantedText))
+      return { ok: true, method: 'already-selected', state: readAscMaritalStatus() };
+    for (const radio of controls.radios) {
+      if (!maritalWantedMatches(maritalCandidateText(radio), wantedText)) continue;
+      const target = getInputClickTarget(radio) || radio;
+      const clicked = clickCenterEl(target);
+      if (clicked) {
+        controls.radios.filter((candidate) => safe(candidate.name) === safe(radio.name)).forEach((candidate) => {
+          candidate.checked = candidate === radio;
+        });
+        radio.dispatchEvent(new Event('input', { bubbles: true }));
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const next = readAscMaritalStatus();
+      return { ok: clicked && maritalWantedMatches(normUpper(`${next.value} ${next.text}`), wantedText), method: clicked ? 'radio-click' : 'radio-click-failed', state: next };
+    }
+    for (const select of controls.selects) {
+      const option = Array.from(select.options || []).find((opt) => maritalWantedMatches(normUpper(`${safe(opt.value)} ${safe(opt.text || opt.innerText)}`), wantedText));
+      if (!option) continue;
+      const applied = setSelectValue(select, option.value, false);
+      const next = readAscMaritalStatus();
+      return { ok: applied && maritalWantedMatches(normUpper(`${next.value} ${next.text}`), wantedText), method: applied ? 'select' : 'select-failed', state: next };
+    }
+    return { ok: false, method: controls.radios.length || controls.selects.length ? 'no-option-match' : 'marital-control-missing', state: current };
+  };
+  const ascParticipantDetailStatus = (source = {}) => {
+    const evidence = ascDriversVehiclesTextEvidence();
+    const missing = [];
+    if (isAscProductRoute()) evidence.push('url:/apps/ASCPRODUCT/');
+    else missing.push('url:/apps/ASCPRODUCT/');
+    const saveButton = findAscSaveButton();
+    if (saveButton) evidence.push('button:profile-summary-submitBtn');
+    else missing.push('button:profile-summary-submitBtn');
+    const spouseSelect = findAscSpouseSelect();
+    const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
+    const spouseOptions = spouseSelect
+      ? Array.from(spouseSelect.options || []).map((opt) => compact(`${safe(opt.value)}:${safe(opt.text || opt.innerText)}`, 90)).join('||')
+      : '';
+    const marital = readAscMaritalStatus();
+    const ownership = readSelectState(document.getElementById('propertyOwnershipEntCd_option') || document.querySelector('select[id*="propertyOwnership"],select[name*="propertyOwnership"]'));
+    const ageFirstLicensed = document.getElementById('ageFirstLicensed_ageFirstLicensed') || document.querySelector('input[id*="AgeFirstLicensed"],input[name*="AgeFirstLicensed"]');
+    const email = document.getElementById('emailAddress.emailAddress') || document.querySelector('input[type=email],input[id*="Email"],input[name*="Email"]');
+    const driverRows = collectAscDriverRows();
+    const primary = driverRows[0] || {};
+    let result = 'NOT_FOUND';
+    if (isAscProductRoute() && (evidence.length >= 2 || saveButton || driverRows.length)) result = 'FOUND';
+    return {
+      result,
+      ascProductRouteId: ascProductRouteId(),
+      primaryName: compact(primary.name || '', 120),
+      primaryAge: primary.age || '',
+      maritalStatusPresent: (findAscMaritalControls().radios.length || findAscMaritalControls().selects.length) ? '1' : '0',
+      maritalStatusSelected: compact(marital.text || '', 80),
+      maritalStatusValue: compact(marital.value || '', 80),
+      spouseDropdownPresent: spouseSelect ? '1' : '0',
+      spouseDropdownValue: compact(spouseState.value || '', 80),
+      spouseDropdownText: compact(spouseState.text || '', 120),
+      spouseOptionCount: spouseSelect ? String((spouseSelect.options || []).length) : '0',
+      spouseOptions: compact(spouseOptions, 240),
+      propertyOwnershipValue: compact(ownership.value || '', 80),
+      propertyOwnershipText: compact(ownership.text || '', 120),
+      ageFirstLicensedValue: compact(ageFirstLicensed ? ageFirstLicensed.value : '', 80),
+      emailPresent: email ? '1' : '0',
+      phonePresent: document.querySelector('input[type=tel],input[id*="Phone"],input[name*="Phone"]') ? '1' : '0',
+      saveButtonPresent: saveButton ? '1' : '0',
+      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      evidence: compact(evidence.join('|'), 240),
+      missing: compact(missing.join('|'), 240)
+    };
+  };
+  const normalizePersonName = (value) => normUpper(value)
+    .replace(/\bAGE\s+\d+\b/g, ' ')
+    .replace(/\b(ADD|REMOVE|EDIT|ADDED|QUOTE|TO|DO|YOU|WANT|DRIVER|SPOUSE)\b/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const personNameMatches = (actual, expected) => {
+    const a = normalizePersonName(actual);
+    const e = normalizePersonName(expected);
+    return !!a && !!e && (a === e || a.includes(e) || e.includes(a));
+  };
+  const parseAgeFromText = (text) => {
+    const match = safe(text).match(/\bAge\s*(\d{1,3})\b/i);
+    return match ? match[1] : '';
+  };
+  const parseAgeNearPersonName = (name) => {
+    const value = safe(name).trim();
+    if (!value) return '';
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const match = bodyText().match(new RegExp(`${escaped}\\s+Age\\s*(\\d{1,3})`, 'i'));
+    return match ? match[1] : '';
+  };
+  const inferDriverName = (text, slug = '') => {
+    const byAge = safe(text).match(/([A-Z][A-Za-z0-9 .'-]{2,80}?)\s+Age\s*\d{1,3}/);
+    if (byAge) return byAge[1].trim();
+    const cleaned = normalizePersonName(text);
+    if (cleaned) return cleaned.split(/\s+/).slice(0, 5).join(' ');
+    return safe(slug).replace(/-/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+  };
+  const pickAscRowForAction = (button) => {
+    let fallback = button && button.parentElement;
+    for (let depth = 0, current = button; depth < 7 && current; depth += 1, current = current.parentElement) {
+      if (!visible(current)) continue;
+      const text = getText(current);
+      if (!text || text.length > 700) continue;
+      if (!fallback && text.length >= 5) fallback = current;
+      const idClass = normLower(`${safe(current.id)} ${safe(current.className)}`);
+      if (current !== button && /(row|card|driver|participant|vehicle|asset|profile|summary|item)/.test(idClass))
+        return current;
+      const actionCount = Array.from(current.querySelectorAll('button,a,[role=button]')).filter(visible).length;
+      if (current !== button && actionCount <= 3 && text.length >= 5)
+        fallback = current;
+    }
+    return fallback;
+  };
+  const collectAscDriverRows = () => {
+    const buttons = Array.from(document.querySelectorAll('button[id],a[id],[role=button][id]'))
+      .filter(visible)
+      .filter((btn) => /-(addToQuote|add|remove|edit)$/i.test(safe(btn.id)) && !/\bvehicle|asset|car|truck/i.test(`${safe(btn.id)} ${getText(btn)}`));
+    const seenRows = new Set();
+    const rows = [];
+    for (const btn of buttons) {
+      const row = pickAscRowForAction(btn);
+      if (!row || !visible(row) || seenRows.has(row)) continue;
+      const text = getText(row);
+      if (!text || /\b(?:19|20)\d{2}\b/.test(text) || normLower(text).includes('vin:')) continue;
+      seenRows.add(row);
+      const rowButtons = Array.from(row.querySelectorAll('button[id],a[id],[role=button][id]')).filter(visible);
+      const addButton = rowButtons.find((node) => /-(addToQuote|add)$/i.test(safe(node.id))) || null;
+      const removeButton = rowButtons.find((node) => /-remove$/i.test(safe(node.id))) || null;
+      const editButton = rowButtons.find((node) => /-edit$/i.test(safe(node.id))) || null;
+      const slugSource = safe((addButton || removeButton || editButton || {}).id).replace(/-(addToQuote|add|remove|edit)$/i, '');
+      const lowerText = normLower(text);
+      rows.push({
+        row,
+        text,
+        name: inferDriverName(text, slugSource),
+        age: parseAgeFromText(text),
+        slug: slugSource,
+        addButton,
+        removeButton,
+        editButton,
+        added: (!!editButton && !addButton) || lowerText.includes('added to quote') || lowerText.includes('added driver'),
+        unresolved: !!addButton || !!removeButton
+      });
+    }
+    return rows.sort((a, b) => a.text.length - b.text.length);
+  };
+  const ascDriverRowsStatus = () => {
+    const rows = collectAscDriverRows();
+    const unresolved = rows.filter((row) => row.unresolved && !row.added);
+    const added = rows.filter((row) => row.added);
+    const removed = rows.filter((row) => normLower(row.text).includes('removed'));
+    const saveButton = findAscSaveButton();
+    const evidence = [];
+    if (rows.length) evidence.push('driver-rows');
+    if (saveButton) evidence.push('save-button');
+    return {
+      result: rows.length ? 'FOUND' : 'NONE',
+      driverCount: String(rows.length),
+      unresolvedDriverCount: String(unresolved.length),
+      addedDriverCount: String(added.length),
+      removedDriverCount: String(removed.length),
+      driverSummaries: compact(rows.map((row) => `${row.name}|age=${row.age}|added=${row.added ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}`).join('||'), 360),
+      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      evidence: compact(evidence.join('|'), 240),
+      missing: rows.length ? '' : 'driver-rows'
+    };
+  };
+  const parsePersonListArg = (value) => {
+    if (Array.isArray(value)) return value.map((item) => safe(item).trim()).filter(Boolean);
+    return safe(value).split(/[|,;]/).map((item) => item.trim()).filter(Boolean);
+  };
+  const ascReconcileDriverRows = (source = {}) => {
+    const rows = collectAscDriverRows();
+    if (!rows.length) return lineResult({ result: 'OK', method: 'no-driver-rows', primaryAction: 'none', spouseAction: 'none', removedDrivers: '', unresolvedDrivers: '', addClickedCount: '0', removeClickedCount: '0', failedFields: '', evidence: 'no-driver-rows' });
+    const leadMarital = normUpper(source.leadMaritalStatus);
+    const selectedSpouseName = safe(source.selectedSpouseName);
+    const expectedNames = parsePersonListArg(source.expectedDriverNames);
+    if (safe(source.primaryName)) expectedNames.unshift(safe(source.primaryName));
+    if (leadMarital === 'MARRIED' && selectedSpouseName) expectedNames.push(selectedSpouseName);
+    const expectedUnique = [];
+    expectedNames.forEach((name) => {
+      if (name && !expectedUnique.some((existing) => personNameMatches(existing, name))) expectedUnique.push(name);
+    });
+    const isExpected = (row) => expectedUnique.some((name) => personNameMatches(row.name || row.text, name));
+    let primaryAction = 'none';
+    let spouseAction = 'none';
+    let removedDrivers = [];
+    let unresolvedDrivers = [];
+    let addClickedCount = 0;
+    let removeClickedCount = 0;
+    for (const row of rows) {
+      if (!isExpected(row)) continue;
+      if (row.added) continue;
+      if (row.addButton) {
+        const clicked = clickCenterEl(row.addButton);
+        addClickedCount = clicked ? 1 : 0;
+        primaryAction = personNameMatches(row.name, source.primaryName) ? (clicked ? 'add-clicked' : 'add-click-failed') : 'none';
+        spouseAction = selectedSpouseName && personNameMatches(row.name, selectedSpouseName) ? (clicked ? 'add-clicked' : 'add-click-failed') : 'none';
+        return lineResult({
+          result: clicked ? 'PARTIAL' : 'FAILED',
+          method: 'expected-driver-add',
+          primaryAction,
+          spouseAction,
+          removedDrivers: '',
+          unresolvedDrivers: compact(row.name, 120),
+          addClickedCount: String(addClickedCount),
+          removeClickedCount: '0',
+          failedFields: clicked ? '' : 'driverAdd',
+          evidence: compact(row.text, 180)
+        });
+      }
+      unresolvedDrivers.push(row.name);
+    }
+    for (const row of rows) {
+      if (isExpected(row)) continue;
+      if (row.removeButton) {
+        const clicked = clickCenterEl(row.removeButton);
+        removeClickedCount = clicked ? 1 : 0;
+        if (clicked) removedDrivers.push(row.name);
+        return lineResult({
+          result: clicked ? 'PARTIAL' : 'FAILED',
+          method: 'unexpected-driver-remove',
+          primaryAction,
+          spouseAction,
+          removedDrivers: removedDrivers.join('||'),
+          unresolvedDrivers: compact(row.name, 120),
+          addClickedCount: '0',
+          removeClickedCount: String(removeClickedCount),
+          failedFields: clicked ? '' : 'driverRemove',
+          evidence: compact(row.text, 180)
+        });
+      }
+      if (!row.added && row.addButton)
+        unresolvedDrivers.push(row.name);
+      if (row.added)
+        unresolvedDrivers.push(row.name);
+    }
+    const result = unresolvedDrivers.length ? 'FAILED' : 'OK';
+    return lineResult({
+      result,
+      method: 'driver-row-reconciliation',
+      primaryAction,
+      spouseAction,
+      removedDrivers: removedDrivers.join('||'),
+      unresolvedDrivers: unresolvedDrivers.join('||'),
+      addClickedCount: '0',
+      removeClickedCount: '0',
+      failedFields: unresolvedDrivers.length ? 'drivers' : '',
+      evidence: compact(rows.map((row) => row.name).join('||'), 240)
+    });
+  };
+  const nonPlaceholderOption = (opt) => opt && !opt.disabled && safe(opt.value) && safe(opt.value) !== 'NewDriver' && !/select one|choose/i.test(safe(opt.text || opt.innerText));
+  const ascResolveParticipantMaritalAndSpouse = (source = {}) => {
+    if (!isAscProductRoute()) {
+      return lineResult({ result: 'ERROR', method: 'wrong-page', selectedMaritalStatus: '', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'ascProductRoute', evidence: '' });
+    }
+    const leadMarital = normUpper(source.leadMaritalStatus);
+    const leadSpouseName = safe(source.leadSpouseName);
+    const maxAgeDiff = Number(source.maxSpouseAgeDifference || 14);
+    const spouseSelect = findAscSpouseSelect();
+    if (leadMarital === 'SINGLE') {
+      const single = setAscMaritalStatus('Single');
+      const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
+      return lineResult({
+        result: single.method === 'already-selected' ? 'SINGLE_CONFIRMED' : (single.ok ? 'SINGLE_SET' : 'FAILED'),
+        method: single.method,
+        selectedMaritalStatus: single.state.text || 'Single',
+        selectedSpouseText: spouseState.text,
+        selectedSpouseValue: spouseState.value,
+        selectedAgeDiff: '',
+        candidateCount: spouseSelect ? String(Math.max(0, (spouseSelect.options || []).length - 1)) : '0',
+        candidates: '',
+        rejectedCandidates: spouseSelect ? 'skipped-lead-single' : '',
+        spouseSelectionMethod: 'skipped-lead-single',
+        failedFields: single.ok ? '' : 'maritalStatus',
+        evidence: 'ASC_PARTICIPANT_LEAD_SINGLE_SPOUSE_SKIPPED'
+      });
+    }
+    if (leadMarital !== 'MARRIED' && !leadSpouseName) {
+      const current = readAscMaritalStatus();
+      return lineResult({
+        result: 'NO_DROPDOWN',
+        method: 'marital-status-not-requested',
+        selectedMaritalStatus: current.text,
+        selectedSpouseText: '',
+        selectedSpouseValue: '',
+        selectedAgeDiff: '',
+        candidateCount: '0',
+        candidates: '',
+        rejectedCandidates: '',
+        spouseSelectionMethod: 'not-requested',
+        failedFields: '',
+        evidence: 'lead-marital-status-missing'
+      });
+    }
+    const married = setAscMaritalStatus('Married');
+    if (!married.ok)
+      return lineResult({ result: 'FAILED', method: married.method, selectedMaritalStatus: married.state.text, selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'maritalStatus', evidence: '' });
+    if (!spouseSelect)
+      return lineResult({ result: 'NO_DROPDOWN', method: 'married-no-spouse-dropdown', selectedMaritalStatus: married.state.text || 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'spouseDropdown', evidence: '' });
+    const driverRows = collectAscDriverRows();
+    const primaryRow = driverRows.find((row) => personNameMatches(row.name, source.primaryName));
+    const primaryAge = Number(source.primaryAge || (primaryRow && primaryRow.age) || (driverRows[0] && driverRows[0].age) || 0);
+    const options = Array.from(spouseSelect.options || [])
+      .filter(nonPlaceholderOption)
+      .map((opt) => {
+        const text = safe(opt.text || opt.innerText);
+        const row = driverRows.find((driver) => personNameMatches(driver.name, text));
+        const age = Number((row && row.age) || parseAgeFromText(text) || parseAgeNearPersonName(text) || 0);
+        return { opt, text, value: safe(opt.value), age, ageDiff: primaryAge && age ? Math.abs(primaryAge - age) : 999 };
+      });
+    let picked = null;
+    let method = '';
+    if (leadSpouseName) {
+      const matches = options.filter((candidate) => personNameMatches(candidate.text, leadSpouseName));
+      if (matches.length === 1) {
+        picked = matches[0];
+        method = 'name-match';
+      } else if (matches.length > 1) {
+        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-name-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(options.map((c) => c.text).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'name-match', failedFields: 'spouse', evidence: '' });
+      }
+    }
+    if (!picked) {
+      const inWindow = options.filter((candidate) => candidate.ageDiff <= maxAgeDiff);
+      if (inWindow.length === 1) {
+        picked = inWindow[0];
+        method = 'age-window';
+      } else if (inWindow.length > 1) {
+        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-age-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(inWindow.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'age-window', failedFields: 'spouse', evidence: '' });
+      }
+    }
+    if (!picked)
+      return lineResult({ result: 'NO_SAFE_SPOUSE', method: 'no-safe-spouse', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(options.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: 'outside-age-window', spouseSelectionMethod: '', failedFields: 'spouse', evidence: '' });
+    const already = safe(spouseSelect.value) === picked.value;
+    const applied = already || setSelectValue(spouseSelect, picked.value, false);
+    const after = readSelectState(spouseSelect);
+    return lineResult({
+      result: applied && safe(spouseSelect.value) === picked.value ? (already ? 'ALREADY_SELECTED' : 'SELECTED') : 'FAILED',
+      method,
+      selectedMaritalStatus: 'Married',
+      selectedSpouseText: after.text,
+      selectedSpouseValue: after.value,
+      selectedAgeDiff: String(picked.ageDiff === 999 ? '' : picked.ageDiff),
+      candidateCount: String(options.length),
+      candidates: compact(options.map((c) => `${c.text}:ageDiff=${c.ageDiff === 999 ? '' : c.ageDiff}`).join('||'), 240),
+      rejectedCandidates: '',
+      spouseSelectionMethod: method,
+      failedFields: applied ? '' : 'spouse',
+      evidence: 'spouse-selected'
+    });
+  };
+  const parseAscPartialVehicles = (source = {}) => {
+    const raw = Array.isArray(source.partialVehicles) ? source.partialVehicles : [];
+    return raw.map((vehicle) => ({
+      year: safe(vehicle && vehicle.year).trim(),
+      make: safe(vehicle && vehicle.make).trim(),
+      model: '',
+      vin: safe(vehicle && vehicle.vin).trim(),
+      vinSuffix: safe(vehicle && vehicle.vinSuffix).trim(),
+      allowedMakeLabels: vehicle && (vehicle.allowedMakeLabels || vehicle.makeAliases || vehicle.advisorMakeLabels) || ''
+    })).filter((vehicle) => vehicle.year && vehicle.make);
+  };
+  const hasVehicleVinEvidenceText = (text) => /\bVIN\b\s*[:#]?\s*[A-Z0-9*]{6,}/i.test(text) || /\b[A-HJ-NPR-Z0-9*]{8,17}\b/i.test(text);
+  const collectAscVehicleRows = () => {
+    const nodes = Array.from(document.querySelectorAll('div,section,article,li,tr,fieldset'))
+      .filter(visible)
+      .filter((node) => {
+        const text = getText(node);
+        if (!/\b(?:19|20)\d{2}\b/.test(text)) return false;
+        if (text.length > 800) return false;
+        if (vehicleTitleCount(text) > 1) return false;
+        return true;
+      });
+    const seen = new Set();
+    const rows = [];
+    for (const node of nodes.sort((a, b) => getText(a).length - getText(b).length)) {
+      const text = getText(node);
+      const key = normLower(text);
+      if (!key || seen.has(key)) continue;
+      if (rows.some((row) => key.includes(normLower(row.text)))) continue;
+      seen.add(key);
+      const buttons = Array.from(node.querySelectorAll('button[id],a[id],[role=button][id],button,a,[role=button]')).filter(visible);
+      const addButton = buttons.find((btn) => /-(addToQuote|add)$/i.test(safe(btn.id)) || answerTextMatches(getText(btn), 'Add')) || null;
+      const removeButton = buttons.find((btn) => /-remove$/i.test(safe(btn.id)) || answerTextMatches(getText(btn), 'Remove')) || null;
+      const editButton = buttons.find((btn) => /-edit$/i.test(safe(btn.id)) || answerTextMatches(getText(btn), 'Edit')) || null;
+      const lowerText = normLower(text);
+      rows.push({
+        row: node,
+        text,
+        addButton,
+        removeButton,
+        editButton,
+        added: lowerText.includes('added to quote') || lowerText.includes('confirmed') || (!!editButton && !addButton),
+        unresolved: !!addButton || !!removeButton,
+        vinEvidence: hasVehicleVinEvidenceText(text)
+      });
+    }
+    return rows;
+  };
+  const vehiclePartialModelText = (rowText, partial) => {
+    const text = normalizeVehicleText(rowText);
+    const labels = parseVehicleListArg(partial.allowedMakeLabels).concat([partial.make]).map(normalizeVehicleText).filter(Boolean);
+    let best = '';
+    for (const label of labels) {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${partial.year}\\b[\\s\\S]*?\\b${escaped}\\b\\s+([A-Z0-9][A-Z0-9\\s-]{0,80})`, 'i');
+      const match = text.match(regex);
+      if (!match) continue;
+      let model = safe(match[1])
+        .replace(/\bVIN\b[\s\S]*$/i, '')
+        .replace(/\b(ADD|REMOVE|EDIT|CONFIRMED|ADDED|TO|QUOTE)\b[\s\S]*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (model) {
+        best = model;
+        break;
+      }
+    }
+    return best;
+  };
+  const ascPartialVehicleMatches = (row, partial) => {
+    const details = scoreVehicleCandidate(row.text, { ...partial, model: '', strictModelMatch: false });
+    const modelText = vehiclePartialModelText(row.text, partial);
+    return {
+      ok: details.yearMatch && details.makeMatch && !!modelText && row.vinEvidence,
+      yearMatch: details.yearMatch,
+      makeMatch: details.makeMatch,
+      modelText,
+      vinEvidence: row.vinEvidence
+    };
+  };
+  const ascVehicleRowsStatus = () => {
+    const rows = collectAscVehicleRows();
+    const added = rows.filter((row) => row.added);
+    const unresolved = rows.filter((row) => row.unresolved && !row.added);
+    const removed = rows.filter((row) => normLower(row.text).includes('removed'));
+    const saveButton = findAscSaveButton();
+    return {
+      result: rows.length ? 'FOUND' : 'NONE',
+      vehicleCount: String(rows.length),
+      unresolvedVehicleCount: String(unresolved.length),
+      addedVehicleCount: String(added.length),
+      removedVehicleCount: String(removed.length),
+      confirmedOrAddedVehicleCount: String(added.length),
+      vehicleSummaries: compact(rows.map((row) => `${compact(row.text, 90)}|added=${row.added ? 1 : 0}|vin=${row.vinEvidence ? 1 : 0}`).join('||'), 420),
+      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      evidence: rows.length ? 'vehicle-rows' : '',
+      missing: rows.length ? '' : 'vehicle-rows'
+    };
+  };
+  const ascReconcileVehicleRows = (source = {}) => {
+    const rows = collectAscVehicleRows();
+    const complete = parseExpectedVehicles(source).filter((vehicle) => vehicle.year && vehicle.make && vehicle.model);
+    const partials = parseAscPartialVehicles(source);
+    const matchedRowIndexes = new Set();
+    const addedVehicles = [];
+    const promotedPartialVehicles = [];
+    const deferredPartialVehicles = [];
+    const missingComplete = [];
+    const rowMatchesComplete = (row, vehicle) => scoreVehicleCandidate(row.text, vehicle).score >= 90;
+    for (const vehicle of complete) {
+      const index = rows.findIndex((row, idx) => !matchedRowIndexes.has(idx) && rowMatchesComplete(row, vehicle));
+      if (index < 0) {
+        missingComplete.push(vehicleLabel(vehicle));
+        continue;
+      }
+      matchedRowIndexes.add(index);
+      const row = rows[index];
+      if (!row.added && row.addButton) {
+        const clicked = clickCenterEl(row.addButton);
+        if (clicked) addedVehicles.push(vehicleLabel(vehicle));
+        return lineResult({
+          result: clicked ? 'PARTIAL' : 'FAILED',
+          method: 'complete-vehicle-add',
+          addedVehicles: addedVehicles.join('||'),
+          removedVehicles: '',
+          promotedPartialVehicles: '',
+          deferredPartialVehicles: '',
+          confirmedVehicleCount: String(rows.filter((candidate) => candidate.added).length),
+          unresolvedVehicles: vehicleLabel(vehicle),
+          failedFields: clicked ? '' : 'vehicleAdd',
+          evidence: compact(row.text, 180)
+        });
+      }
+    }
+    if (missingComplete.length) {
+      return lineResult({
+        result: 'FAILED',
+        method: 'complete-vehicle-missing',
+        addedVehicles: '',
+        removedVehicles: '',
+        promotedPartialVehicles: '',
+        deferredPartialVehicles: '',
+        confirmedVehicleCount: String(rows.filter((candidate) => candidate.added).length),
+        unresolvedVehicles: missingComplete.join('||'),
+        failedFields: 'completeVehicles',
+        evidence: compact(rows.map((row) => row.text).join('||'), 240)
+      });
+    }
+    for (const partial of partials) {
+      const candidates = rows
+        .map((row, index) => ({ row, index, match: ascPartialVehicleMatches(row, partial) }))
+        .filter((candidate) => candidate.match.ok);
+      if (candidates.length === 1) {
+        const candidate = candidates[0];
+        matchedRowIndexes.add(candidate.index);
+        const promotedLabel = `${partial.year} ${partial.make} ${candidate.match.modelText}`;
+        if (!candidate.row.added && candidate.row.addButton) {
+          const clicked = clickCenterEl(candidate.row.addButton);
+          if (clicked) promotedPartialVehicles.push(promotedLabel);
+          return lineResult({
+            result: clicked ? 'PARTIAL' : 'FAILED',
+            method: 'partial-vehicle-unique-vin-add',
+            addedVehicles: '',
+            removedVehicles: '',
+            promotedPartialVehicles: promotedPartialVehicles.join('||'),
+            deferredPartialVehicles: '',
+            confirmedVehicleCount: String(rows.filter((row) => row.added).length),
+            unresolvedVehicles: promotedLabel,
+            failedFields: clicked ? '' : 'partialVehicleAdd',
+            evidence: compact(candidate.row.text, 180)
+          });
+        }
+        promotedPartialVehicles.push(promotedLabel);
+      } else if (candidates.length > 1) {
+        deferredPartialVehicles.push(`${partial.year} ${partial.make}`);
+        return lineResult({
+          result: 'AMBIGUOUS',
+          method: 'partial-vehicle-multiple-candidates',
+          addedVehicles: '',
+          removedVehicles: '',
+          promotedPartialVehicles: '',
+          deferredPartialVehicles: deferredPartialVehicles.join('||'),
+          confirmedVehicleCount: String(rows.filter((row) => row.added).length),
+          unresolvedVehicles: compact(candidates.map((candidate) => candidate.row.text).join('||'), 240),
+          failedFields: 'partialVehicles',
+          evidence: ''
+        });
+      } else {
+        deferredPartialVehicles.push(`${partial.year} ${partial.make}`);
+      }
+    }
+    const unrelated = rows.find((row, index) => !matchedRowIndexes.has(index) && !row.added && row.removeButton);
+    if (unrelated) {
+      const clicked = clickCenterEl(unrelated.removeButton);
+      return lineResult({
+        result: clicked ? 'PARTIAL' : 'FAILED',
+        method: 'unrelated-vehicle-remove',
+        addedVehicles: '',
+        removedVehicles: clicked ? compact(unrelated.text, 120) : '',
+        promotedPartialVehicles: promotedPartialVehicles.join('||'),
+        deferredPartialVehicles: deferredPartialVehicles.join('||'),
+        confirmedVehicleCount: String(rows.filter((row) => row.added).length),
+        unresolvedVehicles: compact(unrelated.text, 120),
+        failedFields: clicked ? '' : 'vehicleRemove',
+        evidence: compact(unrelated.text, 180)
+      });
+    }
+    const satisfiedCount = rows.filter((row, index) => matchedRowIndexes.has(index) && row.added).length + promotedPartialVehicles.length;
+    return lineResult({
+      result: deferredPartialVehicles.length ? 'PARTIAL' : 'OK',
+      method: 'vehicle-row-reconciliation',
+      addedVehicles: '',
+      removedVehicles: '',
+      promotedPartialVehicles: promotedPartialVehicles.join('||'),
+      deferredPartialVehicles: deferredPartialVehicles.join('||'),
+      confirmedVehicleCount: String(Math.max(satisfiedCount, rows.filter((row) => row.added).length)),
+      unresolvedVehicles: deferredPartialVehicles.join('||'),
+      failedFields: '',
+      evidence: compact(rows.map((row) => row.text).join('||'), 240)
     });
   };
   /* @include matchers/vehicle.js#summarize */
@@ -2083,12 +2757,21 @@ copy(String((() => {
   const readVehicleRow = (index) => {
     const vehicleType = vehicleField(index, 'VehTypeCd');
     const year = vehicleField(index, 'ModelYear');
+    const vin = vehicleField(index, 'VehIdentificationNumber');
     const manufacturer = vehicleField(index, 'Manufacturer');
     const model = vehicleField(index, 'Model');
     const subModel = vehicleField(index, 'SubModel');
-    return { vehicleType, year, manufacturer, model, subModel };
+    return { vehicleType, year, vin, manufacturer, model, subModel };
   };
   const vehicleFieldValue = (el) => safe(el && el.value).trim();
+  const vehicleFieldTextValue = (el) => {
+    const value = vehicleFieldValue(el);
+    if (el && el.tagName === 'SELECT') {
+      const selected = Array.from(el.options || []).find((opt) => opt.selected) || (el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null);
+      return [value, vehicleOptionText(selected)].filter(Boolean).join(' ').trim();
+    }
+    return value;
+  };
   const vehicleFieldReady = (el) => !!(el && visible(el) && !isDisabledLike(el) && !el.readOnly);
   const vehicleRowComplete = (row) => !!(
     vehicleFieldValue(row.year)
@@ -2124,6 +2807,261 @@ copy(String((() => {
     .slice(0, max)
     .map((opt) => compact(vehicleOptionText(opt), 40))
     .join('|');
+  const vehicleRowMatchesExpectedContext = (row, match) => {
+    if (!row || !match) return false;
+    const rowYear = normalizeDigits(vehicleFieldValue(row.year));
+    if (match.year && rowYear && rowYear !== normalizeDigits(match.year)) return false;
+    const rowMake = normalizeVehicleText(vehicleFieldTextValue(row.manufacturer));
+    if (match.make && rowMake && !vehicleMakeMatches(rowMake, match)) return false;
+    const rowModel = vehicleFieldTextValue(row.model);
+    if (rowModel && !/select one/i.test(rowModel) && match.model) {
+      const modelMatches = match.strictModelMatch
+        ? vehicleStrictModelMatches(normalizeVehicleText(rowModel), match.model)
+        : normalizeVehicleText(rowModel).includes(match.model);
+      if (!modelMatches) return false;
+    }
+    return true;
+  };
+  const vehicleRowDetails = (row) => {
+    if (!row) return '';
+    return compact([
+      `year=${vehicleFieldValue(row.year)}`,
+      `vin=${vehicleFieldValue(row.vin)}`,
+      `make=${vehicleFieldValue(row.manufacturer)}`,
+      `model=${vehicleFieldValue(row.model)}`,
+      `subModel=${vehicleFieldValue(row.subModel)}`
+    ].join(','), 160);
+  };
+  const vehicleRowControls = (row) => row ? [row.vehicleType, row.year, row.vin, row.manufacturer, row.model, row.subModel].filter(Boolean) : [];
+  const findVehicleRowContainer = (row) => {
+    const controls = vehicleRowControls(row);
+    const seed = row && (row.year || row.vehicleType || row.manufacturer || row.model || row.subModel || row.vin);
+    if (!seed) return null;
+    let fallback = null;
+    for (let depth = 0, current = seed.parentElement; depth < 8 && current; depth++, current = current.parentElement) {
+      if (!visible(current)) continue;
+      if (!controls.every((control) => current.contains(control))) continue;
+      const text = normLower(getText(current));
+      const actions = Array.from(current.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')).filter(visible);
+      const hasCancel = actions.some((action) => answerTextMatches([getText(action), safe(action.value)].join(' '), 'Cancel'));
+      const hasAdd = actions.some((action) => answerTextMatches([getText(action), safe(action.value)].join(' '), 'Add'));
+      const looksLikeAddRow = text.includes('add car or truck') || text.includes('vehicle type') || hasAdd || controls.length >= 4;
+      const broadVehicleSection = text.includes('confirmed vehicles') || text.includes('potential vehicles') || text.includes('start quoting');
+      if (looksLikeAddRow && !broadVehicleSection) {
+        if (hasCancel) return current;
+        if (!fallback) fallback = current;
+      }
+    }
+    return fallback;
+  };
+  const rowScopedButton = (container, wantedText) => {
+    const wanted = safe(wantedText);
+    const buttons = Array.from((container && container.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')) || [])
+      .filter((button) => visible(button) && !isDisabledLike(button))
+      .filter((button) => answerTextMatches([getText(button), safe(button.value), safe(button.getAttribute('aria-label'))].join(' '), wanted));
+    return buttons.length === 1 ? buttons[0] : null;
+  };
+  const gatherVehicleAddRowState = (source = {}, matchArgs = {}) => {
+    const rowIndexArg = safe(source.index).trim();
+    const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
+    const indexes = vehicleRowIndexes();
+    const hasAnyRow = indexes.length > 0;
+    const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
+    const rowOpen = !!(row && (row.year || row.vin || row.manufacturer || row.model || row.subModel));
+    const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
+    const rowIncomplete = rowOpen && !rowComplete;
+    const rowGone = !rowOpen && !hasAnyRow;
+    const rowMatchesExpectedContext = rowIncomplete && vehicleRowMatchesExpectedContext(row, matchArgs);
+    return { rowIndex, row, hasAnyRow, rowOpen, rowComplete, rowIncomplete, rowGone, rowMatchesExpectedContext };
+  };
+  const findStaleAddVehicleRow = (source = {}) => {
+    const allExpectedSatisfied = safe(source.allExpectedVehiclesSatisfied) === '1' || source.allExpectedVehiclesSatisfied === true;
+    const indexes = vehicleRowIndexes();
+    const candidates = [];
+    for (const idx of indexes) {
+      const row = readVehicleRow(idx);
+      if (!vehicleRowControls(row).some((control) => control && visible(control))) continue;
+      const state = gatherVehicleAddRowState({ index: String(idx) }, {});
+      if (!state.rowOpen) continue;
+      const container = findVehicleRowContainer(row);
+      const rowText = compact(getText(container), 220);
+      const lowerText = normLower(rowText);
+      const cancelButton = rowScopedButton(container, 'Cancel');
+      const addButton = rowScopedButton(container, 'Add');
+      const vinValue = vehicleFieldValue(row.vin);
+      const modelValue = vehicleFieldValue(row.model);
+      const subModelValue = vehicleFieldValue(row.subModel);
+      const unsafeContext = lowerText.includes('confirmed vehicles')
+        || lowerText.includes('potential vehicles')
+        || lowerText.includes('edit remove confirmed')
+        || lowerText.includes('confirm remove');
+      const rowIncomplete = state.rowIncomplete;
+      const meaningfulVin = normalizeVehicleVin(vinValue).length >= 6;
+      let reason = 'safe';
+      if (!allExpectedSatisfied) reason = 'expected-vehicles-not-satisfied';
+      else if (!rowIncomplete) reason = 'row-not-incomplete';
+      else if (!container) reason = 'row-container-not-found';
+      else if (unsafeContext) reason = 'unsafe-vehicle-section-context';
+      else if (meaningfulVin) reason = 'vin-present';
+      else if (!cancelButton) reason = 'cancel-button-not-scoped';
+      const safeToCancel = reason === 'safe';
+      candidates.push({
+        rowIndex: idx,
+        row,
+        state,
+        container,
+        rowText,
+        cancelButton,
+        addButton,
+        rowIncomplete,
+        meaningfulVin,
+        unsafeContext,
+        safeToCancel,
+        reason,
+        yearValue: vehicleFieldValue(row.year),
+        vinValue,
+        manufacturerValue: vehicleFieldValue(row.manufacturer),
+        modelValue,
+        subModelValue,
+        rowTitle: lowerText.includes('add car or truck') ? 'Add Car or Truck' : ''
+      });
+    }
+    const incomplete = candidates.filter((candidate) => candidate.rowIncomplete);
+    const safeCandidate = incomplete.find((candidate) => candidate.safeToCancel);
+    return safeCandidate || incomplete[0] || null;
+  };
+  const staleAddVehicleRowStatus = (source = {}) => {
+    try {
+      const candidate = findStaleAddVehicleRow(source);
+      if (!candidate) {
+        return {
+          result: 'NONE',
+          rowIndex: '',
+          rowTitle: '',
+          rowIncomplete: '0',
+          yearValue: '',
+          vinValue: '',
+          manufacturerValue: '',
+          modelValue: '',
+          subModelValue: '',
+          addButtonPresent: '0',
+          cancelButtonPresent: '0',
+          cancelButtonScoped: '0',
+          safeToCancel: '0',
+          reason: 'no-stale-row',
+          evidence: '',
+          missing: 'staleAddVehicleRow'
+        };
+      }
+      return {
+        result: candidate.safeToCancel ? 'FOUND' : 'UNSAFE',
+        rowIndex: String(candidate.rowIndex),
+        rowTitle: candidate.rowTitle,
+        rowIncomplete: candidate.rowIncomplete ? '1' : '0',
+        yearValue: candidate.yearValue,
+        vinValue: candidate.vinValue,
+        manufacturerValue: candidate.manufacturerValue,
+        modelValue: candidate.modelValue,
+        subModelValue: candidate.subModelValue,
+        addButtonPresent: candidate.addButton ? '1' : '0',
+        cancelButtonPresent: candidate.cancelButton ? '1' : '0',
+        cancelButtonScoped: candidate.cancelButton ? '1' : '0',
+        safeToCancel: candidate.safeToCancel ? '1' : '0',
+        reason: candidate.reason,
+        evidence: compact(candidate.rowText, 180),
+        missing: candidate.safeToCancel ? '' : candidate.reason
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        rowIndex: '',
+        rowTitle: '',
+        rowIncomplete: '0',
+        yearValue: '',
+        vinValue: '',
+        manufacturerValue: '',
+        modelValue: '',
+        subModelValue: '',
+        addButtonPresent: '0',
+        cancelButtonPresent: '0',
+        cancelButtonScoped: '0',
+        safeToCancel: '0',
+        reason: 'error',
+        evidence: '',
+        missing: compact(err && err.message, 160)
+      };
+    }
+  };
+  const cancelStaleAddVehicleRow = (source = {}) => {
+    try {
+      const before = findStaleAddVehicleRow(source);
+      if (!before) {
+        return linesOut({
+          result: 'NO_STALE_ROW',
+          rowIndex: '',
+          clicked: '0',
+          cancelButtonText: '',
+          cancelButtonClass: '',
+          beforeRowText: '',
+          afterRowPresent: '0',
+          failedFields: '',
+          evidence: 'no-stale-row'
+        });
+      }
+      if (!before.safeToCancel || !before.cancelButton) {
+        return linesOut({
+          result: 'UNSAFE',
+          rowIndex: String(before.rowIndex),
+          clicked: '0',
+          cancelButtonText: before.cancelButton ? compact(getText(before.cancelButton), 80) : '',
+          cancelButtonClass: before.cancelButton ? safe(before.cancelButton.className) : '',
+          beforeRowText: compact(before.rowText, 180),
+          afterRowPresent: '1',
+          failedFields: before.reason,
+          evidence: before.reason
+        });
+      }
+      const clicked = clickCenterEl(before.cancelButton);
+      if (!clicked) {
+        return linesOut({
+          result: 'CLICK_FAILED',
+          rowIndex: String(before.rowIndex),
+          clicked: '0',
+          cancelButtonText: compact(getText(before.cancelButton), 80),
+          cancelButtonClass: safe(before.cancelButton.className),
+          beforeRowText: compact(before.rowText, 180),
+          afterRowPresent: '1',
+          failedFields: 'cancelButton',
+          evidence: 'cancel-click-failed'
+        });
+      }
+      const after = findStaleAddVehicleRow(source);
+      const afterRowPresent = !!(after && after.rowIndex === before.rowIndex && after.state && after.state.rowOpen);
+      return linesOut({
+        result: afterRowPresent ? 'VERIFY_FAILED' : 'CANCELLED',
+        rowIndex: String(before.rowIndex),
+        clicked: '1',
+        cancelButtonText: compact(getText(before.cancelButton), 80),
+        cancelButtonClass: safe(before.cancelButton.className),
+        beforeRowText: compact(before.rowText, 180),
+        afterRowPresent: afterRowPresent ? '1' : '0',
+        failedFields: afterRowPresent ? 'staleRowStillPresent' : '',
+        evidence: afterRowPresent ? 'row-still-present-after-cancel' : 'row-closed'
+      });
+    } catch (err) {
+      return linesOut({
+        result: 'ERROR',
+        rowIndex: '',
+        clicked: '0',
+        cancelButtonText: '',
+        cancelButtonClass: '',
+        beforeRowText: '',
+        afterRowPresent: '1',
+        failedFields: 'exception',
+        evidence: compact(err && err.message, 160)
+      });
+    }
+  };
   const vehicleAliasValues = (wantedText) => {
     const wanted = normUpper(wantedText);
     const groups = [
@@ -2429,9 +3367,15 @@ copy(String((() => {
   };
   const gatherVehicleAddStatus = (source = {}) => {
     const matchArgs = getVehicleMatchArgs(source);
+    const partialYearMakeMode = safe(source.partialYearMakeMode) === '1' || source.partialYearMakeMode === true;
     const year = normUpper(source.year);
-    const candidates = findVehicleMatchCandidates(source);
-    const candidateTexts = candidates.slice(0, 5).map((candidate) => compact(candidate.cardText, 120));
+    const rowState = gatherVehicleAddRowState(source, matchArgs);
+    const addButton = findGatherAddVehicleButton();
+    const text = bodyText();
+    const warningStillPresent = includesText(text, 'confirm or add at least 1 car or truck') || includesText(text, 'auto originally asked for');
+    const alerts = collectVisibleAlerts();
+    const alertText = lower(alerts.join(' || '));
+    const failedAlert = /incomplete|required|invalid|error/.test(alertText);
     const isConfirmedVehicleCandidate = (candidate) => {
       if (!candidate || !candidate.details || !candidate.details.yearMatch || !candidate.details.makeMatch || !candidate.details.modelMatch)
         return false;
@@ -2443,7 +3387,113 @@ copy(String((() => {
       const actionEvidence = cardText.includes('edit') || cardText.includes('remove');
       return sectionEvidence || actionEvidence;
     };
-    const confirmed = candidates.find(isConfirmedVehicleCandidate) || null;
+    const partialConfirmedDetails = (candidate) => {
+      const cardText = normalizeVehicleText(candidate.cardText);
+      const rawText = candidate.cardText;
+      const yearMatch = !!matchArgs.year && new RegExp(`(^|\\s)${matchArgs.year}(\\s|$)`).test(cardText);
+      const makeMatch = vehicleMakeMatches(cardText, matchArgs);
+      const confirmedStatusMatched = normLower(rawText).includes('confirmed');
+      const lowerText = normLower(rawText);
+      const sectionEvidence = lowerText.includes('cars and trucks') || lowerText.includes('confirmed vehicles');
+      const actionEvidence = lowerText.includes('edit') || lowerText.includes('remove');
+      const contextMatched = confirmedStatusMatched
+        && !lowerText.includes('potential vehicles')
+        && !lowerText.includes('unknown vehicles')
+        && (sectionEvidence || actionEvidence);
+      const promotedModel = partialVehicleModelTextFromCard(rawText, matchArgs);
+      const vinEvidenceText = vehicleVinEvidenceText(rawText);
+      return {
+        yearMatch,
+        makeMatch,
+        confirmedStatusMatched,
+        contextMatched,
+        modelMatch: !!promotedModel,
+        promotedModel,
+        vinEvidenceText,
+        vinEvidence: !!vinEvidenceText
+      };
+    };
+    if (partialYearMakeMode) {
+      const partialCandidates = confirmedVehicleCandidates()
+        .map((candidate) => ({ ...candidate, details: partialConfirmedDetails(candidate) }))
+        .filter((candidate) => candidate.details.yearMatch && candidate.details.makeMatch && candidate.details.contextMatched)
+        .sort((a, b) => a.cardText.length - b.cardText.length);
+      const candidateTexts = partialCandidates
+        .map((candidate) => compact(candidate.cardText, 120))
+        .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
+        .slice(0, 5);
+      const candidate = partialCandidates.length === 1 ? partialCandidates[0] : null;
+      const duplicateAddRowOpenForConfirmedVehicle = !!(candidate && rowState.rowIncomplete && rowState.rowMatchesExpectedContext);
+      let result = 'MISSING';
+      let method = 'partial-confirmed-card-none';
+      let failedFields = '';
+      let matchedText = '';
+      let promotedModel = '';
+      let vinEvidenceText = '';
+      let partialPromoted = false;
+      if (partialCandidates.length > 1) {
+        result = 'AMBIGUOUS';
+        method = 'partial-confirmed-card-ambiguous';
+        failedFields = 'partialVehicleAmbiguous';
+      } else if (candidate) {
+        matchedText = compact(candidate.cardText, 180);
+        promotedModel = candidate.details.promotedModel;
+        vinEvidenceText = candidate.details.vinEvidenceText;
+        if (!promotedModel) {
+          method = 'partial-confirmed-card-model-missing';
+          failedFields = 'partialVehicleModelMissing';
+        } else if (!vinEvidenceText) {
+          method = 'partial-confirmed-card-no-vin';
+          failedFields = 'partialVehicleNoVin';
+        } else {
+          result = 'ADDED';
+          method = 'partial-confirmed-card';
+          partialPromoted = true;
+        }
+      }
+      return linesOut({
+        result,
+        vehicleMatched: partialPromoted ? '1' : '0',
+        confirmedVehicleMatched: partialPromoted ? '1' : '0',
+        confirmedStatusMatched: candidate && candidate.details.confirmedStatusMatched ? '1' : '0',
+        yearMatched: candidate && candidate.details.yearMatch ? '1' : '0',
+        makeMatched: candidate && candidate.details.makeMatch ? '1' : '0',
+        modelMatched: partialPromoted ? '1' : '0',
+        vinMatched: '0',
+        vinEvidence: vinEvidenceText ? '1' : '0',
+        partialPromoted: partialPromoted ? '1' : '0',
+        promotedModel,
+        promotedVehicleText: matchedText,
+        promotedVinEvidence: vinEvidenceText ? '1' : '0',
+        promotionSource: partialPromoted ? 'confirmed-card' : '',
+        rowOpen: rowState.rowOpen ? '1' : '0',
+        rowIndex: rowState.rowIndex >= 0 ? String(rowState.rowIndex) : '',
+        rowComplete: rowState.rowComplete ? '1' : '0',
+        rowIncomplete: rowState.rowIncomplete ? '1' : '0',
+        duplicateAddRowOpenForConfirmedVehicle: duplicateAddRowOpenForConfirmedVehicle ? '1' : '0',
+        duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(rowState.row) : '',
+        rowGone: rowState.rowGone ? '1' : '0',
+        addButtonPresent: addButton ? '1' : '0',
+        warningStillPresent: warningStillPresent ? '1' : '0',
+        expectedModelKey: '',
+        matchedText,
+        candidateTexts: candidateTexts.join(' || '),
+        candidateCount: String(partialCandidates.length),
+        failedFields,
+        alerts: alerts.join(' || '),
+        method
+      });
+    }
+    const candidates = findVehicleMatchCandidates(source);
+    const confirmedCandidates = confirmedVehicleCandidates()
+      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }))
+      .filter((candidate) => candidate.details.score >= candidate.details.threshold)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const candidateTexts = confirmedCandidates.concat(candidates)
+      .map((candidate) => compact(candidate.cardText, 120))
+      .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
+      .slice(0, 5);
+    const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate) || candidates.find(isConfirmedVehicleCandidate) || null;
     const matched = confirmed || candidates[0] || null;
     const matchedText = matched ? compact(matched.cardText, 180) : '';
     const matchedNorm = normUpper(matchedText);
@@ -2454,21 +3504,7 @@ copy(String((() => {
     const vehicleMatched = !!matched && yearMatched && makeMatched && modelMatched;
     const confirmedVehicleMatched = !!confirmed;
     const confirmedStatusMatched = !!confirmed && normLower(confirmed.cardText).includes('confirmed');
-    const rowIndexArg = safe(source.index).trim();
-    const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
-    const indexes = vehicleRowIndexes();
-    const hasAnyRow = indexes.length > 0;
-    const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
-    const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
-    const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
-    const rowIncomplete = rowOpen && !rowComplete;
-    const rowGone = !rowOpen && !hasAnyRow;
-    const addButton = findGatherAddVehicleButton();
-    const text = bodyText();
-    const warningStillPresent = includesText(text, 'confirm or add at least 1 car or truck') || includesText(text, 'auto originally asked for');
-    const alerts = collectVisibleAlerts();
-    const alertText = lower(alerts.join(' || '));
-    const failedAlert = /incomplete|required|invalid|error/.test(alertText);
+    const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowState.rowIncomplete && rowState.rowMatchesExpectedContext;
     let result = 'MISSING';
     let method = 'no-vehicle-evidence';
     if (confirmedVehicleMatched) {
@@ -2480,16 +3516,16 @@ copy(String((() => {
     } else if (vehicleMatched) {
       result = 'IN_PROGRESS';
       method = 'vehicle-text-unconfirmed';
-    } else if (rowComplete) {
+    } else if (rowState.rowComplete) {
       result = 'READY_ROW';
       method = 'row-complete';
     } else if (failedAlert) {
       result = 'FAILED';
       method = 'validation-alert';
-    } else if (rowIncomplete || (rowGone && warningStillPresent)) {
+    } else if (rowState.rowIncomplete || (rowState.rowGone && warningStillPresent)) {
       result = 'IN_PROGRESS';
-      method = rowIncomplete ? 'row-incomplete' : 'row-gone-warning-present';
-    } else if (rowGone && !warningStillPresent) {
+      method = rowState.rowIncomplete ? 'row-incomplete' : 'row-gone-warning-present';
+    } else if (rowState.rowGone && !warningStillPresent) {
       result = 'IN_PROGRESS';
       method = 'row-gone-no-vehicle-text';
     }
@@ -2502,15 +3538,26 @@ copy(String((() => {
       makeMatched: makeMatched ? '1' : '0',
       modelMatched: modelMatched ? '1' : '0',
       vinMatched: (matchArgs.vin || matchArgs.vinSuffix) && vinMatched ? '1' : '0',
-      rowOpen: rowOpen ? '1' : '0',
-      rowIndex: rowIndex >= 0 ? String(rowIndex) : '',
-      rowComplete: rowComplete ? '1' : '0',
-      rowIncomplete: rowIncomplete ? '1' : '0',
-      rowGone: rowGone ? '1' : '0',
+      vinEvidence: matchedText && vehicleVinEvidenceText(matchedText) ? '1' : '0',
+      partialPromoted: '0',
+      promotedModel: '',
+      promotedVehicleText: '',
+      promotedVinEvidence: '0',
+      promotionSource: '',
+      rowOpen: rowState.rowOpen ? '1' : '0',
+      rowIndex: rowState.rowIndex >= 0 ? String(rowState.rowIndex) : '',
+      rowComplete: rowState.rowComplete ? '1' : '0',
+      rowIncomplete: rowState.rowIncomplete ? '1' : '0',
+      duplicateAddRowOpenForConfirmedVehicle: duplicateAddRowOpenForConfirmedVehicle ? '1' : '0',
+      duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(rowState.row) : '',
+      rowGone: rowState.rowGone ? '1' : '0',
       addButtonPresent: addButton ? '1' : '0',
       warningStillPresent: warningStillPresent ? '1' : '0',
+      expectedModelKey: normalizeVehicleModelKey(source.model),
       matchedText,
       candidateTexts: candidateTexts.join(' || '),
+      candidateCount: String(candidateTexts.length),
+      failedFields: '',
       alerts: alerts.join(' || '),
       method
     });
@@ -3444,6 +4491,14 @@ copy(String((() => {
       return gatherVehicleAddStatus(args);
     }
 
+    case 'gather_stale_add_vehicle_row_status': {
+      return linesOut(staleAddVehicleRowStatus(args));
+    }
+
+    case 'cancel_stale_add_vehicle_row': {
+      return cancelStaleAddVehicleRow(args);
+    }
+
     case 'gather_vehicle_edit_status': {
       return linesOut(readVehicleEditStatusFields());
     }
@@ -3454,6 +4509,30 @@ copy(String((() => {
 
     case 'gather_confirmed_vehicles_status': {
       return gatherConfirmedVehiclesStatus(args);
+    }
+
+    case 'asc_participant_detail_status': {
+      return linesOut(ascParticipantDetailStatus(args));
+    }
+
+    case 'asc_resolve_participant_marital_and_spouse': {
+      return ascResolveParticipantMaritalAndSpouse(args);
+    }
+
+    case 'asc_driver_rows_status': {
+      return linesOut(ascDriverRowsStatus(args));
+    }
+
+    case 'asc_reconcile_driver_rows': {
+      return ascReconcileDriverRows(args);
+    }
+
+    case 'asc_vehicle_rows_status': {
+      return linesOut(ascVehicleRowsStatus(args));
+    }
+
+    case 'asc_reconcile_vehicle_rows': {
+      return ascReconcileVehicleRows(args);
     }
 
     case 'gather_start_quoting_status': {
@@ -3764,10 +4843,13 @@ copy(String((() => {
 
       const spouseSelect = document.getElementById(safe(args.spouseSelectId));
       const marriedRadio = document.getElementById('maritalStatusEntCd_0001');
+      const leadMaritalStatus = normUpper(args.leadMaritalStatus);
       let spouseSelection = { applied: 'SKIP', method: 'not-needed' };
       if (spouseSelect && marriedRadio) {
         const valid = Array.from(spouseSelect.options || []).map((o) => safe(o.value)).filter((v) => v && v !== 'NewDriver');
-        if (valid.length === 1) {
+        if (leadMaritalStatus === 'SINGLE') {
+          spouseSelection = { applied: 'SKIP', method: 'skipped-lead-single' };
+        } else if (valid.length === 1) {
           const marriedTarget = getInputClickTarget(marriedRadio) || marriedRadio;
           const marriedApplied = clickCenterEl(marriedTarget) && (marriedRadio.checked || isSelectedNode(marriedRadio) || isSelectedNode(marriedTarget));
           const spouseApplied = marriedApplied && setSelectValue(spouseSelect, valid[0], false) && safe(spouseSelect.value) === safe(valid[0]);

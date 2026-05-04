@@ -51,6 +51,36 @@ infinitiQx56Vehicle := AdvisorNormalizeVehicleDescriptor("2012 INFINITI QX56")
 AssertEqual(infinitiQx56Vehicle["make"], "INFINITI", "Infiniti QX56 make should still normalize")
 AssertEqual(infinitiQx56Vehicle["model"], "QX56", "Infiniti QX56 model should still normalize")
 
+hondaCrvVehicle := AdvisorNormalizeVehicleDescriptor("2019 Honda CR-V")
+AssertEqual(hondaCrvVehicle["make"], "HONDA", "Honda CR-V make should normalize")
+AssertEqual(hondaCrvVehicle["model"], "CRV", "Honda CR-V should normalize to CRV for strict model matching")
+
+hondaHrvVehicle := AdvisorNormalizeVehicleDescriptor("2019 Honda HR V")
+AssertEqual(hondaHrvVehicle["make"], "HONDA", "Honda HR V make should normalize")
+AssertEqual(hondaHrvVehicle["model"], "HRV", "Honda HR V should normalize to HRV for strict model matching")
+
+hyundaiSonataVehicle := AdvisorNormalizeVehicleDescriptor("2013 Hyundai Sonata")
+AssertEqual(hyundaiSonataVehicle["make"], "HYUNDAI", "Hyundai Sonata make should normalize")
+AssertEqual(hyundaiSonataVehicle["model"], "SONATA", "Hyundai Sonata model should normalize")
+
+nissanPartialVehicle := AdvisorNormalizeVehicleDescriptor("2010 Nissan")
+AssertEqual(nissanPartialVehicle["year"], "2010", "Year/make-only Nissan should preserve year")
+AssertEqual(nissanPartialVehicle["make"], "NISSAN", "Year/make-only Nissan should preserve make")
+AssertEqual(nissanPartialVehicle["model"], "", "Year/make-only Nissan should remain partial with no model")
+AssertEqual(nissanPartialVehicle["displayKey"], "2010|NISSAN", "Year/make-only Nissan should keep a partial display key")
+
+nissanPartialWithFollowingLabels := AdvisorNormalizeVehicleDescriptor("2010 Nissan Driver 1 Name-Age:: Driver 2 Name-Age:: Calidad: A+ Idioma: Spanish")
+AssertEqual(nissanPartialWithFollowingLabels["year"], "2010", "Year/make-only Nissan with following lead labels should preserve year")
+AssertEqual(nissanPartialWithFollowingLabels["make"], "NISSAN", "Year/make-only Nissan with following lead labels should preserve make")
+AssertEqual(nissanPartialWithFollowingLabels["model"], "", "Following lead labels should not become Nissan model text")
+AssertEqual(nissanPartialWithFollowingLabels["displayKey"], "2010|NISSAN", "Following lead labels should preserve partial display key")
+
+nissanPartialWithNote := AdvisorNormalizeVehicleDescriptor("2010 Nissan Note: informational coverage text")
+AssertEqual(nissanPartialWithNote["year"], "2010", "Year/make-only Nissan before Note label should preserve year")
+AssertEqual(nissanPartialWithNote["make"], "NISSAN", "Year/make-only Nissan before Note label should preserve make")
+AssertEqual(nissanPartialWithNote["model"], "", "Note label should not become Nissan model text")
+AssertEqual(nissanPartialWithNote["displayKey"], "2010|NISSAN", "Note label should preserve partial display key")
+
 joseSample :=
 (
 "Name:
@@ -171,6 +201,50 @@ AssertTrue(LabelListContains(AdvisorVehicleAllowedMakeLabelsText("Dodge", "Grand
 AssertFalse(AdvisorVehicleCatalogModelMatches("Prius", "Prius Prime"), "Prius must not match Prius Prime")
 AssertTrue(AdvisorVehicleCatalogModelMatches("F-150", "F150"), "F-150 variants should normalize")
 AssertFalse(AdvisorVehicleCatalogModelMatches("F-150", "F-250"), "F150 must not match F250")
+AssertTrue(AdvisorVehicleCatalogModelMatches("CR-V", "CRV"), "CR-V variants should normalize")
+AssertTrue(AdvisorVehicleCatalogModelMatches("HR V", "HR-V"), "HR-V variants should normalize")
+AssertFalse(AdvisorVehicleCatalogModelMatches("CR-V", "HR-V"), "CR-V must not match HR-V")
+
+ascRouteDb := Map("urls", Map("ascProductContains", "/ASCPRODUCT/"))
+ascWaitArgs := AdvisorQuoteAscWaitArgs(ascRouteDb)
+AssertEqual(ascWaitArgs["ascProductContains"], "/ASCPRODUCT/", "ASC wait args should include ASCPRODUCT route family")
+ascWaitArgsWithConsent := AdvisorQuoteAscWaitArgs(ascRouteDb, Map("consumerReportsConsentYesId", "orderReportsConsent-yes-btn"))
+AssertEqual(ascWaitArgsWithConsent["ascProductContains"], "/ASCPRODUCT/", "ASC wait args with extras should preserve route family")
+AssertEqual(ascWaitArgsWithConsent["consumerReportsConsentYesId"], "orderReportsConsent-yes-btn", "ASC wait args should carry consent selector extras")
+AssertEqual(AdvisorQuoteAscProductRouteIdText("109"), "ASCPRODUCT/109", "ASC route id log text should avoid fixed route assumptions")
+
+ascVehiclePolicy := AdvisorQuoteClassifyAscVehicles(Map("vehicles", [
+    TestVehicle("2019", "HONDA", "CRV"),
+    TestVehicle("2013", "HYUNDAI", "SONATA"),
+    TestVehicle("2010", "NISSAN", "")
+]))
+AssertEqual(ascVehiclePolicy["completeVehicles"].Length, 2, "ASC policy should keep year/make/model vehicles complete")
+AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"].Length, 1, "ASC policy should classify year/make-only vehicle as partial")
+AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "ASC partial should preserve year/make identity")
+
+gatherPartialPolicy := AdvisorQuoteClassifyGatherVehicles(Map("vehicles", [
+    TestVehicle("2019", "HONDA", "CRV"),
+    TestVehicle("2013", "HYUNDAI", "SONATA"),
+    TestVehicle("2010", "NISSAN", "")
+]))
+AssertEqual(gatherPartialPolicy["actionableVehicles"].Length, 2, "Gather policy should keep complete vehicles actionable")
+AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"].Length, 1, "Gather policy should keep year/make-only vehicles in partial preflight")
+AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "Gather partial should preserve year/make identity")
+
+gatherRawRecoveryProfile := Map(
+    "raw", "PERSONAL LEAD - Test Lead One 04/22/2026 10:00:00 AM 123 Example St Example City FL 32001 (555) 010-0001 test.lead.one@example.com Jan 1985 Male 2019 Honda CR-V 2013 Hyundai Sonata 2010 Nissan Note: synthetic coverage note Driver 1 Name-Age::",
+    "vehicles", [
+        TestVehicle("2019", "HONDA", "CRV"),
+        TestVehicle("2013", "HYUNDAI", "SONATA")
+    ]
+)
+gatherRawRecoveryPolicy := AdvisorQuoteClassifyGatherVehicles(gatherRawRecoveryProfile)
+AssertEqual(gatherRawRecoveryPolicy["actionableVehicles"].Length, 2, "Gather policy should keep profile complete vehicles actionable during raw recovery")
+AssertEqual(gatherRawRecoveryPolicy["partialYearMakeVehicles"].Length, 1, "Gather policy should recover omitted year/make-only vehicle from raw lead text")
+AssertEqual(gatherRawRecoveryPolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "Recovered raw partial should preserve year/make identity")
+
+singleLeadProfile := Map("raw", "Marital Status: Single", "person", Map("fullName", "Test Single Lead"))
+AssertEqual(AdvisorQuoteLeadMaritalStatus(singleLeadProfile), "Single", "Lead marital status parser should preserve Single truth")
 
 missingOnlyPolicy := AdvisorQuoteClassifyGatherVehicles(Map("vehicles", [
     TestVehicle("", "TOYOTA", "PRIUS PRIME")
@@ -206,6 +280,44 @@ partialVehicleStatus := Map(
 )
 AssertFalse(AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(partialVehicleStatus), "Confirmed-card status must still match exact model")
 
+partialPromotedStatus := Map(
+    "result", "ADDED",
+    "partialPromoted", "1",
+    "confirmedVehicleMatched", "1",
+    "confirmedStatusMatched", "1",
+    "yearMatched", "1",
+    "makeMatched", "1",
+    "modelMatched", "1",
+    "promotedModel", "CUBE",
+    "promotedVinEvidence", "1",
+    "promotionSource", "confirmed-card",
+    "promotedVehicleText", "2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED"
+)
+AssertTrue(AdvisorQuoteGatherVehiclePartialStatusPromoted(partialPromotedStatus), "Unique VIN-bearing confirmed card should promote partial year/make vehicle")
+promotedPartial := AdvisorQuoteBuildGatherPromotedPartialVehicle(nissanPartialVehicle, partialPromotedStatus)
+AssertEqual(promotedPartial["year"], "2010", "Promoted partial should preserve year")
+AssertEqual(promotedPartial["make"], "NISSAN", "Promoted partial should preserve make")
+AssertEqual(promotedPartial["model"], "CUBE", "Promoted partial should use confirmed-card model")
+AssertEqual(promotedPartial["displayKey"], "2010|NISSAN|CUBE", "Promoted partial should contribute a complete display key")
+AssertEqual(promotedPartial["promotedFromPartial"], "1", "Promoted partial should carry first-class promotion marker")
+finalExpectedVehiclesWithPromoted := AdvisorQuoteBuildGatherFinalExpectedVehicles(
+    [TestVehicle("2019", "HONDA", "CRV"), TestVehicle("2013", "HYUNDAI", "SONATA")],
+    [promotedPartial]
+)
+finalExpectedWithPromoted := AdvisorQuoteBuildExpectedVehiclesArgList(finalExpectedVehiclesWithPromoted)
+AssertEqual(finalExpectedVehiclesWithPromoted.Length, 3, "Final expected list should include complete vehicles plus promoted partials")
+AssertEqual(AdvisorQuoteVehicleListSummary(finalExpectedVehiclesWithPromoted), "2019|HONDA|CRV || 2013|HYUNDAI|SONATA || 2010|NISSAN|CUBE", "Final expected summary should include promoted partial")
+AssertEqual(finalExpectedWithPromoted.Length, 3, "Final guard should include complete vehicles plus promoted partials")
+AssertEqual(finalExpectedWithPromoted[3]["model"], "CUBE", "Final guard should include promoted partial model")
+AssertEqual(finalExpectedWithPromoted[3]["promotedFromPartial"], "1", "Final guard args should preserve promoted partial marker")
+AssertEqual(AdvisorQuoteCountExpectedArgsMatchingVehicles(finalExpectedWithPromoted, [promotedPartial]), 1, "Promoted partial should be counted in final expected args")
+AssertEqual(AdvisorQuoteExpectedArgsMissingVehiclesSummary(finalExpectedWithPromoted, [promotedPartial]), "", "Promoted partial should not be reported dropped from final expected args")
+
+unpromotedPartialFinalExpected := AdvisorQuoteBuildGatherFinalExpectedVehicles([TestVehicle("2019", "HONDA", "CRV")], [])
+unpromotedPartialFinalArgs := AdvisorQuoteBuildExpectedVehiclesArgList(unpromotedPartialFinalExpected)
+AssertEqual(unpromotedPartialFinalArgs.Length, 1, "Unpromoted partials should stay deferred and out of final expected args")
+AssertEqual(unpromotedPartialFinalArgs[1]["model"], "CRV", "Unpromoted partial final args should contain only complete expected vehicles")
+
 missingConfirmedStatus := Map(
     "result", "OK",
     "expectedCount", "2",
@@ -229,10 +341,67 @@ safeConfirmedStatus := Map(
 safeReason := ""
 AssertTrue(AdvisorQuoteGatherConfirmedVehiclesSafe(safeConfirmedStatus, Map(), &safeReason), "Ignored missing-year vehicles should not block final reconciliation when expected actionable vehicles match")
 
-if (A_Args.Length && (A_Args[1] = "--headless" || A_Args[1] = "headless"))
-    ExitApp(0)
-else
-    MsgBox("advisor_quote_helper_tests passed")
+startQuotingDb := GetAdvisorQuoteWorkflowDb()
+startQuotingDisabledWithScopedAdd := Map(
+    "hasStartQuotingText", "1",
+    "startQuotingSectionPresent", "1",
+    "autoProductPresent", "1",
+    "autoProductChecked", "1",
+    "autoProductSelected", "1",
+    "ratingStateValue", "FL",
+    "ratingStateText", "Florida",
+    "createQuoteButtonPresent", "1",
+    "createQuoteButtonEnabled", "0",
+    "addProductLinkPresent", "1",
+    "addProductPresent", "1"
+)
+startQuotingReason := ""
+AssertFalse(AdvisorQuoteGatherStartQuotingStatusValid(startQuotingDisabledWithScopedAdd, startQuotingDb, &startQuotingReason), "Disabled Create Quotes should not be fully ready before handoff")
+AssertEqual(startQuotingReason, "Create Quotes & Order Reports is still disabled on Gather Data.", "Disabled Create Quotes reason should remain explicit")
+AssertTrue(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, &startQuotingReason), "Scoped Start Quoting Add product should be eligible before disabled Create Quotes failure")
+AssertEqual(startQuotingReason, "START_QUOTING_NEEDS_SCOPED_ADD_PRODUCT", "Scoped handoff should distinguish needs-handoff from failure")
+AssertTrue(AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, true, &startQuotingReason), "Verified Product Tile Auto should allow scoped handoff")
+AssertFalse(AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, false, &startQuotingReason), "Unverified Product Tile Auto should block scoped handoff")
+AssertEqual(startQuotingReason, "PRODUCT_OVERVIEW_AUTO_NOT_VERIFIED", "Blocked scoped handoff should preserve Product Tile Auto gate reason")
+
+startQuotingEnabled := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingEnabled["createQuoteButtonEnabled"] := "1"
+AssertTrue(AdvisorQuoteGatherStartQuotingStatusValid(startQuotingEnabled, startQuotingDb, &startQuotingReason), "Enabled Create Quotes should be ready without Add product handoff")
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingEnabled, startQuotingDb, &startQuotingReason), "Enabled Create Quotes should not run Add product handoff")
+
+startQuotingSidebarOnly := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingSidebarOnly["addProductLinkPresent"] := "0"
+startQuotingSidebarOnly["addProductPresent"] := "0"
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingSidebarOnly, startQuotingDb, &startQuotingReason), "Sidebar-only Add Product should not satisfy scoped handoff")
+
+startQuotingAutoUnchecked := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingAutoUnchecked["autoProductChecked"] := "0"
+startQuotingAutoUnchecked["autoProductSelected"] := "0"
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingAutoUnchecked, startQuotingDb, &startQuotingReason), "Unchecked Start Quoting Auto should block Add product handoff")
+
+legacyCreateQuotesAliasStatus := Map(
+    "hasStartQuotingText", "1",
+    "startQuotingSectionPresent", "1",
+    "autoProductPresent", "1",
+    "autoProductChecked", "1",
+    "ratingStateValue", "FL",
+    "ratingStateText", "Florida",
+    "createQuotesPresent", "1",
+    "createQuotesEnabled", "1",
+    "addProductLinkPresent", "0"
+)
+AssertTrue(AdvisorQuoteGatherStartQuotingStatusValid(legacyCreateQuotesAliasStatus, startQuotingDb, &startQuotingReason), "Create Quotes alias fields should still be accepted")
+AssertTrue(AdvisorQuoteStartQuotingScopedAddProductPresent(Map("startQuotingAddProductPresent", "1")), "Future Start Quoting Add product alias should be accepted")
+
+headless := false
+for _, arg in A_Args {
+    if (arg = "--headless" || arg = "headless") {
+        headless := true
+        break
+    }
+}
+
+ExitApp(0)
 
 TestVehicle(year, make, model, vin := "") {
     display := Trim(String(year) "|" String(make) "|" String(model), "|")

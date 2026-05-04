@@ -96,8 +96,10 @@ AdvisorBuildVehicleDisplayKey(year, make, model) {
     y := Trim(String(year))
     mk := AdvisorNormalizeLooseToken(make)
     md := AdvisorNormalizeVehicleModelToken(model)
-    if (y = "" || mk = "" || md = "")
+    if (y = "" || mk = "")
         return ""
+    if (md = "")
+        return y "|" mk
     return y "|" mk "|" md
 }
 
@@ -117,11 +119,62 @@ AdvisorCanonicalizeVehicleModelAndTrim(model, trimHint := "") {
         remainingTrim := (m.Count >= 2) ? m[2] : ""
         normalizedModel := "F" m[1]
         normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "CR" && RegExMatch(normalizedTrim, "^V(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "CRV"
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "HR" && RegExMatch(normalizedTrim, "^V(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "HRV"
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "CX" && RegExMatch(normalizedTrim, "^(\d{2})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "CX" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "QX" && RegExMatch(normalizedTrim, "^(\d{2})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "QX" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "GLE" && RegExMatch(normalizedTrim, "^(\d{3})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "GLE" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "4" && RegExMatch(normalizedTrim, "^RUNNER(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "4RUNNER"
+        normalizedTrim := Trim(String(remainingTrim))
     }
     return Map(
         "model", normalizedModel,
         "trimHint", normalizedTrim
     )
+}
+
+AdvisorTrimVehicleDescriptorTail(text) {
+    value := Trim(String(text ?? ""))
+    if (value = "")
+        return ""
+    cutAt := 0
+    labelPatterns := [
+        "\bDriver\s*\d+\s+Name\s*[-:]?\s*Age\b",
+        "\bDriver\s*\d+\s+Name\b",
+        "\bCalidad\b",
+        "\bIdioma\b",
+        "\bAddress\s+Verified\b",
+        "\bCuando\s+Renueva\b",
+        "\bOpen\s+The\s+Calendar\b",
+        "\bQue\s+Cobertura\b",
+        "\bCurrent\s+Insurance\s+Company\b",
+        "\bSkyline\s+Agent\b",
+        "\bNote\s*:",
+        "\bSource\s*:"
+    ]
+    for _, pattern in labelPatterns {
+        pos := RegExMatch(value, "i)" pattern)
+        if (pos > 1 && (cutAt = 0 || pos < cutAt))
+            cutAt := pos
+    }
+    return (cutAt > 1) ? Trim(SubStr(value, 1, cutAt - 1)) : value
 }
 
 AdvisorNormalizeVehicleDescriptor(rawVehicle) {
@@ -135,6 +188,7 @@ AdvisorNormalizeVehicleDescriptor(rawVehicle) {
         vin := mv[1]
     vinSuffix := (StrLen(vin) >= 6) ? SubStr(vin, StrLen(vin) - 5) : ""
     parseText := (vin != "") ? Trim(RegExReplace(text, "i)\b" . vin . "\b", "")) : text
+    parseText := AdvisorTrimVehicleDescriptorTail(parseText)
 
     year := ""
     if RegExMatch(parseText, "i)\b((19|20)\d{2})\b", &my)
