@@ -224,7 +224,7 @@ AdvisorQuoteCallStateHandler(stateName, profile, db, attempt := 1, entryScanPath
         case "SELECT_PRODUCT":
             return AdvisorQuoteStateSelectProduct(db, attempt, entryScanPath)
         case "CONSUMER_REPORTS":
-            return AdvisorQuoteStateConsumerReports(db, attempt, entryScanPath)
+            return AdvisorQuoteStateConsumerReports(profile, db, attempt, entryScanPath)
         case "DRIVERS_VEHICLES":
             return AdvisorQuoteStateDriversVehicles(profile, db, attempt, entryScanPath)
         case "INCIDENTS":
@@ -570,15 +570,27 @@ AdvisorQuoteStateSelectProduct(db, attempt := 1, entryScanPath := "") {
     return AdvisorQuoteResultOkValue("SELECT_PRODUCT", "SELECT_PRODUCT", "Select Product completed.", entryScanPath, AdvisorQuoteDetectState(db))
 }
 
-AdvisorQuoteStateConsumerReports(db, attempt := 1, entryScanPath := "") {
+AdvisorQuoteStateConsumerReports(profile, db, attempt := 1, entryScanPath := "") {
     AdvisorQuoteSetStep("CONSUMER_REPORTS", "Accepting consumer reports consent.")
     state := AdvisorQuoteDetectState(db)
-    if AdvisorQuoteIsStateInList(state, ["INCIDENTS"]) || AdvisorQuoteIsDriversVehiclesState(db)
-        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer reports stage already satisfied.", entryScanPath, state)
+    failureReason := ""
+    failureScan := ""
+    routeResult := AdvisorQuoteTryRouteConsumerReportsAscProduct(profile, db, state, entryScanPath, &failureReason, &failureScan)
+    if (routeResult = "OK")
+        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "CONSUMER_REPORTS_ROUTED_TO_DRIVERS_VEHICLES", entryScanPath, AdvisorQuoteDetectState(db))
+    if (routeResult = "ALREADY_SATISFIED")
+        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer reports stage already satisfied.", entryScanPath, AdvisorQuoteDetectState(db))
+    if (routeResult = "FAILED") {
+        if (failureScan = "")
+            failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "consumer-reports-asc-route-failed")
+        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", failureReason, true, failureScan, AdvisorQuoteDetectState(db))
+    }
 
-    if !AdvisorQuoteHandleConsumerReports(db) {
+    if !AdvisorQuoteHandleConsumerReports(db, &failureReason) {
         failScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "consumer-reports-failed")
-        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer Reports consent did not complete.", true, failScan, AdvisorQuoteDetectState(db))
+        if (failureReason = "")
+            failureReason := "Consumer Reports consent did not complete."
+        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", failureReason, true, failScan, AdvisorQuoteDetectState(db))
     }
     return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer Reports completed.", entryScanPath, AdvisorQuoteDetectState(db))
 }
@@ -713,7 +725,92 @@ AdvisorQuoteBuildProspectInvalidReason(status) {
 }
 
 AdvisorQuoteIsDriversVehiclesState(db) {
-    return AdvisorQuoteWaitForCondition("drivers_or_incidents", 500, 150, Map()) && !AdvisorQuoteIsIncidentsPage(db)
+    return AdvisorQuoteWaitForCondition("drivers_or_incidents", 500, 150, AdvisorQuoteAscWaitArgs(db)) && !AdvisorQuoteIsIncidentsPage(db)
+}
+
+AdvisorQuoteAscWaitArgs(db, extraArgs := Map()) {
+    args := Map("ascProductContains", db["urls"]["ascProductContains"])
+    if IsObject(extraArgs) {
+        for key, value in extraArgs
+            args[String(key)] := value
+    }
+    return args
+}
+
+AdvisorQuoteAscProductRouteIdText(routeId) {
+    routeId := Trim(String(routeId))
+    return (routeId = "") ? "" : "ASCPRODUCT/" routeId
+}
+
+AdvisorQuoteIsConsumerReportsConsentPage(db) {
+    args := AdvisorQuoteAscWaitArgs(db, Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"]))
+    return AdvisorQuoteWaitForCondition("consumer_reports_ready", 500, 150, args)
+}
+
+AdvisorQuoteIsQuoteLandingPage(db) {
+    return AdvisorQuoteWaitForCondition("quote_landing", 500, 150, AdvisorQuoteAscWaitArgs(db))
+}
+
+AdvisorQuoteTryRouteConsumerReportsAscProduct(profile, db, observedState, entryScanPath, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    routeId := AdvisorQuoteStatusValue(participantStatus, "ascProductRouteId")
+    ascDetected := (observedState = "ASC_PRODUCT") || (routeId != "") || AdvisorQuoteIsOnAscProductPage(db)
+    AdvisorQuoteAppendLog(
+        "CONSUMER_REPORTS_ROUTE_CHECK",
+        AdvisorQuoteGetLastStep(),
+        "consumerReportsObservedState=" observedState
+            . ", consumerReportsAscProductDetected=" (ascDetected ? "1" : "0")
+            . ", consumerReportsAscProductRouteId=" routeId
+    )
+    if !ascDetected
+        return "CONTINUE"
+
+    currentUrlText := AdvisorQuoteAscProductRouteIdText(routeId)
+    driversVehiclesDetected := AdvisorQuoteIsDriversVehiclesState(db)
+    incidentsDetected := AdvisorQuoteIsIncidentsPage(db)
+    quoteLandingDetected := AdvisorQuoteIsQuoteLandingPage(db)
+    consumerReportsReady := (!driversVehiclesDetected && !incidentsDetected && !quoteLandingDetected) ? AdvisorQuoteIsConsumerReportsConsentPage(db) : false
+    AdvisorQuoteAppendLog(
+        "CONSUMER_REPORTS_ASC_PRODUCT_SUBSTATE",
+        AdvisorQuoteGetLastStep(),
+        "consumerReportsObservedState=" observedState
+            . ", consumerReportsCurrentUrl=" currentUrlText
+            . ", consumerReportsAscProductDetected=1"
+            . ", consumerReportsAscProductRouteId=" routeId
+            . ", consumerReportsDriversVehiclesEvidence=" (driversVehiclesDetected ? "1" : "0")
+            . ", incidentsEvidence=" (incidentsDetected ? "1" : "0")
+            . ", quoteLandingEvidence=" (quoteLandingDetected ? "1" : "0")
+            . ", consumerReportsReadyEvidence=" (consumerReportsReady ? "1" : "0")
+            . ", participantStatusResult=" AdvisorQuoteStatusValue(participantStatus, "result")
+            . ", participantEvidence=" AdvisorQuoteStatusValue(participantStatus, "evidence")
+    )
+
+    if driversVehiclesDetected {
+        AdvisorQuoteAppendLog(
+            "CONSUMER_REPORTS_ROUTED_TO_DRIVERS_VEHICLES",
+            AdvisorQuoteGetLastStep(),
+            "consumerReportsRoutedToDriversVehicles=1"
+                . ", ascDriversVehiclesHandlerInvoked=1"
+                . ", consumerReportsReadyWaitSkippedReason=already-on-asc-drivers-vehicles"
+        )
+        if AdvisorQuoteHandleDriversVehicles(profile, db)
+            return "OK"
+        failureReason := "ASC_DRIVERS_VEHICLES_HANDLER_FAILED"
+        failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-drivers-vehicles-handler-failed")
+        return "FAILED"
+    }
+
+    if incidentsDetected || quoteLandingDetected
+        return "ALREADY_SATISFIED"
+
+    if consumerReportsReady
+        return "CONTINUE"
+
+    failureReason := "ASC_PRODUCT_SUBSTATE_UNKNOWN"
+    failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-product-substate-unknown")
+    return "FAILED"
 }
 
 AdvisorQuoteProfileLooksUsable(profile) {
@@ -1423,7 +1520,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     vehiclePolicy := AdvisorQuoteClassifyGatherVehicles(profile)
     AdvisorQuoteLogGatherVehiclePolicy(vehiclePolicy)
     actionableVehicles := vehiclePolicy["actionableVehicles"]
-    if (actionableVehicles.Length = 0) {
+    partialYearMakeVehicles := vehiclePolicy["partialYearMakeVehicles"]
+    if (actionableVehicles.Length = 0 && partialYearMakeVehicles.Length = 0) {
         failureReason := (vehiclePolicy["deferredVinVehicles"].Length > 0)
             ? "VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED: Gather Data has no actionable year/make/model vehicle."
             : "NO_ACTIONABLE_LEAD_VEHICLE: Gather Data has no lead vehicle with year, make, and model."
@@ -1433,6 +1531,10 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
     vehicleSatisfiedCount := 0
     satisfiedVehicles := []
+    promotedPartialVehicles := []
+    deferredPartialVehicles := []
+    staleDuplicateRowSeen := false
+    staleDuplicateRowDetails := ""
     for _, vehicle in actionableVehicles {
         if StopRequested() {
             failureReason := "Stopped manually."
@@ -1466,6 +1568,18 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 . ", skippedBecauseAlreadyConfirmed=" (alreadyConfirmed ? "1" : "0")
         )
         if alreadyConfirmed {
+            if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(preflightStatus) {
+                staleDuplicateRowSeen := true
+                staleDuplicateRowDetails := AdvisorQuoteStatusValue(preflightStatus, "duplicateAddRowDetails")
+                AdvisorQuoteAppendLog(
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE_DEFERRED",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" vehicle["displayKey"]
+                        . ", matchedText=" AdvisorQuoteStatusValue(preflightStatus, "matchedText")
+                        . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(preflightStatus, "duplicateAddRowDetails")
+                        . ", cleanupDeferredUntilFinalConfirmedReconciliation=1"
+                )
+            }
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
@@ -1524,15 +1638,108 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         satisfiedVehicles.Push(vehicle)
     }
 
-    expectedVehicleCountForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(actionableVehicles).Length
-    expectedVehiclesForFinalGuard := AdvisorQuoteVehicleListSummary(actionableVehicles)
+    for _, partialVehicle in partialYearMakeVehicles {
+        if StopRequested() {
+            failureReason := "Stopped manually."
+            return false
+        }
+
+        AdvisorQuoteSetStep("GATHER_DATA_PARTIAL_VEHICLE_CHECK", "Checking partial vehicle: " partialVehicle["displayKey"])
+        partialStatus := AdvisorQuoteGetGatherPartialVehicleConfirmedStatus(partialVehicle)
+        AdvisorQuoteLogGatherVehicleAddStatus(partialStatus, "VEHICLE_PARTIAL_PREFLIGHT_STATUS", partialVehicle)
+
+        if AdvisorQuoteGatherVehiclePartialStatusPromoted(partialStatus) {
+            promotedVehicle := AdvisorQuoteBuildGatherPromotedPartialVehicle(partialVehicle, partialStatus)
+            if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(partialStatus) {
+                staleDuplicateRowSeen := true
+                staleDuplicateRowDetails := AdvisorQuoteStatusValue(partialStatus, "duplicateAddRowDetails")
+                AdvisorQuoteAppendLog(
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE_DEFERRED",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" partialVehicle["displayKey"]
+                        . ", promotedVehicle=" AdvisorQuoteVehicleLabel(promotedVehicle)
+                        . ", promotedVehicleText=" AdvisorQuoteStatusValue(partialStatus, "promotedVehicleText")
+                        . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(partialStatus, "duplicateAddRowDetails")
+                        . ", cleanupDeferredUntilFinalConfirmedReconciliation=1"
+                )
+            }
+            vehicleSatisfiedCount += 1
+            promotedPartialVehicles.Push(promotedVehicle)
+            satisfiedVehicles.Push(promotedVehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_PARTIAL_ALREADY_CONFIRMED",
+                AdvisorQuoteGetLastStep(),
+                "partialVehicle=" partialVehicle["displayKey"]
+                    . ", promotedVehicle=" AdvisorQuoteVehicleLabel(promotedVehicle)
+                    . ", promotedModel=" AdvisorQuoteStatusValue(partialStatus, "promotedModel")
+                    . ", promotedVinEvidence=" AdvisorQuoteStatusValue(partialStatus, "promotedVinEvidence")
+                    . ", promotionSource=" AdvisorQuoteStatusValue(partialStatus, "promotionSource")
+                    . ", matchedText=" AdvisorQuoteStatusValue(partialStatus, "matchedText")
+            )
+            continue
+        }
+
+        result := AdvisorQuoteStatusValue(partialStatus, "result")
+        if (result = "AMBIGUOUS") {
+            failureReason := "PARTIAL_VEHICLE_AMBIGUOUS: " partialVehicle["displayKey"] " matched multiple confirmed year/make cards; no model was selected."
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "partial-vehicle-ambiguous")
+            return false
+        }
+
+        deferredPartialVehicles.Push(partialVehicle)
+        AdvisorQuoteAppendLog(
+            "VEHICLE_PARTIAL_DEFERRED",
+            AdvisorQuoteGetLastStep(),
+            "partialVehicle=" partialVehicle["displayKey"]
+                . ", result=" result
+                . ", failedFields=" AdvisorQuoteStatusValue(partialStatus, "failedFields")
+                . ", candidateCount=" AdvisorQuoteStatusValue(partialStatus, "candidateCount")
+                . ", candidateTexts=" AdvisorQuoteStatusValue(partialStatus, "candidateTexts")
+        )
+    }
+
+    if (vehicleSatisfiedCount = 0) {
+        failureReason := "NO_SAFE_GATHER_VEHICLE_SATISFIED: no complete vehicle or unique VIN-bearing confirmed partial vehicle could be satisfied."
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-gather-vehicle-satisfied")
+        return false
+    }
+
+    expectedVehiclesForGuardList := AdvisorQuoteBuildGatherFinalExpectedVehicles(actionableVehicles, promotedPartialVehicles)
+    expectedVehicleArgsForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(expectedVehiclesForGuardList)
+    expectedVehicleCountForFinalGuard := expectedVehicleArgsForFinalGuard.Length
+    promotedPartialExpectedCount := AdvisorQuoteCountExpectedArgsMatchingVehicles(expectedVehicleArgsForFinalGuard, promotedPartialVehicles)
+    expectedVehiclesForFinalGuard := AdvisorQuoteVehicleListSummary(expectedVehiclesForGuardList)
+    missingPromotedPartialExpectedVehicles := AdvisorQuoteExpectedArgsMissingVehiclesSummary(expectedVehicleArgsForFinalGuard, promotedPartialVehicles)
+    if (promotedPartialVehicles.Length > 0 && missingPromotedPartialExpectedVehicles != "") {
+        failureReason := "PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST: " missingPromotedPartialExpectedVehicles
+        AdvisorQuoteAppendLog(
+            "PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST",
+            AdvisorQuoteGetLastStep(),
+            "completeExpectedCount=" actionableVehicles.Length
+                . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
+                . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+                . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+                . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
+                . ", missingPromotedPartialExpectedVehicles=" missingPromotedPartialExpectedVehicles
+        )
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "promoted-partial-dropped-from-expected-list")
+        return false
+    }
     AdvisorQuoteAppendLog(
         "GATHER_CONFIRMED_VEHICLES_ARGS",
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionableVehicles.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionableVehicles)
+            . ", completeExpectedCount=" actionableVehicles.Length
+            . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
+            . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
+            . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
+            . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+            . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
             . ", ignoredMissingYearVehicleCount=" vehiclePolicy["ignoredMissingYearVehicles"].Length
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(vehiclePolicy["ignoredMissingYearVehicles"])
             . ", deferredVinVehicleCount=" vehiclePolicy["deferredVinVehicles"].Length
@@ -1541,15 +1748,23 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
             . ", confirmedGuardArgsSummary=" expectedVehiclesForFinalGuard
     )
-    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(actionableVehicles)
+    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(expectedVehiclesForGuardList)
     AdvisorQuoteAppendLog("GATHER_CONFIRMED_VEHICLES_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(confirmedStatus))
     AdvisorQuoteAppendLog(
         "GATHER_VEHICLE_RECONCILIATION",
         AdvisorQuoteGetLastStep(),
         "vehicleSatisfiedCount=" vehicleSatisfiedCount
             . ", actionableVehicleCount=" actionableVehicles.Length
+            . ", completeExpectedCount=" actionableVehicles.Length
+            . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
+            . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
+            . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
+            . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+            . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
             . ", ignoredMissingYearVehicleCount=" vehiclePolicy["ignoredMissingYearVehicles"].Length
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(vehiclePolicy["ignoredMissingYearVehicles"])
@@ -1565,11 +1780,15 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
     }
 
+    if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, &failureReason, &failureScanPath)
+        return false
+
     startQuotingStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
     AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
 
     startQuotingReason := ""
     startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
+    startQuotingCheckboxEnsureAttempted := false
     if !startQuotingReady {
         if (advisorQuoteProductOverviewAutoPending && !AdvisorQuoteGatherStartQuotingAutoSelected(startQuotingStatus)) {
             advisorQuoteGatherAutoCommitted := false
@@ -1581,6 +1800,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         }
 
         if (AdvisorQuoteStatusValue(startQuotingStatus, "hasStartQuotingText") = "1") {
+            startQuotingCheckboxEnsureAttempted := true
             checkboxStatus := AdvisorQuoteEnsureStartQuotingAutoCheckbox()
             AdvisorQuoteAppendLog("GATHER_START_QUOTING_AUTO_CHECKBOX", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildStartQuotingAutoCheckboxDetail(checkboxStatus))
 
@@ -1591,6 +1811,17 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
             startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
         }
+    }
+
+    if (!startQuotingReady && AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingStatus, db, advisorQuoteProductOverviewAutoVerified, &startQuotingReason)) {
+        handoffPath := startQuotingCheckboxEnsureAttempted ? "checkbox-then-add-product" : "scoped-add-product"
+        handoffStatus := Map()
+        handoffReason := ""
+        if !AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, startQuotingStatus, handoffPath, &handoffStatus, &handoffReason, &failureReason, &failureScanPath)
+            return false
+        startQuotingStatus := handoffStatus
+        startQuotingReason := handoffReason
+        startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
     }
 
     if (!startQuotingReady && advisorQuoteProductOverviewAutoVerified && AdvisorQuoteGatherNeedsProductTileRecovery(startQuotingStatus)) {
@@ -1613,10 +1844,42 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         advisorQuoteProductOverviewAutoPending := false
         advisorQuoteGatherAutoCommitted := true
         AdvisorQuoteAppendLog("GATHER_START_QUOTING_READY", AdvisorQuoteGetLastStep(), "GatherAutoCommitted=1, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=create-quotes-enabled"
+                . ", startQuotingCreateQuotesEnabledBefore=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(startQuotingStatus) ? "1" : "0")
+                . ", startQuotingScopedAddProductPresent=" (AdvisorQuoteStartQuotingScopedAddProductPresent(startQuotingStatus) ? "1" : "0")
+                . ", startQuotingScopedAddProductClicked=0"
+        )
 
         clickResult := AdvisorQuoteClickCreateQuotesOrderReports(db)
         AdvisorQuoteAppendLog("GATHER_START_QUOTING_CREATE_QUOTES_CLICK", AdvisorQuoteGetLastStep(), "result=" clickResult)
         if (clickResult != "OK") {
+            if (clickResult = "DISABLED" && advisorQuoteProductOverviewAutoVerified) {
+                retryStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
+                AdvisorQuoteAppendLog(
+                    "GATHER_START_QUOTING_STATUS",
+                    AdvisorQuoteGetLastStep(),
+                    "phase=create-quotes-disabled-retry, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(retryStatus)
+                )
+                retryReason := ""
+                if AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(retryStatus, db, advisorQuoteProductOverviewAutoVerified, &retryReason) {
+                    if !AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, retryStatus, "scoped-add-product", &startQuotingStatus, &startQuotingReason, &failureReason, &failureScanPath)
+                        return false
+                    clickResult := AdvisorQuoteClickCreateQuotesOrderReports(db)
+                    AdvisorQuoteAppendLog("GATHER_START_QUOTING_CREATE_QUOTES_CLICK", AdvisorQuoteGetLastStep(), "phase=after-scoped-add-product, result=" clickResult)
+                    if (clickResult = "OK") {
+                        waitArgs := Map("ascProductContains", db["urls"]["ascProductContains"])
+                        if !AdvisorQuoteWaitForCondition("gather_start_quoting_transition", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs) {
+                            failureReason := "Create Quotes & Order Reports did not transition to Consumer Reports or a later quote state."
+                            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "create-quotes-transition-timeout")
+                            return false
+                        }
+                        return true
+                    }
+                }
+            }
             if (clickResult = "NO_BUTTON")
                 failureReason := "Create Quotes & Order Reports button was not found on Gather Data."
             else if (clickResult = "DISABLED")
@@ -1823,6 +2086,79 @@ AdvisorQuoteGatherStartQuotingAutoSelected(status) {
     )
 }
 
+AdvisorQuoteStartQuotingCreateQuotesPresent(status) {
+    return AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "createQuotesPresent") = "1"
+}
+
+AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
+    return AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") = "1"
+        || AdvisorQuoteStatusValue(status, "createQuotesEnabled") = "1"
+}
+
+AdvisorQuoteStartQuotingScopedAddProductPresent(status) {
+    return AdvisorQuoteStatusValue(status, "addProductLinkPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "addProductPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "startQuotingAddProductPresent") = "1"
+}
+
+AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason := "") {
+    failureReason := ""
+    if !IsObject(status) || (status.Count = 0) {
+        failureReason := "Gather Data Start Quoting status could not be read back from the page."
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "hasStartQuotingText") != "1" || AdvisorQuoteStatusValue(status, "startQuotingSectionPresent") = "0") {
+        failureReason := "Start Quoting block is not visible on Gather Data."
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "autoProductPresent") != "1") {
+        failureReason := "Auto is not present in the Start Quoting block."
+        return false
+    }
+    if !AdvisorQuoteGatherStartQuotingAutoSelected(status) {
+        failureReason := "Auto is not selected in the Start Quoting block."
+        return false
+    }
+    if !AdvisorQuoteStatusOptionMatches(
+        AdvisorQuoteStatusValue(status, "ratingStateValue"),
+        AdvisorQuoteStatusValue(status, "ratingStateText"),
+        db["defaults"]["ratingState"],
+        db["defaults"]["ratingState"]
+    ) {
+        failureReason := "Start Quoting Rating State is not " db["defaults"]["ratingState"] "."
+        return false
+    }
+    if !AdvisorQuoteStartQuotingCreateQuotesPresent(status) {
+        failureReason := "Create Quotes & Order Reports is not present on Gather Data."
+        return false
+    }
+    return true
+}
+
+AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(status, db, &failureReason := "") {
+    if !AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason)
+        return false
+    if AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
+        failureReason := "Create Quotes & Order Reports is already enabled."
+        return false
+    }
+    if !AdvisorQuoteStartQuotingScopedAddProductPresent(status) {
+        failureReason := "Scoped Start Quoting Add product link is not present."
+        return false
+    }
+    failureReason := "START_QUOTING_NEEDS_SCOPED_ADD_PRODUCT"
+    return true
+}
+
+AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(status, db, productOverviewAutoVerified, &failureReason := "") {
+    if !productOverviewAutoVerified {
+        failureReason := "PRODUCT_OVERVIEW_AUTO_NOT_VERIFIED"
+        return false
+    }
+    return AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(status, db, &failureReason)
+}
+
 AdvisorQuoteGatherNeedsProductTileRecovery(status) {
     if !IsObject(status) || (status.Count = 0)
         return true
@@ -1846,43 +2182,15 @@ AdvisorQuoteStartQuotingFailureCode(status, failureReason := "") {
         return "START_QUOTING_AUTO_NOT_CHECKED: " failureReason
     if (AdvisorQuoteStatusValue(status, "ratingStatePresent") != "1")
         return "START_QUOTING_RATING_STATE_INVALID: " failureReason
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") != "1" || AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") != "1")
+    if !AdvisorQuoteStartQuotingCreateQuotesPresent(status) || !AdvisorQuoteStartQuotingCreateQuotesEnabled(status)
         return "START_QUOTING_CREATE_QUOTES_DISABLED: " failureReason
     return "START_QUOTING_RATING_STATE_INVALID: " failureReason
 }
 
 AdvisorQuoteGatherStartQuotingStatusValid(status, db, &failureReason := "") {
-    failureReason := ""
-    if !IsObject(status) || (status.Count = 0) {
-        failureReason := "Gather Data Start Quoting status could not be read back from the page."
+    if !AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason)
         return false
-    }
-    if (AdvisorQuoteStatusValue(status, "hasStartQuotingText") != "1") {
-        failureReason := "Start Quoting block is not visible on Gather Data."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "autoProductPresent") != "1") {
-        failureReason := "Auto is not present in the Start Quoting block."
-        return false
-    }
-    if !AdvisorQuoteGatherStartQuotingAutoSelected(status) {
-        failureReason := "Auto is not selected in the Start Quoting block."
-        return false
-    }
-    if !AdvisorQuoteStatusOptionMatches(
-        AdvisorQuoteStatusValue(status, "ratingStateValue"),
-        AdvisorQuoteStatusValue(status, "ratingStateText"),
-        db["defaults"]["ratingState"],
-        db["defaults"]["ratingState"]
-    ) {
-        failureReason := "Start Quoting Rating State is not " db["defaults"]["ratingState"] "."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") != "1") {
-        failureReason := "Create Quotes & Order Reports is not present on Gather Data."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") != "1") {
+    if !AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
         failureReason := "Create Quotes & Order Reports is still disabled on Gather Data."
         return false
     }
@@ -1945,6 +2253,59 @@ AdvisorQuoteStatusOptionMatches(actualValue, actualText, expectedValue, expected
     return false
 }
 
+AdvisorQuoteProfileFullName(profile) {
+    person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
+    fullName := person.Has("fullName") ? Trim(String(person["fullName"])) : ""
+    if (fullName = "")
+        fullName := Trim(String((person.Has("firstName") ? person["firstName"] : "") . " " . (person.Has("lastName") ? person["lastName"] : "")))
+    return fullName
+}
+
+AdvisorQuoteLeadMaritalStatus(profile) {
+    raw := (IsObject(profile) && profile.Has("raw")) ? String(profile["raw"]) : ""
+    fields := (IsObject(profile) && profile.Has("fields")) ? profile["fields"] : Map()
+    if (IsObject(fields) && fields.Has("MARITAL_STATUS")) {
+        normalizedField := AdvisorQuoteNormalizeMaritalStatus(fields["MARITAL_STATUS"])
+        if (normalizedField != "")
+            return normalizedField
+    }
+    if RegExMatch(raw, "i)\bMarital\s+Status\s*:\s*(Single|Married|Divorced|Widowed|Separated)\b", &m)
+        return AdvisorQuoteNormalizeMaritalStatus(m[1])
+    return ""
+}
+
+AdvisorQuoteNormalizeMaritalStatus(value) {
+    text := AdvisorNormalizeLooseToken(value)
+    if InStr(text, "SINGLE")
+        return "Single"
+    if InStr(text, "MARRIED")
+        return "Married"
+    if InStr(text, "DIVORCED")
+        return "Divorced"
+    if InStr(text, "WIDOW")
+        return "Widowed"
+    if InStr(text, "SEPARATED")
+        return "Separated"
+    return ""
+}
+
+AdvisorQuoteLeadSpouseName(profile) {
+    raw := (IsObject(profile) && profile.Has("raw")) ? String(profile["raw"]) : ""
+    if RegExMatch(raw, "i)\b(?:Spouse|Spouse\s+Name)\s*:\s*([^\r\n]+)", &m)
+        return Trim(String(m[1]))
+    return ""
+}
+
+AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName := "") {
+    names := []
+    primary := AdvisorQuoteProfileFullName(profile)
+    if (primary != "")
+        names.Push(primary)
+    if (AdvisorQuoteLeadMaritalStatus(profile) = "Married" && Trim(String(selectedSpouseName)) != "")
+        names.Push(Trim(String(selectedSpouseName)))
+    return JoinArray(names, "||")
+}
+
 AdvisorQuoteBuildVehicleJsArgs(vehicle, includeCatalogMakeLabels := false) {
     args := Map(
         "year", vehicle["year"],
@@ -1977,6 +2338,13 @@ AdvisorQuoteVehicleHasActionableFields(vehicle) {
         && vehicle.Has("model") && Trim(String(vehicle["model"])) != ""
 }
 
+AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+    return IsObject(vehicle)
+        && vehicle.Has("year") && Trim(String(vehicle["year"])) != ""
+        && vehicle.Has("make") && Trim(String(vehicle["make"])) != ""
+        && (!vehicle.Has("model") || Trim(String(vehicle["model"])) = "")
+}
+
 AdvisorQuoteVehicleLabel(vehicle) {
     if !IsObject(vehicle)
         return ""
@@ -2000,9 +2368,57 @@ AdvisorQuoteVehicleListSummary(vehicles) {
     return JoinArray(parts, " || ")
 }
 
-AdvisorQuoteClassifyGatherVehicles(profile) {
+AdvisorQuoteJoinVehicleLists(lists*) {
+    result := []
+    for _, list in lists {
+        if !IsObject(list)
+            continue
+        for _, vehicle in list
+            result.Push(vehicle)
+    }
+    return result
+}
+
+AdvisorQuoteGetGatherProfileVehicles(profile) {
+    result := []
+    seen := Map()
+
     vehicles := (IsObject(profile) && profile.Has("vehicles")) ? profile["vehicles"] : []
+    if IsObject(vehicles) {
+        for _, vehicle in vehicles
+            AdvisorQuoteAppendUniqueVehicleByDisplayKey(result, seen, vehicle)
+    }
+
+    raw := (IsObject(profile) && profile.Has("raw")) ? Trim(String(profile["raw"])) : ""
+    if (raw != "") {
+        for _, vehicleText in ExtractVehicleList(raw) {
+            normalized := AdvisorNormalizeVehicleDescriptor(vehicleText)
+            AdvisorQuoteAppendUniqueVehicleByDisplayKey(result, seen, normalized)
+        }
+    }
+
+    return result
+}
+
+AdvisorQuoteAppendUniqueVehicleByDisplayKey(vehicleList, seenVehicleKeys, vehicle) {
+    if !IsObject(vehicle)
+        return false
+    if !vehicle.Has("displayKey")
+        return false
+    key := Trim(String(vehicle["displayKey"]))
+    if (key = "")
+        return false
+    if seenVehicleKeys.Has(key)
+        return false
+    seenVehicleKeys[key] := true
+    vehicleList.Push(vehicle)
+    return true
+}
+
+AdvisorQuoteClassifyGatherVehicles(profile) {
+    vehicles := AdvisorQuoteGetGatherProfileVehicles(profile)
     actionable := []
+    partial := []
     missingYearNoVin := []
     deferredVin := []
     blocking := []
@@ -2014,6 +2430,10 @@ AdvisorQuoteClassifyGatherVehicles(profile) {
         }
         if AdvisorQuoteVehicleHasVinEvidence(vehicle) {
             deferredVin.Push(vehicle)
+            continue
+        }
+        if AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+            partial.Push(vehicle)
             continue
         }
         year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
@@ -2037,14 +2457,58 @@ AdvisorQuoteClassifyGatherVehicles(profile) {
 
     return Map(
         "actionableVehicles", actionable,
+        "partialYearMakeVehicles", partial,
         "ignoredMissingYearVehicles", ignored,
         "deferredVinVehicles", deferredVin,
         "blockingMissingVehicleData", blocking
     )
 }
 
+AdvisorQuoteClassifyAscVehicles(profile) {
+    vehicles := (IsObject(profile) && profile.Has("vehicles")) ? profile["vehicles"] : []
+    complete := []
+    partial := []
+    deferred := []
+
+    for _, vehicle in vehicles {
+        if AdvisorQuoteVehicleHasActionableFields(vehicle) {
+            complete.Push(vehicle)
+        } else if AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+            partial.Push(vehicle)
+        } else {
+            deferred.Push(vehicle)
+        }
+    }
+
+    return Map(
+        "completeVehicles", complete,
+        "partialYearMakeVehicles", partial,
+        "deferredVehicles", deferred
+    )
+}
+
+AdvisorQuoteBuildAscPartialVehiclesArgList(vehicles) {
+    result := []
+    if !IsObject(vehicles)
+        return result
+    for _, vehicle in vehicles {
+        year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+        make := IsObject(vehicle) && vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+        if (year = "" || make = "")
+            continue
+        result.Push(Map(
+            "year", year,
+            "make", make,
+            "model", "",
+            "allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(make, "", year)
+        ))
+    }
+    return result
+}
+
 AdvisorQuoteLogGatherVehiclePolicy(policy) {
     actionable := IsObject(policy) && policy.Has("actionableVehicles") ? policy["actionableVehicles"] : []
+    partial := IsObject(policy) && policy.Has("partialYearMakeVehicles") ? policy["partialYearMakeVehicles"] : []
     ignored := IsObject(policy) && policy.Has("ignoredMissingYearVehicles") ? policy["ignoredMissingYearVehicles"] : []
     deferred := IsObject(policy) && policy.Has("deferredVinVehicles") ? policy["deferredVinVehicles"] : []
     blocking := IsObject(policy) && policy.Has("blockingMissingVehicleData") ? policy["blockingMissingVehicleData"] : []
@@ -2052,10 +2516,12 @@ AdvisorQuoteLogGatherVehiclePolicy(policy) {
         "GATHER_VEHICLE_POLICY",
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionable.Length
+            . ", partialYearMakeVehicleCount=" partial.Length
             . ", ignoredMissingYearVehicleCount=" ignored.Length
             . ", deferredVinVehicleCount=" deferred.Length
             . ", blockingMissingVehicleDataCount=" blocking.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionable)
+            . ", partialYearMakeVehicles=" AdvisorQuoteVehicleListSummary(partial)
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(ignored)
             . ", deferredVinVehicles=" AdvisorQuoteVehicleListSummary(deferred)
             . ", blockingMissingVehicleData=" AdvisorQuoteVehicleListSummary(blocking)
@@ -2098,9 +2564,72 @@ AdvisorQuoteBuildExpectedVehiclesArgList(vehicles) {
             "allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(make, model, year),
             "strictModelMatch", "1"
         )
+        if IsObject(vehicle) {
+            for _, metaKey in ["promotedFromPartial", "promotionSource", "promotedVehicleText", "originalLeadText", "promotedVinEvidence"] {
+                if vehicle.Has(metaKey)
+                    item[metaKey] := vehicle[metaKey]
+            }
+        }
         result.Push(item)
     }
     return result
+}
+
+AdvisorQuoteBuildGatherFinalExpectedVehicles(actionableVehicles, promotedPartialVehicles) {
+    return AdvisorQuoteJoinVehicleLists(actionableVehicles, promotedPartialVehicles)
+}
+
+AdvisorQuoteVehicleIdentityKey(vehicle) {
+    if !IsObject(vehicle)
+        return ""
+    year := vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+    make := vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+    model := vehicle.Has("model") ? Trim(String(vehicle["model"])) : ""
+    return AdvisorBuildVehicleDisplayKey(year, make, model)
+}
+
+AdvisorQuoteExpectedArgIdentityKey(expected) {
+    if !IsObject(expected)
+        return ""
+    year := expected.Has("year") ? Trim(String(expected["year"])) : ""
+    make := expected.Has("make") ? Trim(String(expected["make"])) : ""
+    model := expected.Has("model") ? Trim(String(expected["model"])) : ""
+    return AdvisorBuildVehicleDisplayKey(year, make, model)
+}
+
+AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle) {
+    targetKey := AdvisorQuoteVehicleIdentityKey(vehicle)
+    if (targetKey = "")
+        return false
+    if !IsObject(expectedArgs)
+        return false
+    for _, expected in expectedArgs {
+        if (AdvisorQuoteExpectedArgIdentityKey(expected) = targetKey)
+            return true
+    }
+    return false
+}
+
+AdvisorQuoteCountExpectedArgsMatchingVehicles(expectedArgs, vehicles) {
+    count := 0
+    if !IsObject(vehicles)
+        return count
+    for _, vehicle in vehicles {
+        if AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle)
+            count += 1
+    }
+    return count
+}
+
+AdvisorQuoteExpectedArgsMissingVehiclesSummary(expectedArgs, vehicles) {
+    missing := []
+    if IsObject(vehicles) {
+        for _, vehicle in vehicles {
+            if !AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle)
+                missing.Push(AdvisorQuoteVehicleLabel(vehicle))
+        }
+    }
+    return JoinArray(missing, " || ")
 }
 
 AdvisorQuoteBuildExpectedVehiclesText(profile) {
@@ -2120,6 +2649,16 @@ AdvisorQuoteGetGatherConfirmedVehiclesStatus(profile) {
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_confirmed_vehicles_status", args))
 }
 
+AdvisorQuoteGetGatherStaleAddVehicleRowStatus(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_stale_add_vehicle_row_status", args))
+}
+
+AdvisorQuoteCancelStaleAddVehicleRow(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("cancel_stale_add_vehicle_row", args))
+}
+
 AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(status) {
     return "result=" AdvisorQuoteStatusValue(status, "result")
         . ", confirmedCount=" AdvisorQuoteStatusValue(status, "confirmedCount")
@@ -2131,6 +2670,78 @@ AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(status) {
         . ", missingExpectedVehicles=" AdvisorQuoteStatusValue(status, "missingExpectedVehicles")
         . ", unresolvedLeadVehicles=" AdvisorQuoteStatusValue(status, "unresolvedLeadVehicles")
         . ", method=" AdvisorQuoteStatusValue(status, "method")
+}
+
+AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", rowTitle=" AdvisorQuoteStatusValue(status, "rowTitle")
+        . ", rowIncomplete=" AdvisorQuoteStatusValue(status, "rowIncomplete")
+        . ", yearValue=" AdvisorQuoteStatusValue(status, "yearValue")
+        . ", vinValue=" AdvisorQuoteStatusValue(status, "vinValue")
+        . ", manufacturerValue=" AdvisorQuoteStatusValue(status, "manufacturerValue")
+        . ", modelValue=" AdvisorQuoteStatusValue(status, "modelValue")
+        . ", subModelValue=" AdvisorQuoteStatusValue(status, "subModelValue")
+        . ", addButtonPresent=" AdvisorQuoteStatusValue(status, "addButtonPresent")
+        . ", cancelButtonPresent=" AdvisorQuoteStatusValue(status, "cancelButtonPresent")
+        . ", cancelButtonScoped=" AdvisorQuoteStatusValue(status, "cancelButtonScoped")
+        . ", safeToCancel=" AdvisorQuoteStatusValue(status, "safeToCancel")
+        . ", reason=" AdvisorQuoteStatusValue(status, "reason")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteBuildGatherStaleVehicleCancelDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", clicked=" AdvisorQuoteStatusValue(status, "clicked")
+        . ", cancelButtonText=" AdvisorQuoteStatusValue(status, "cancelButtonText")
+        . ", cancelButtonClass=" AdvisorQuoteStatusValue(status, "cancelButtonClass")
+        . ", beforeRowText=" AdvisorQuoteStatusValue(status, "beforeRowText")
+        . ", afterRowPresent=" AdvisorQuoteStatusValue(status, "afterRowPresent")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+}
+
+AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehicles, staleDuplicateRowSeen := false, staleDuplicateRowDetails := "", &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    status := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
+    AdvisorQuoteAppendLog(
+        "STALE_ADD_VEHICLE_ROW_STATUS",
+        AdvisorQuoteGetLastStep(),
+        AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status)
+            . ", staleDuplicateRowSeen=" (staleDuplicateRowSeen ? "1" : "0")
+            . ", staleDuplicateRowDetails=" staleDuplicateRowDetails
+    )
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "" || result = "NONE")
+        return true
+    if (AdvisorQuoteStatusValue(status, "safeToCancel") != "1") {
+        failureReason := "STALE_ADD_ROW_CANCEL_UNSAFE: stale Add Car/Truck row exists but is not safe to cancel. reason=" AdvisorQuoteStatusValue(status, "reason")
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-unsafe")
+        return false
+    }
+
+    cancelStatus := AdvisorQuoteCancelStaleAddVehicleRow(true)
+    AdvisorQuoteAppendLog("STALE_ADD_VEHICLE_ROW_CANCEL", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus))
+    if (AdvisorQuoteStatusValue(cancelStatus, "result") != "CANCELLED") {
+        failureReason := "STALE_ADD_ROW_CANCEL_FAILED: " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-failed")
+        return false
+    }
+
+    rowStatus := AdvisorQuoteGetGatherVehicleRowStatus()
+    AdvisorQuoteLogGatherVehicleRowStatus(rowStatus, "STALE_ADD_ROW_POST_CANCEL_ROW_STATUS")
+    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(expectedVehicles)
+    AdvisorQuoteAppendLog("GATHER_CONFIRMED_VEHICLES_STATUS_AFTER_STALE_ROW_CANCEL", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(confirmedStatus))
+    safeReason := ""
+    if !AdvisorQuoteGatherConfirmedVehiclesSafe(confirmedStatus, "", &safeReason) {
+        failureReason := "STALE_ADD_ROW_CANCEL_RECONCILIATION_FAILED: " safeReason
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-reconciliation-failed")
+        return false
+    }
+    return true
 }
 
 AdvisorQuoteGatherConfirmedVehiclesSafe(status, profile, &failureReason := "") {
@@ -2390,6 +3001,14 @@ AdvisorQuoteGetGatherVehicleAddStatus(vehicle, index := "") {
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_add_status", args))
 }
 
+AdvisorQuoteGetGatherPartialVehicleConfirmedStatus(vehicle, index := "") {
+    args := AdvisorQuoteBuildVehicleJsArgs(vehicle, true)
+    args["partialYearMakeMode"] := "1"
+    if (Trim(String(index)) != "")
+        args["index"] := index
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_add_status", args))
+}
+
 AdvisorQuoteGetGatherVehicleEditStatus(vehicle := "") {
     args := IsObject(vehicle) ? AdvisorQuoteBuildVehicleJsArgs(vehicle) : Map()
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_edit_status", args, 2, 120))
@@ -2448,6 +3067,46 @@ AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(status) {
         && AdvisorQuoteStatusValue(status, "yearMatched") = "1"
         && AdvisorQuoteStatusValue(status, "makeMatched") = "1"
         && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
+}
+
+AdvisorQuoteGatherVehiclePartialStatusPromoted(status) {
+    return AdvisorQuoteStatusValue(status, "result") = "ADDED"
+        && AdvisorQuoteStatusValue(status, "partialPromoted") = "1"
+        && AdvisorQuoteStatusValue(status, "confirmedVehicleMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "confirmedStatusMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "yearMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "makeMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "promotedVinEvidence") = "1"
+        && Trim(String(AdvisorQuoteStatusValue(status, "promotedModel"))) != ""
+}
+
+AdvisorQuoteBuildGatherPromotedPartialVehicle(vehicle, status) {
+    year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+    make := IsObject(vehicle) && vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+    promotedModel := Trim(String(AdvisorQuoteStatusValue(status, "promotedModel")))
+    raw := IsObject(vehicle) && vehicle.Has("raw") ? Trim(String(vehicle["raw"])) : ""
+    if (raw = "")
+        raw := Trim(year " " make)
+    return Map(
+        "year", year,
+        "make", make,
+        "model", promotedModel,
+        "trimHint", "",
+        "vin", "",
+        "vinSuffix", "",
+        "raw", raw,
+        "displayKey", AdvisorBuildVehicleDisplayKey(year, make, promotedModel),
+        "originalLeadText", raw,
+        "promotedFromPartial", "1",
+        "promotionSource", AdvisorQuoteStatusValue(status, "promotionSource"),
+        "promotedVehicleText", AdvisorQuoteStatusValue(status, "promotedVehicleText"),
+        "promotedVinEvidence", AdvisorQuoteStatusValue(status, "promotedVinEvidence")
+    )
+}
+
+AdvisorQuoteGatherVehicleDuplicateAddRowOpen(status) {
+    return AdvisorQuoteStatusValue(status, "duplicateAddRowOpenForConfirmedVehicle") = "1"
 }
 
 AdvisorQuoteWaitForGatherVehicleAddStatus(vehicle, db, index := "") {
@@ -2524,12 +3183,24 @@ AdvisorQuoteLogGatherVehicleAddStatus(status, eventType, vehicle := "") {
             . ", makeMatched=" AdvisorQuoteStatusValue(status, "makeMatched")
             . ", modelMatched=" AdvisorQuoteStatusValue(status, "modelMatched")
             . ", vinMatched=" AdvisorQuoteStatusValue(status, "vinMatched")
+            . ", vinEvidence=" AdvisorQuoteStatusValue(status, "vinEvidence")
+            . ", partialPromoted=" AdvisorQuoteStatusValue(status, "partialPromoted")
+            . ", promotedModel=" AdvisorQuoteStatusValue(status, "promotedModel")
+            . ", promotedVinEvidence=" AdvisorQuoteStatusValue(status, "promotedVinEvidence")
+            . ", promotionSource=" AdvisorQuoteStatusValue(status, "promotionSource")
             . ", rowOpen=" AdvisorQuoteStatusValue(status, "rowOpen")
             . ", rowGone=" AdvisorQuoteStatusValue(status, "rowGone")
             . ", rowComplete=" AdvisorQuoteStatusValue(status, "rowComplete")
+            . ", rowIncomplete=" AdvisorQuoteStatusValue(status, "rowIncomplete")
+            . ", duplicateAddRowOpenForConfirmedVehicle=" AdvisorQuoteStatusValue(status, "duplicateAddRowOpenForConfirmedVehicle")
+            . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(status, "duplicateAddRowDetails")
             . ", warningStillPresent=" AdvisorQuoteStatusValue(status, "warningStillPresent")
             . ", method=" AdvisorQuoteStatusValue(status, "method")
+            . ", expectedModelKey=" AdvisorQuoteStatusValue(status, "expectedModelKey")
             . ", matchedText=" AdvisorQuoteStatusValue(status, "matchedText")
+            . ", promotedVehicleText=" AdvisorQuoteStatusValue(status, "promotedVehicleText")
+            . ", candidateCount=" AdvisorQuoteStatusValue(status, "candidateCount")
+            . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
             . ", candidateTexts=" AdvisorQuoteStatusValue(status, "candidateTexts")
             . ", alerts=" AdvisorQuoteStatusValue(status, "alerts")
     )
@@ -2642,6 +3313,99 @@ AdvisorQuoteBuildStartQuotingAutoCheckboxDetail(status) {
 
 AdvisorQuoteClickCreateQuotesOrderReports(db) {
     return AdvisorQuoteRunOp("click_create_quotes_order_reports", Map("selectors", db["selectors"]), 1, 100)
+}
+
+AdvisorQuoteClickStartQuotingScopedAddProduct(db) {
+    return AdvisorQuoteRunOp("click_start_quoting_add_product", Map("selectors", db["selectors"]), 1, 100)
+}
+
+AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, beforeStatus, handoffPath, &afterStatus, &afterReason := "", &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    afterStatus := beforeStatus
+    afterReason := ""
+
+    clickResult := AdvisorQuoteClickStartQuotingScopedAddProduct(db)
+    AdvisorQuoteAppendLog(
+        "GATHER_START_QUOTING_SCOPED_ADD_PRODUCT_HANDOFF",
+        AdvisorQuoteGetLastStep(),
+        "startQuotingHandoffPath=" handoffPath
+            . ", startQuotingCreateQuotesEnabledBefore=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(beforeStatus) ? "1" : "0")
+            . ", startQuotingScopedAddProductPresent=" (AdvisorQuoteStartQuotingScopedAddProductPresent(beforeStatus) ? "1" : "0")
+            . ", startQuotingScopedAddProductClicked=" (clickResult = "OK" ? "1" : "0")
+            . ", startQuotingScopedAddProductResult=" clickResult
+            . ", startQuotingScopedAddProductHandoff=1"
+            . ", statusBefore=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(beforeStatus)
+    )
+    if (clickResult != "OK") {
+        if (clickResult = "NO_BUTTON")
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_NOT_FOUND: scoped Start Quoting Add product link was not found."
+        else if (clickResult = "DISABLED")
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_DISABLED: scoped Start Quoting Add product link is disabled."
+        else
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_CLICK_FAILED: scoped Start Quoting Add product link could not be clicked."
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "start-quoting-scoped-add-product-click-failed")
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF_FAILED",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=failed, startQuotingScopedAddProductResult=" clickResult . ", failureReason=" failureReason
+        )
+        return false
+    }
+
+    if !AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &afterStatus, &afterReason) {
+        failureReason := "START_QUOTING_CREATE_QUOTES_DISABLED_AFTER_SCOPED_ADD_PRODUCT: " afterReason
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "start-quoting-create-quotes-still-disabled")
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF_FAILED",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=failed"
+                . ", startQuotingScopedAddProductClicked=1"
+                . ", startQuotingScopedAddProductResult=OK"
+                . ", startQuotingCreateQuotesEnabledAfter=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(afterStatus) ? "1" : "0")
+                . ", failureReason=" failureReason
+                . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
+                . ", scan=" failureScanPath
+        )
+        return false
+    }
+
+    AdvisorQuoteAppendLog(
+        "GATHER_START_QUOTING_HANDOFF_READY",
+        AdvisorQuoteGetLastStep(),
+        "startQuotingHandoffPath=" handoffPath
+            . ", startQuotingScopedAddProductClicked=1"
+            . ", startQuotingScopedAddProductResult=OK"
+            . ", startQuotingCreateQuotesEnabledAfter=1"
+            . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
+    )
+    return true
+}
+
+AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &statusOut, &reasonOut := "") {
+    start := A_TickCount
+    timeoutMs := db["timeouts"]["transitionMs"]
+    pollMs := db["timeouts"]["pollMs"]
+    statusOut := Map()
+    reasonOut := ""
+    while ((A_TickCount - start) < timeoutMs) {
+        if StopRequested() {
+            reasonOut := "Stopped manually."
+            return false
+        }
+        statusOut := AdvisorQuoteGetGatherStartQuotingStatus(db)
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_STATUS",
+            AdvisorQuoteGetLastStep(),
+            "phase=after-scoped-add-product, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(statusOut)
+        )
+        if AdvisorQuoteGatherStartQuotingStatusValid(statusOut, db, &reasonOut)
+            return true
+        Sleep(pollMs)
+    }
+    if (reasonOut = "")
+        reasonOut := "Create Quotes & Order Reports did not become enabled after scoped Start Quoting Add product."
+    return false
 }
 
 AdvisorQuoteClickProductOverviewSubnavFromRapport(db) {
@@ -3165,42 +3929,277 @@ AdvisorQuoteHandleProductOverview(db) {
     return ""
 }
 
-AdvisorQuoteHandleConsumerReports(db) {
-    waitArgs := Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"])
-    if !AdvisorQuoteWaitForCondition("consumer_reports_ready", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs)
+AdvisorQuoteHandleConsumerReports(db, &failureReason := "") {
+    failureReason := ""
+    waitArgs := AdvisorQuoteAscWaitArgs(db, Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"]))
+    if !AdvisorQuoteWaitForCondition("consumer_reports_ready", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs) {
+        failureReason := "CONSUMER_REPORTS_READY_TIMEOUT"
         return false
+    }
 
     if !AdvisorQuoteClickById(db["selectors"]["consumerReportsConsentYesId"], db["timeouts"]["actionMs"])
-        if !AdvisorQuoteClickByText("yes", "button,a", db["timeouts"]["actionMs"])
+        if !AdvisorQuoteClickByText("yes", "button,a", db["timeouts"]["actionMs"]) {
+            failureReason := "CONSUMER_REPORTS_CONSENT_CLICK_FAILED"
             return false
+        }
 
-    return AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db)) {
+        failureReason := "CONSUMER_REPORTS_TO_DRIVERS_OR_INCIDENTS_TIMEOUT"
+        return false
+    }
+    return true
 }
 
 AdvisorQuoteHandleDriversVehicles(profile, db) {
     AdvisorQuoteSetStep("DRIVERS_VEHICLES", "Waiting for Drivers and vehicles stage.")
-    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    AdvisorQuoteAppendLog("ASC_DRIVERS_VEHICLES_HANDLER_INVOKED", AdvisorQuoteGetLastStep(), "ascDriversVehiclesHandlerInvoked=1")
+    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
         return false
 
     if AdvisorQuoteIsIncidentsPage(db)
         return true
 
-    if !AdvisorQuoteResolveDrivers(profile, db)
+    AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1")
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    AdvisorQuoteLogAscParticipantDetailStatus(participantStatus, "ASC_PARTICIPANT_DETAIL_STATUS")
+    if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND") {
+        AdvisorQuoteAppendLog("ASC_PARTICIPANT_DETAIL_NOT_FOUND", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus))
+        return false
+    }
+
+    maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db)
+    AdvisorQuoteAppendLog("ASC_PARTICIPANT_MARITAL_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus))
+    maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
+    if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"])
         return false
 
-    if !AdvisorQuoteResolveVehicles(profile, db)
+    selectedSpouseName := AdvisorQuoteStatusValue(maritalStatus, "selectedSpouseText")
+    AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascDriverReconcileCalled=1")
+    if !AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName)
         return false
 
-    if !AdvisorQuoteHandleOpenModals(profile, db, 12000)
+    AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascVehicleReconcileCalled=1")
+    if !AdvisorQuoteReconcileAscVehicles(profile, db)
         return false
 
-    if !AdvisorQuoteWaitForContinueEnabled(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["transitionMs"])
+    if !AdvisorQuoteAscSaveAndContinueIfReady(profile, db)
         return false
+
+    return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
+}
+
+AdvisorQuoteGetAscParticipantDetailStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_participant_detail_status", Map(), 2, 120))
+}
+
+AdvisorQuoteLogAscParticipantDetailStatus(status, eventType) {
+    AdvisorQuoteAppendLog(eventType, AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(status))
+}
+
+AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", ascProductRouteId=" AdvisorQuoteStatusValue(status, "ascProductRouteId")
+        . ", maritalStatusPresent=" AdvisorQuoteStatusValue(status, "maritalStatusPresent")
+        . ", maritalStatusSelected=" AdvisorQuoteStatusValue(status, "maritalStatusSelected")
+        . ", spouseDropdownPresent=" AdvisorQuoteStatusValue(status, "spouseDropdownPresent")
+        . ", spouseOptionCount=" AdvisorQuoteStatusValue(status, "spouseOptionCount")
+        . ", propertyOwnershipValue=" AdvisorQuoteStatusValue(status, "propertyOwnershipValue")
+        . ", ageFirstLicensedValue=" AdvisorQuoteStatusValue(status, "ageFirstLicensedValue")
+        . ", emailPresent=" AdvisorQuoteStatusValue(status, "emailPresent")
+        . ", phonePresent=" AdvisorQuoteStatusValue(status, "phonePresent")
+        . ", saveButtonPresent=" AdvisorQuoteStatusValue(status, "saveButtonPresent")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db) {
+    person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
+    args := Map(
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "primaryName", AdvisorQuoteProfileFullName(profile),
+        "primaryAge", "",
+        "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
+        "maxSpouseAgeDifference", "14",
+        "expectedPropertyOwnership", AdvisorQuoteResolveParticipantPropertyOwnership(profile, db)
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_resolve_participant_marital_and_spouse", args))
+}
+
+AdvisorQuoteBuildAscMaritalStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", selectedMaritalStatus=" AdvisorQuoteStatusValue(status, "selectedMaritalStatus")
+        . ", selectedSpouseText=" AdvisorQuoteStatusValue(status, "selectedSpouseText")
+        . ", selectedAgeDiff=" AdvisorQuoteStatusValue(status, "selectedAgeDiff")
+        . ", candidateCount=" AdvisorQuoteStatusValue(status, "candidateCount")
+        . ", spouseSelectionMethod=" AdvisorQuoteStatusValue(status, "spouseSelectionMethod")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+}
+
+AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName := "") {
+    Loop 8 {
+        status := AdvisorQuoteGetAscDriverRowsStatus()
+        AdvisorQuoteAppendLog("ASC_DRIVER_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverRowsStatusDetail(status))
+        if (AdvisorQuoteStatusValue(status, "result") = "NONE")
+            return true
+
+        result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
+        AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result))
+        outcome := AdvisorQuoteStatusValue(result, "result")
+        if (outcome = "OK")
+            return true
+        if AdvisorQuoteIsStateInList(outcome, ["AMBIGUOUS", "FAILED", "ERROR", ""])
+            return false
+
+        clickedCount := AdvisorQuoteStatusInteger(result, "addClickedCount") + AdvisorQuoteStatusInteger(result, "removeClickedCount")
+        if (clickedCount <= 0)
+            return false
+        if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+            return false
+        if !SafeSleep(db["timeouts"]["pollMs"])
+            return false
+    }
+    AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_FAILED", AdvisorQuoteGetLastStep(), "reason=max-iterations")
+    return false
+}
+
+AdvisorQuoteGetAscDriverRowsStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_driver_rows_status", Map(), 2, 120))
+}
+
+AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName := "") {
+    args := Map(
+        "primaryName", AdvisorQuoteProfileFullName(profile),
+        "primaryAge", "",
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "selectedSpouseName", selectedSpouseName,
+        "expectedDriverNames", AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName)
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_driver_rows", args))
+}
+
+AdvisorQuoteBuildAscDriverRowsStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", driverCount=" AdvisorQuoteStatusValue(status, "driverCount")
+        . ", unresolvedDriverCount=" AdvisorQuoteStatusValue(status, "unresolvedDriverCount")
+        . ", addedDriverCount=" AdvisorQuoteStatusValue(status, "addedDriverCount")
+        . ", removedDriverCount=" AdvisorQuoteStatusValue(status, "removedDriverCount")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", driverSummaries=" AdvisorQuoteStatusValue(status, "driverSummaries")
+}
+
+AdvisorQuoteBuildAscDriverReconcileDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", primaryAction=" AdvisorQuoteStatusValue(status, "primaryAction")
+        . ", spouseAction=" AdvisorQuoteStatusValue(status, "spouseAction")
+        . ", removedDrivers=" AdvisorQuoteStatusValue(status, "removedDrivers")
+        . ", unresolvedDrivers=" AdvisorQuoteStatusValue(status, "unresolvedDrivers")
+        . ", addClickedCount=" AdvisorQuoteStatusValue(status, "addClickedCount")
+        . ", removeClickedCount=" AdvisorQuoteStatusValue(status, "removeClickedCount")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+}
+
+AdvisorQuoteReconcileAscVehicles(profile, db) {
+    policy := AdvisorQuoteClassifyAscVehicles(profile)
+    AdvisorQuoteAppendLog(
+        "ASC_VEHICLE_POLICY",
+        AdvisorQuoteGetLastStep(),
+        "completeVehicleCount=" policy["completeVehicles"].Length
+            . ", partialVehicleCount=" policy["partialYearMakeVehicles"].Length
+            . ", deferredVehicleCount=" policy["deferredVehicles"].Length
+            . ", completeVehicles=" AdvisorQuoteVehicleListSummary(policy["completeVehicles"])
+            . ", partialVehicles=" AdvisorQuoteVehicleListSummary(policy["partialYearMakeVehicles"])
+            . ", deferredVehicles=" AdvisorQuoteVehicleListSummary(policy["deferredVehicles"])
+    )
+
+    Loop 10 {
+        status := AdvisorQuoteGetAscVehicleRowsStatus()
+        AdvisorQuoteAppendLog("ASC_VEHICLE_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleRowsStatusDetail(status))
+        result := AdvisorQuoteRunAscVehicleReconcile(policy)
+        AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleReconcileDetail(result))
+        outcome := AdvisorQuoteStatusValue(result, "result")
+        if (outcome = "OK")
+            return true
+        if AdvisorQuoteIsStateInList(outcome, ["AMBIGUOUS", "FAILED", "ERROR", ""])
+            return false
+
+        clickedEvidence := AdvisorQuoteStatusValue(result, "addedVehicles")
+            . AdvisorQuoteStatusValue(result, "removedVehicles")
+            . AdvisorQuoteStatusValue(result, "promotedPartialVehicles")
+        if (Trim(clickedEvidence) = "" && AdvisorQuoteStatusValue(result, "method") != "partial-vehicle-unique-vin-add")
+            return false
+        if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+            return false
+        if !SafeSleep(db["timeouts"]["pollMs"])
+            return false
+    }
+    AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_FAILED", AdvisorQuoteGetLastStep(), "reason=max-iterations")
+    return false
+}
+
+AdvisorQuoteGetAscVehicleRowsStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_vehicle_rows_status", Map(), 2, 120))
+}
+
+AdvisorQuoteRunAscVehicleReconcile(policy) {
+    args := Map(
+        "expectedVehicles", AdvisorQuoteBuildExpectedVehiclesArgList(policy["completeVehicles"]),
+        "partialVehicles", AdvisorQuoteBuildAscPartialVehiclesArgList(policy["partialYearMakeVehicles"])
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_vehicle_rows", args))
+}
+
+AdvisorQuoteBuildAscVehicleRowsStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", vehicleCount=" AdvisorQuoteStatusValue(status, "vehicleCount")
+        . ", unresolvedVehicleCount=" AdvisorQuoteStatusValue(status, "unresolvedVehicleCount")
+        . ", addedVehicleCount=" AdvisorQuoteStatusValue(status, "addedVehicleCount")
+        . ", confirmedOrAddedVehicleCount=" AdvisorQuoteStatusValue(status, "confirmedOrAddedVehicleCount")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", vehicleSummaries=" AdvisorQuoteStatusValue(status, "vehicleSummaries")
+}
+
+AdvisorQuoteBuildAscVehicleReconcileDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", addedVehicles=" AdvisorQuoteStatusValue(status, "addedVehicles")
+        . ", removedVehicles=" AdvisorQuoteStatusValue(status, "removedVehicles")
+        . ", promotedPartialVehicles=" AdvisorQuoteStatusValue(status, "promotedPartialVehicles")
+        . ", deferredPartialVehicles=" AdvisorQuoteStatusValue(status, "deferredPartialVehicles")
+        . ", confirmedVehicleCount=" AdvisorQuoteStatusValue(status, "confirmedVehicleCount")
+        . ", unresolvedVehicles=" AdvisorQuoteStatusValue(status, "unresolvedVehicles")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+}
+
+AdvisorQuoteAscSaveAndContinueIfReady(profile, db) {
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    driverStatus := AdvisorQuoteGetAscDriverRowsStatus()
+    vehicleStatus := AdvisorQuoteGetAscVehicleRowsStatus()
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_PARTICIPANT_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus))
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_DRIVER_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverRowsStatusDetail(driverStatus))
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_VEHICLE_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleRowsStatusDetail(vehicleStatus))
+
+    unresolvedDrivers := AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount")
+    unresolvedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "unresolvedVehicleCount")
+    confirmedOrAddedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "confirmedOrAddedVehicleCount")
+    saveEnabled := AdvisorQuoteStatusValue(participantStatus, "saveButtonEnabled")
+
+    if (unresolvedDrivers > 0 || unresolvedVehicles > 0 || confirmedOrAddedVehicles < 1 || saveEnabled != "1") {
+        AdvisorQuoteAppendLog(
+            "ASC109_SAVE_DISABLED_AFTER_RECONCILIATION",
+            AdvisorQuoteGetLastStep(),
+            "unresolvedDrivers=" unresolvedDrivers
+                . ", unresolvedVehicles=" unresolvedVehicles
+                . ", confirmedOrAddedVehicles=" confirmedOrAddedVehicles
+                . ", saveButtonEnabled=" saveEnabled
+        )
+        return false
+    }
 
     if !AdvisorQuoteClickById(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["actionMs"])
         return false
-
-    return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    AdvisorQuoteAppendLog("ASC_SAVE_AND_CONTINUE_CLICKED", AdvisorQuoteGetLastStep(), "result=OK")
+    return true
 }
 
 AdvisorQuoteResolveDrivers(profile, db) {
@@ -3451,6 +4450,8 @@ AdvisorQuoteFillParticipantModal(profile, db) {
         "defensiveDriving", db["defaults"]["defensiveDriving"],
         "propertyOwnership", propertyOwnership,
         "oppositeGenderValue", oppositeGenderValue,
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
         "spouseSelectId", db["texts"]["spouseSelectId"]
     )
     raw := AdvisorQuoteRunOp("fill_participant_modal", args)
@@ -3526,7 +4527,7 @@ AdvisorQuoteHandleIncidentsIfPresent(db) {
     if (result != "OK")
         return false
 
-    return AdvisorQuoteWaitForCondition("incidents_done", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    return AdvisorQuoteWaitForCondition("incidents_done", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
 }
 
 AdvisorQuoteWaitForQuoteLanding(db) {
@@ -3566,7 +4567,7 @@ AdvisorQuoteIsOnAscProductPage(db) {
 }
 
 AdvisorQuoteIsIncidentsPage(db) {
-    args := Map("incidentsHeading", db["texts"]["incidentsHeading"])
+    args := AdvisorQuoteAscWaitArgs(db, Map("incidentsHeading", db["texts"]["incidentsHeading"]))
     return AdvisorQuoteWaitForCondition("is_incidents", 500, 150, args)
 }
 
@@ -3788,6 +4789,9 @@ AdvisorQuoteIsJsActionOp(op) {
         "handle_vehicle_edit_modal",
         "ensure_auto_start_quoting_state",
         "set_select_product_defaults",
+        "asc_resolve_participant_marital_and_spouse",
+        "asc_reconcile_driver_rows",
+        "asc_reconcile_vehicle_rows",
         "fill_participant_modal",
         "select_remove_reason",
         "fill_vehicle_modal",

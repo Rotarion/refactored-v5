@@ -649,6 +649,69 @@ function driversVehiclesDoc(extraNodes = []) {
   ]);
 }
 
+function ascDriverRow({ name, age, slug, added = false, add = false, remove = false }) {
+  const row = new FakeElement('div', {
+    className: 'driver-row',
+    text: `${name} Age ${age}${added ? ' Added to quote' : ''}`
+  });
+  const markAdded = () => {
+    row._text = `${name} Age ${age} Added to quote`;
+    row.children = [];
+    row.appendChild(createButton(`${slug}-edit`, 'Edit'));
+  };
+  const markRemoved = () => {
+    row.hidden = true;
+  };
+  if (added)
+    row.appendChild(createButton(`${slug}-edit`, 'Edit'));
+  if (add)
+    row.appendChild(createButton(`${slug}-addToQuote`, 'Add', { onClick: markAdded }));
+  if (remove)
+    row.appendChild(createButton(`${slug}-remove`, 'Remove', { onClick: markRemoved }));
+  return row;
+}
+
+function ascVehicleRow({ text, slug, added = false, add = false, remove = false }) {
+  const row = new FakeElement('div', {
+    className: 'vehicle-row',
+    text: `${text}${added ? ' CONFIRMED' : ''}`
+  });
+  const markAdded = () => {
+    row._text = `${text} CONFIRMED`;
+    row.children = [];
+    row.appendChild(createButton(`${slug}-edit`, 'Edit'));
+  };
+  const markRemoved = () => {
+    row.hidden = true;
+  };
+  if (added)
+    row.appendChild(createButton(`${slug}-edit`, 'Edit'));
+  if (add)
+    row.appendChild(createButton(`${slug}-add`, 'Add', { onClick: markAdded }));
+  if (remove)
+    row.appendChild(createButton(`${slug}-remove`, 'Remove', { onClick: markRemoved }));
+  return row;
+}
+
+function ascDriversVehiclesDoc({ marital = 'Single', spouseOptions = [], drivers = [], vehicles = [], saveDisabled = false } = {}) {
+  const maritalName = 'agreement.agreementParticipant.party.maritalStatusEntCd';
+  const spouseSelect = createSelect('maritalStatusWithSpouse_spouseName', [
+    { value: '', text: 'Select One', selected: true },
+    ...spouseOptions
+  ], { name: 'agreement.agreementParticipant.party.spouse.id' });
+  return pageDoc("Drivers and vehicles Let's get some more details Add drivers Add vehicles Save and Continue", [
+    createRadio('maritalStatusEntCd_0002', maritalName, 'Single', { checked: marital === 'Single' }),
+    createRadio('maritalStatusEntCd_0001', maritalName, 'Married', { checked: marital === 'Married' }),
+    spouseSelect,
+    createSelect('propertyOwnershipEntCd_option', [{ value: '0001_0120', text: 'Own Home', selected: true }]),
+    createInput('ageFirstLicensed_ageFirstLicensed', '16'),
+    createInput('emailAddress.emailAddress', 'test.driver@example.com', { type: 'email' }),
+    ...drivers,
+    ...vehicles,
+    createButton('profile-summary-submitBtn', 'Save and Continue', { disabled: saveDisabled })
+  ]);
+}
+
 function incidentsDoc(extraNodes = []) {
   return pageDoc('Incidents Accident caused by being hit by animal or road debris', [
     createButton('CONTINUE_OFFER-btn', 'Continue'),
@@ -1470,6 +1533,59 @@ function appendVehicleInputRow(doc, index, yearValue = '') {
     doc.body.appendChild(node);
 }
 
+function appendStaleVehicleRow(doc, {
+  index = 5,
+  year = '',
+  vin = '',
+  make = '',
+  model = '',
+  subModel = '',
+  modelOptions = null,
+  cancelCloses = true,
+  includeCancel = true,
+  includeAdd = true
+} = {}) {
+  const row = new FakeElement('div', { className: 'add-vehicle-row', text: 'Add Car or Truck INCOMPLETE Car/Truck Vehicle Type Year VIN Manufacturer Model Sub-Model' });
+  const hideRow = () => {
+    const hide = (node) => {
+      node.hidden = true;
+      node.children.forEach(hide);
+    };
+    hide(row);
+  };
+  const nodes = [
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].VehTypeCd`, [
+      { value: 'CAR_TRUCK', text: 'Car/Truck', selected: true }
+    ]),
+    createInput(`ConsumerData.Assets.Vehicles[${index}].ModelYear`, year),
+    createInput(`ConsumerData.Assets.Vehicles[${index}].VehIdentificationNumber`, vin),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].Manufacturer`, [
+      { value: '', text: 'Select One', selected: !make },
+      { value: 'NISSAN', text: 'Nissan', selected: make === 'NISSAN' },
+      { value: 'HONDA', text: 'Honda', selected: make === 'HONDA' },
+      { value: 'HYUNDAI', text: 'Hyundai', selected: make === 'HYUNDAI' }
+    ], { disabled: !make }),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].Model`, modelOptions || [
+      { value: '', text: 'Select One', selected: !model },
+      { value: 'CUBE', text: 'CUBE', selected: model === 'CUBE' }
+    ], { disabled: !make }),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].SubModel`, [
+      { value: '', text: 'Select One', selected: !subModel },
+      { value: 'BASE', text: 'Base', selected: subModel === 'BASE' }
+    ], { disabled: !model })
+  ];
+  nodes.forEach((node) => row.appendChild(node));
+  if (includeAdd)
+    row.appendChild(createButton('confirmNewVehicle', 'Add'));
+  if (includeCancel)
+    row.appendChild(createButton(`cancelVehicle-${index}`, 'Cancel', { onClick: cancelCloses ? hideRow : null }));
+  doc.body.appendChild(row);
+  if (make) nodes[3].value = make;
+  if (model) nodes[4].value = model;
+  if (subModel) nodes[5].value = subModel;
+  return row;
+}
+
 function createVehicleCascadeRow(index, { enableOnEvent = true, manufacturerReady = false, readOnlyYear = false } = {}) {
   const manufacturer = createSelect(`ConsumerData.Assets.Vehicles[${index}].Manufacturer`, manufacturerReady ? [
     { value: '', text: 'Select One' },
@@ -1756,6 +1872,332 @@ function testVehicleContracts() {
   assert.strictEqual(catalogCorollaAddedStatus.confirmedVehicleMatched, '1');
   assert.strictEqual(catalogCorollaAddedStatus.makeMatched, '1');
   assert.strictEqual(catalogCorollaAddedStatus.modelMatched, '1');
+  const crvConfirmedStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'confirmedStatusMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'expectedModelKey']);
+  assert.strictEqual(crvConfirmedStatus.result, 'ADDED');
+  assert.strictEqual(crvConfirmedStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.confirmedStatusMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.yearMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.makeMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.modelMatched, '1');
+  assert.strictEqual(crvConfirmedStatus.expectedModelKey, 'CRV');
+  const crvCardWithoutHyphenStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CR-V',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CRV FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(crvCardWithoutHyphenStatus.result, 'ADDED');
+  assert.strictEqual(crvCardWithoutHyphenStatus.modelMatched, '1');
+  const crvSpaceVariantStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CR V',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(crvSpaceVariantStatus.result, 'ADDED');
+  assert.strictEqual(crvSpaceVariantStatus.modelMatched, '1');
+  const hrvPositiveStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'HRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda HR-V FAKEHRV1*******02 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(hrvPositiveStatus.result, 'ADDED');
+  assert.strictEqual(hrvPositiveStatus.modelMatched, '1');
+  const crvDoesNotMatchHrvStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2019 Honda HR-V FAKEHRV1*******02 Edit Remove CONFIRMED'
+  })), ['result', 'vehicleMatched', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.notStrictEqual(crvDoesNotMatchHrvStatus.result, 'ADDED');
+  assert.strictEqual(crvDoesNotMatchHrvStatus.confirmedVehicleMatched, '0');
+  const fordF250Status = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2021',
+    make: 'Ford',
+    model: 'F 250',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2021 Ford Trucks F-250 FAKEF250*******03 Edit Remove CONFIRMED'
+  })), ['result', 'modelMatched']);
+  assert.strictEqual(fordF250Status.result, 'ADDED');
+  assert.strictEqual(fordF250Status.modelMatched, '1');
+  const duplicateAddRowDoc = confirmedVehicleCardDoc({
+    text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  });
+  appendVehicleInputRow(duplicateAddRowDoc, 5, '2019');
+  duplicateAddRowDoc.getElementById('ConsumerData.Assets.Vehicles[5].Manufacturer').value = 'HONDA';
+  const duplicateAddRowStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, duplicateAddRowDoc), ['result', 'confirmedVehicleMatched', 'rowIncomplete', 'duplicateAddRowOpenForConfirmedVehicle', 'duplicateAddRowDetails']);
+  assert.strictEqual(duplicateAddRowStatus.result, 'ADDED');
+  assert.strictEqual(duplicateAddRowStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(duplicateAddRowStatus.rowIncomplete, '1');
+  assert.strictEqual(duplicateAddRowStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  assert.match(duplicateAddRowStatus.duplicateAddRowDetails, /model=/);
+  const crvFixture = fixtureScenario('gather-confirmed-honda-crv');
+  const crvFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, crvFixture.doc, crvFixture.href), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.strictEqual(crvFixtureStatus.result, 'ADDED');
+  assert.strictEqual(crvFixtureStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(crvFixtureStatus.modelMatched, '1');
+  const duplicateFixture = fixtureScenario('gather-confirmed-honda-crv-with-duplicate-add-row');
+  const duplicateFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2019',
+    make: 'Honda',
+    model: 'CRV',
+    allowedMakeLabels: 'HONDA',
+    strictModelMatch: '1'
+  }, duplicateFixture.doc, duplicateFixture.href), ['result', 'duplicateAddRowOpenForConfirmedVehicle']);
+  assert.strictEqual(duplicateFixtureStatus.result, 'ADDED');
+  assert.strictEqual(duplicateFixtureStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  const partialNissanStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'promotedModel', 'confirmedVehicleMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'vinEvidence', 'method']);
+  assert.strictEqual(partialNissanStatus.result, 'ADDED');
+  assert.strictEqual(partialNissanStatus.partialPromoted, '1');
+  assert.strictEqual(partialNissanStatus.promotedModel, 'CUBE');
+  assert.strictEqual(partialNissanStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(partialNissanStatus.modelMatched, '1');
+  assert.strictEqual(partialNissanStatus.vinEvidence, '1');
+  assert.strictEqual(partialNissanStatus.method, 'partial-confirmed-card');
+  const partialNissanFixture = fixtureScenario('gather-partial-confirmed-nissan-cube');
+  const partialNissanFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, partialNissanFixture.doc, partialNissanFixture.href), ['result', 'partialPromoted', 'promotedModel']);
+  assert.strictEqual(partialNissanFixtureStatus.result, 'ADDED');
+  assert.strictEqual(partialNissanFixtureStatus.partialPromoted, '1');
+  assert.strictEqual(partialNissanFixtureStatus.promotedModel, 'CUBE');
+  const partialAmbiguousStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2010 Nissan ALTIMA FAKEALTI*******04 Edit Remove CONFIRMED'
+  ])), ['result', 'partialPromoted', 'candidateCount', 'failedFields']);
+  assert.strictEqual(partialAmbiguousStatus.result, 'AMBIGUOUS');
+  assert.strictEqual(partialAmbiguousStatus.partialPromoted, '0');
+  assert.strictEqual(partialAmbiguousStatus.failedFields, 'partialVehicleAmbiguous');
+  const partialNoVinStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Nissan CUBE Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'promotedModel', 'vinEvidence', 'failedFields']);
+  assert.strictEqual(partialNoVinStatus.result, 'MISSING');
+  assert.strictEqual(partialNoVinStatus.partialPromoted, '0');
+  assert.strictEqual(partialNoVinStatus.promotedModel, 'CUBE');
+  assert.strictEqual(partialNoVinStatus.vinEvidence, '0');
+  assert.strictEqual(partialNoVinStatus.failedFields, 'partialVehicleNoVin');
+  const partialWrongYearStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2011 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'candidateCount']);
+  assert.strictEqual(partialWrongYearStatus.result, 'MISSING');
+  assert.strictEqual(partialWrongYearStatus.partialPromoted, '0');
+  assert.strictEqual(partialWrongYearStatus.candidateCount, '0');
+  const partialWrongMakeStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'candidateCount']);
+  assert.strictEqual(partialWrongMakeStatus.result, 'MISSING');
+  assert.strictEqual(partialWrongMakeStatus.partialPromoted, '0');
+  assert.strictEqual(partialWrongMakeStatus.candidateCount, '0');
+  const broadDropdownUnsafeFixture = fixtureScenario('gather-partial-nissan-broad-dropdown-unsafe');
+  const broadDropdownUnsafeStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, broadDropdownUnsafeFixture.doc, broadDropdownUnsafeFixture.href), ['result', 'partialPromoted', 'rowIncomplete', 'method']);
+  assert.strictEqual(broadDropdownUnsafeStatus.result, 'MISSING');
+  assert.strictEqual(broadDropdownUnsafeStatus.partialPromoted, '0');
+  assert.strictEqual(broadDropdownUnsafeStatus.rowIncomplete, '1');
+  assert.strictEqual(broadDropdownUnsafeFixture.doc.getElementById('ConsumerData.Assets.Vehicles[5].Model').value, '');
+  const partialDuplicateFixture = fixtureScenario('gather-partial-confirmed-nissan-cube-with-duplicate-add-row');
+  const partialDuplicateStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, partialDuplicateFixture.doc, partialDuplicateFixture.href), ['result', 'partialPromoted', 'duplicateAddRowOpenForConfirmedVehicle']);
+  assert.strictEqual(partialDuplicateStatus.result, 'ADDED');
+  assert.strictEqual(partialDuplicateStatus.partialPromoted, '1');
+  assert.strictEqual(partialDuplicateStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  const staleAllConfirmedDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2013 Hyundai SONATA FAKEHYUN*******02 Edit Remove CONFIRMED',
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  const staleRow = appendStaleVehicleRow(staleAllConfirmedDoc);
+  const staleStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleAllConfirmedDoc), ['result', 'rowIncomplete', 'cancelButtonScoped', 'safeToCancel', 'reason']);
+  assert.strictEqual(staleStatus.result, 'FOUND');
+  assert.strictEqual(staleStatus.rowIncomplete, '1');
+  assert.strictEqual(staleStatus.cancelButtonScoped, '1');
+  assert.strictEqual(staleStatus.safeToCancel, '1');
+  const staleConfirmedGuard = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
+    expectedVehicles: [
+      { year: '2010', make: 'Nissan', model: 'CUBE', allowedMakeLabels: 'NISSAN', strictModelMatch: '1' },
+      { year: '2013', make: 'Hyundai', model: 'SONATA', allowedMakeLabels: 'HYUNDAI', strictModelMatch: '1' },
+      { year: '2019', make: 'Honda', model: 'CRV', allowedMakeLabels: 'HONDA', strictModelMatch: '1' }
+    ]
+  }, staleAllConfirmedDoc), ['result', 'matchedExpectedCount', 'unexpectedCount']);
+  assert.strictEqual(staleConfirmedGuard.result, 'OK');
+  assert.strictEqual(staleConfirmedGuard.matchedExpectedCount, '3');
+  assert.strictEqual(staleConfirmedGuard.unexpectedCount, '0');
+  const cancelStatus = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleAllConfirmedDoc), ['result', 'clicked', 'afterRowPresent']);
+  assert.strictEqual(cancelStatus.result, 'CANCELLED');
+  assert.strictEqual(cancelStatus.clicked, '1');
+  assert.strictEqual(cancelStatus.afterRowPresent, '0');
+  assert.strictEqual(staleRow.hidden, true);
+  const staleFilledDuplicateDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2013 Hyundai SONATA FAKEHYUN*******02 Edit Remove CONFIRMED',
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleFilledDuplicateDoc, {
+    year: '2010',
+    make: 'NISSAN',
+    modelOptions: [
+      { value: '', text: 'Select One', selected: true },
+      { value: '370Z', text: '370Z' },
+      { value: 'ALTIMA', text: 'ALTIMA' },
+      { value: 'CUBE', text: 'CUBE' }
+    ]
+  });
+  const staleFilledStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleFilledDuplicateDoc), ['result', 'safeToCancel', 'yearValue', 'manufacturerValue', 'modelValue']);
+  assert.strictEqual(staleFilledStatus.result, 'FOUND');
+  assert.strictEqual(staleFilledStatus.safeToCancel, '1');
+  assert.strictEqual(staleFilledStatus.yearValue, '2010');
+  assert.strictEqual(staleFilledStatus.manufacturerValue, 'NISSAN');
+  assert.strictEqual(staleFilledStatus.modelValue, '');
+  const staleUnsafeDoc = confirmedVehicleCardsDoc([
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleUnsafeDoc);
+  const staleUnsafeStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '0'
+  }, staleUnsafeDoc), ['result', 'safeToCancel', 'reason']);
+  assert.strictEqual(staleUnsafeStatus.result, 'UNSAFE');
+  assert.strictEqual(staleUnsafeStatus.safeToCancel, '0');
+  assert.strictEqual(staleUnsafeStatus.reason, 'expected-vehicles-not-satisfied');
+  const staleDecoyDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  const confirmedEditButton = staleDecoyDoc.getElementById('confirmed-edit-0');
+  const confirmedRemoveButton = staleDecoyDoc.getElementById('confirmed-remove-0');
+  const potentialCard = new FakeElement('div', { className: 'vehicle-card potential-vehicle', text: 'POTENTIAL VEHICLES 2010 Nissan CUBE Confirm Remove' });
+  const potentialConfirm = createButton('potential-confirm', 'Confirm');
+  const potentialRemove = createButton('potential-remove', 'Remove');
+  potentialCard.appendChild(potentialConfirm);
+  potentialCard.appendChild(potentialRemove);
+  staleDecoyDoc.body.appendChild(potentialCard);
+  appendStaleVehicleRow(staleDecoyDoc);
+  const staleDecoyCancel = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleDecoyDoc), ['result', 'clicked']);
+  assert.strictEqual(staleDecoyCancel.result, 'CANCELLED');
+  assert.strictEqual(staleDecoyCancel.clicked, '1');
+  assert.strictEqual(confirmedEditButton.clickCalls, 0);
+  assert.strictEqual(confirmedRemoveButton.clickCalls, 0);
+  assert.strictEqual(potentialConfirm.clickCalls, 0);
+  assert.strictEqual(potentialRemove.clickCalls, 0);
+  const staleBroadDropdownDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleBroadDropdownDoc, {
+    year: '2010',
+    make: 'NISSAN',
+    modelOptions: [
+      { value: '', text: 'Select One', selected: true },
+      { value: '370Z', text: '370Z' },
+      { value: 'ALTIMA', text: 'ALTIMA' },
+      { value: 'CUBE', text: 'CUBE' },
+      { value: 'FRONTIER', text: 'FRONTIER' }
+    ]
+  });
+  const broadModel = staleBroadDropdownDoc.getElementById('ConsumerData.Assets.Vehicles[5].Model');
+  const staleBroadStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleBroadDropdownDoc), ['result', 'safeToCancel']);
+  assert.strictEqual(staleBroadStatus.result, 'FOUND');
+  assert.strictEqual(staleBroadStatus.safeToCancel, '1');
+  assert.strictEqual(broadModel.value, '');
+  const staleVerifyFailedDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleVerifyFailedDoc, { cancelCloses: false });
+  const staleVerifyFailed = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleVerifyFailedDoc), ['result', 'clicked', 'afterRowPresent', 'failedFields']);
+  assert.strictEqual(staleVerifyFailed.result, 'VERIFY_FAILED');
+  assert.strictEqual(staleVerifyFailed.clicked, '1');
+  assert.strictEqual(staleVerifyFailed.afterRowPresent, '1');
+  assert.strictEqual(staleVerifyFailed.failedFields, 'staleRowStillPresent');
   const potentialVehicleStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', { year: '2019', make: 'Honda', model: 'Pilot' }, new FakeDocument([
     textNode('POTENTIAL VEHICLES'),
     new FakeElement('div', { className: 'vehicle-card', text: '2019 Honda PILOT Confirm Remove' })
@@ -1831,6 +2273,23 @@ function testVehicleContracts() {
   assert.strictEqual(priusPrimeMismatchStatus.unexpectedCount, '1');
   assert.match(priusPrimeMismatchStatus.unexpectedVehicles, /Prius Prime/);
   assert.match(priusPrimeMismatchStatus.missingExpectedVehicles, /Prius/);
+  const transitConnectMismatchStatus = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
+    expectedVehicles: [
+      {
+        year: '2020',
+        make: 'Ford',
+        model: 'Transit',
+        allowedMakeLabels: 'FORD|FORD VANS',
+        strictModelMatch: '1'
+      }
+    ]
+  }, confirmedVehicleCardsDoc([
+    '2020 Ford Vans Transit Connect FAKEVAN1*******04 Edit Remove CONFIRMED'
+  ])), ['result', 'matchedExpectedCount', 'unexpectedCount', 'missingExpectedVehicles']);
+  assert.strictEqual(transitConnectMismatchStatus.result, 'UNEXPECTED');
+  assert.strictEqual(transitConnectMismatchStatus.matchedExpectedCount, '0');
+  assert.strictEqual(transitConnectMismatchStatus.unexpectedCount, '1');
+  assert.match(transitConnectMismatchStatus.missingExpectedVehicles, /Transit/);
   const unresolvedConfirmedStatus = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
     expectedVehiclesText: '|Toyota|Prius Prime|'
   }, new FakeDocument()), ['result', 'expectedCount', 'unresolvedLeadVehicles']);
@@ -2362,6 +2821,176 @@ function createIncidentActionDoc(hasReason, hasContinue) {
   return new FakeDocument(nodes);
 }
 
+function testAscReconciliationContracts() {
+  const ascHref = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/';
+  const singleDoc = ascDriversVehiclesDoc({
+    marital: 'Married',
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Older Driver' },
+      { value: 'driver-b', text: 'Test Near Candidate' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', add: true }),
+      ascDriverRow({ name: 'Test Older Driver', age: 66, slug: 'test-older-driver', remove: true }),
+      ascDriverRow({ name: 'Test Near Candidate', age: 37, slug: 'test-near-candidate', remove: true })
+    ]
+  });
+  const singleStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), singleDoc, ascHref), [
+    'result', 'ascProductRouteId', 'spouseDropdownPresent', 'saveButtonPresent'
+  ]);
+  assert.strictEqual(singleStatus.result, 'FOUND');
+  assert.strictEqual(singleStatus.ascProductRouteId, '112');
+  const singleResolved = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Single',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14'
+  }, singleDoc, ascHref), ['result', 'selectedMaritalStatus', 'spouseSelectionMethod', 'selectedSpouseValue']);
+  assert.ok(['SINGLE_CONFIRMED', 'SINGLE_SET'].includes(singleResolved.result));
+  assert.strictEqual(singleResolved.spouseSelectionMethod, 'skipped-lead-single');
+  assert.strictEqual(singleResolved.selectedSpouseValue, '');
+
+  const marriedDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Older Driver' },
+      { value: 'driver-b', text: 'Test Near Candidate' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Older Driver', age: 66, slug: 'test-older-driver', remove: true }),
+      ascDriverRow({ name: 'Test Near Candidate', age: 37, slug: 'test-near-candidate', add: true })
+    ]
+  });
+  const marriedResolved = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Married',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14'
+  }, marriedDoc, ascHref), ['result', 'selectedSpouseText', 'spouseSelectionMethod', 'selectedAgeDiff']);
+  const marriedDriverDebug = parseLines(runOperator('asc_driver_rows_status', {}, marriedDoc, ascHref));
+  assert.strictEqual(marriedResolved.result, 'SELECTED', JSON.stringify({ marriedResolved, marriedDriverDebug }));
+  assert.strictEqual(marriedResolved.selectedSpouseText, 'Test Near Candidate');
+  assert.strictEqual(marriedResolved.spouseSelectionMethod, 'age-window');
+
+  const exactNameDoc = ascDriversVehiclesDoc({
+    marital: 'Married',
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Exact Spouse' },
+      { value: 'driver-b', text: 'Test Other Candidate' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Exact Spouse', age: 66, slug: 'test-exact-spouse', add: true }),
+      ascDriverRow({ name: 'Test Other Candidate', age: 37, slug: 'test-other-candidate', remove: true })
+    ]
+  });
+  const exactName = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Married',
+    primaryName: 'Test Primary Driver',
+    leadSpouseName: 'Test Exact Spouse'
+  }, exactNameDoc, ascHref), ['result', 'selectedSpouseText', 'spouseSelectionMethod']);
+  assert.strictEqual(exactName.result, 'SELECTED');
+  assert.strictEqual(exactName.selectedSpouseText, 'Test Exact Spouse');
+  assert.strictEqual(exactName.spouseSelectionMethod, 'name-match');
+
+  const ambiguousDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Candidate One' },
+      { value: 'driver-b', text: 'Test Candidate Two' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Candidate One', age: 38, slug: 'test-candidate-one', add: true }),
+      ascDriverRow({ name: 'Test Candidate Two', age: 37, slug: 'test-candidate-two', add: true })
+    ]
+  });
+  const ambiguous = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Married',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14'
+  }, ambiguousDoc, ascHref), ['result', 'failedFields']);
+  assert.strictEqual(ambiguous.result, 'AMBIGUOUS');
+
+  const noSafeDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [{ value: 'driver-a', text: 'Test Older Driver' }],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Older Driver', age: 66, slug: 'test-older-driver', add: true })
+    ]
+  });
+  const noSafe = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Married',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14'
+  }, noSafeDoc, ascHref), ['result']);
+  assert.strictEqual(noSafe.result, 'NO_SAFE_SPOUSE');
+
+  let driverDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', add: true }),
+      ascDriverRow({ name: 'Test Other Driver One', age: 66, slug: 'test-other-one', remove: true }),
+      ascDriverRow({ name: 'Test Other Driver Two', age: 37, slug: 'test-other-two', remove: true })
+    ]
+  });
+  for (let i = 0; i < 3; i += 1) {
+    runOperator('asc_reconcile_driver_rows', {
+      primaryName: 'Test Primary Driver',
+      leadMaritalStatus: 'Single'
+    }, driverDoc, ascHref);
+  }
+  const driverDone = assertKeyBlock(runOperator('asc_reconcile_driver_rows', {
+    primaryName: 'Test Primary Driver',
+    leadMaritalStatus: 'Single'
+  }, driverDoc, ascHref), ['result', 'unresolvedDrivers']);
+  assert.strictEqual(driverDone.result, 'OK', JSON.stringify(driverDone));
+  assert.strictEqual(driverDone.unresolvedDrivers, '');
+
+  let vehicleDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2019 Honda CR-V VIN: FAKECRV1*******01', slug: 'honda-crv', add: true }),
+      ascVehicleRow({ text: '2013 Hyundai Sonata VIN: FAKESONA*******02', slug: 'hyundai-sonata', add: true }),
+      ascVehicleRow({ text: '2010 Nissan cube VIN: FAKECUBE*******03', slug: 'nissan-cube', add: true })
+    ]
+  });
+  const vehicleArgs = {
+    expectedVehicles: [
+      { year: '2019', make: 'Honda', model: 'CR-V', allowedMakeLabels: 'HONDA', strictModelMatch: '1' },
+      { year: '2013', make: 'Hyundai', model: 'Sonata', allowedMakeLabels: 'HYUNDAI', strictModelMatch: '1' }
+    ],
+    partialVehicles: [
+      { year: '2010', make: 'Nissan', allowedMakeLabels: 'NISSAN' }
+    ]
+  };
+  for (let i = 0; i < 3; i += 1)
+    runOperator('asc_reconcile_vehicle_rows', vehicleArgs, vehicleDoc, ascHref);
+  const vehicleDone = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', vehicleArgs, vehicleDoc, ascHref), [
+    'result', 'promotedPartialVehicles', 'unresolvedVehicles'
+  ]);
+  assert.strictEqual(vehicleDone.result, 'OK');
+  assert.ok(vehicleDone.promotedPartialVehicles.includes('2010 Nissan'));
+  assert.strictEqual(vehicleDone.unresolvedVehicles, '');
+
+  const partialAmbiguousDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2010 Nissan cube VIN: FAKECUBE*******03', slug: 'nissan-cube', add: true }),
+      ascVehicleRow({ text: '2010 Nissan Altima VIN: FAKEALTI*******04', slug: 'nissan-altima', add: true })
+    ]
+  });
+  const partialAmbiguous = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [],
+    partialVehicles: [{ year: '2010', make: 'Nissan', allowedMakeLabels: 'NISSAN' }]
+  }, partialAmbiguousDoc, ascHref), ['result', 'failedFields']);
+  assert.strictEqual(partialAmbiguous.result, 'AMBIGUOUS');
+
+  const saveDisabledStatus = assertKeyBlock(runOperator('asc_vehicle_rows_status', baseArgs(), ascDriversVehiclesDoc({
+    saveDisabled: true,
+    vehicles: [ascVehicleRow({ text: '2019 Honda CR-V VIN: FAKECRV1*******01', slug: 'honda-crv', added: true })]
+  }), ascHref), ['result', 'saveButtonEnabled']);
+  assert.strictEqual(saveDisabledStatus.saveButtonEnabled, '0');
+}
+
 function testDriverAndModalContracts() {
   assert.strictEqual(runOperator('list_driver_slugs', {}, new FakeDocument([
     createButton('john-smith-addToQuote', 'Add'),
@@ -2522,6 +3151,7 @@ function run() {
   testAddressVerificationContracts();
   testDuplicateContracts();
   testDuplicateMovedAddressContracts();
+  testAscReconciliationContracts();
   testDriverAndModalContracts();
   testHighRiskStrengthenedContracts();
   process.stdout.write('advisor_quote_ops_smoke: PASS\n');

@@ -528,6 +528,218 @@
       }
     ]
   },
+  "gather-stale-row-all-confirmed-blank": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck Start Quoting",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE0000003 Edit Remove CONFIRMED" },
+          { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2013 Hyundai SONATA FAKESONATA00060 Edit Remove CONFIRMED" },
+          { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV00000031 Edit Remove CONFIRMED" }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck INCOMPLETE",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-all-confirmed-duplicate-year-make": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE0000003 Edit Remove CONFIRMED" }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck 2010 NISSAN Select One",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2010" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [{ "value": "NISSAN", "text": "Nissan", "selected": true }] },
+          {
+            "tag": "select",
+            "id": "ConsumerData.Assets.Vehicles[5].Model",
+            "options": [
+              { "value": "", "text": "Select One", "selected": true },
+              { "value": "370Z", "text": "370Z" },
+              { "value": "ALTIMA", "text": "ALTIMA" },
+              { "value": "CUBE", "text": "CUBE" },
+              { "value": "FRONTIER", "text": "FRONTIER" }
+            ]
+          },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-not-all-confirmed": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV00000031 Edit Remove CONFIRMED" }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck INCOMPLETE",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-confirmed-decoy": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      {
+        "tag": "section",
+        "text": "Cars and Trucks CONFIRMED VEHICLES",
+        "children": [
+          {
+            "tag": "div",
+            "className": "vehicle-card confirmed-vehicle",
+            "text": "2019 Honda CR-V FAKECRV00000031 Edit Remove CONFIRMED",
+            "children": [
+              { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+              { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+            ]
+          }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck INCOMPLETE",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-potential-decoy": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES POTENTIAL VEHICLES Add Car or Truck",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV00000031 Edit Remove CONFIRMED" },
+      {
+        "tag": "div",
+        "className": "vehicle-card potential-vehicle",
+        "text": "2020 Honda HR-V FAKEHRV00000020 Confirm Remove",
+        "children": [
+          { "tag": "button", "id": "potential-confirm", "text": "Confirm" },
+          { "tag": "button", "id": "potential-remove", "text": "Remove" }
+        ]
+      },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck INCOMPLETE",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-broad-dropdown": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck Nissan models",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE0000003 Edit Remove CONFIRMED" },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck 2010 Nissan Model Select One 370Z ALTIMA CUBE FRONTIER",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2010" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [{ "value": "NISSAN", "text": "Nissan", "selected": true }] },
+          {
+            "tag": "select",
+            "id": "ConsumerData.Assets.Vehicles[5].Model",
+            "options": [
+              { "value": "", "text": "Select One", "selected": true },
+              { "value": "370Z", "text": "370Z" },
+              { "value": "ALTIMA", "text": "ALTIMA" },
+              { "value": "CUBE", "text": "CUBE" },
+              { "value": "FRONTIER", "text": "FRONTIER" }
+            ]
+          },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
+  "gather-stale-row-cancel-verify-failed": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck cancel remains open",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV00000031 Edit Remove CONFIRMED" },
+      {
+        "tag": "div",
+        "className": "vehicle-add-row incomplete",
+        "text": "Add Car or Truck INCOMPLETE",
+        "children": [
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [{ "value": "10", "text": "Car/Truck", "selected": true }] },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+          { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+          { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+          { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+          { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+        ]
+      }
+    ]
+  },
   "select-product-form": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
     "bodyText": "Select Product Is the customer currently insured? Yes",
@@ -758,6 +970,195 @@
     "nodes": [
       { "tag": "button", "id": "2023-ford-f150-add", "text": "Add" },
       { "tag": "button", "id": "2023-ford-f150-addToQuote", "text": "Add" }
+    ]
+  },
+  "asc-single-spouse-dropdown-visible": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Let's get some more details Add drivers Add vehicles Save and Continue",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "maritalStatusEntCd_0002", "name": "agreement.agreementParticipant.party.maritalStatusEntCd", "value": "Single", "checked": true },
+      { "tag": "input", "type": "radio", "id": "maritalStatusEntCd_0001", "name": "agreement.agreementParticipant.party.maritalStatusEntCd", "value": "Married" },
+      { "tag": "select", "id": "maritalStatusWithSpouse_spouseName", "name": "agreement.agreementParticipant.party.spouse.id", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "candidate-old", "text": "Test Older Driver" },
+        { "value": "candidate-near", "text": "Test Near Candidate" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40", "children": [{ "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }] },
+      { "tag": "div", "className": "driver-row", "text": "Test Older Driver Age 66", "children": [{ "tag": "button", "id": "test-older-driver-remove", "text": "Remove" }] },
+      { "tag": "div", "className": "driver-row", "text": "Test Near Candidate Age 37", "children": [{ "tag": "button", "id": "test-near-candidate-remove", "text": "Remove" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "asc-partial-unique-vin-vehicle": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add vehicles at least one vehicle must be added",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan cube VIN: FAKECUBE*******03", "children": [{ "tag": "button", "id": "nissan-cube-add", "text": "Add" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "asc-partial-ambiguous-vehicles": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add vehicles",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan cube VIN: FAKECUBE*******03", "children": [{ "tag": "button", "id": "nissan-cube-add", "text": "Add" }] },
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan Altima VIN: FAKEALTI*******04", "children": [{ "tag": "button", "id": "nissan-altima-add", "text": "Add" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "gather-confirmed-honda-crv": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-confirmed-honda-crv-with-duplicate-add-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+        { "value": "CAR_TRUCK", "text": "Car or Truck", "selected": true }
+      ] },
+      { "tag": "input", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2019" },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [
+        { "value": "HONDA", "text": "Honda", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
+    ]
+  },
+  "gather-partial-confirmed-nissan-cube": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-cube-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-cube-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-partial-ambiguous-nissan": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-cube-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-cube-remove", "text": "Remove" }
+        ] },
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan ALTIMA FAKEALTA*******04 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-altima-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-altima-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-partial-nissan-no-vin": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-cube-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-cube-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-partial-nissan-wrong-year": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2011 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-cube-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-cube-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-partial-nissan-wrong-make": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-crv-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-crv-remove", "text": "Remove" }
+        ] }
+      ] }
+    ]
+  },
+  "gather-partial-nissan-broad-dropdown-unsafe": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks Add Car or Truck",
+    "nodes": [
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+        { "value": "CAR_TRUCK", "text": "Car or Truck", "selected": true }
+      ] },
+      { "tag": "input", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2010" },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [
+        { "value": "NISSAN", "text": "Nissan", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "370Z", "text": "370Z" },
+        { "value": "ALTIMA", "text": "ALTIMA" },
+        { "value": "CUBE", "text": "CUBE" },
+        { "value": "FRONTIER", "text": "FRONTIER" }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
+    ]
+  },
+  "gather-partial-confirmed-nissan-cube-with-duplicate-add-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-cube-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-cube-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+        { "value": "CAR_TRUCK", "text": "Car or Truck", "selected": true }
+      ] },
+      { "tag": "input", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2010" },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [
+        { "value": "NISSAN", "text": "Nissan", "selected": true }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "370Z", "text": "370Z" },
+        { "value": "ALTIMA", "text": "ALTIMA" },
+        { "value": "CUBE", "text": "CUBE" }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [
+        { "value": "", "text": "Select One", "selected": true }
+      ] },
+      { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
     ]
   },
   "scan-current-page-rich": {

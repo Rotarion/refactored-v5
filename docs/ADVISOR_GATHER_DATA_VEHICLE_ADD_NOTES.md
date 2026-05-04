@@ -141,6 +141,14 @@ Gather Start Quoting Auto is a separate commitment check from Product Tile Grid 
 
 The workflow does not treat RAPPORT arrival as proof of commitment. If Start Quoting Auto is missing or unchecked after a verified Product Overview save, it may recover once by clicking the top `SELECT PRODUCT` subnav back to Product Tile Grid, reselecting Auto if needed, saving again, and re-reading Start Quoting. Sidebar Add Product remains refused as a Product Tile recovery path.
 
+Disabled `Create Quotes & Order Reports` is not treated as final failure when the Start Quoting section is otherwise committed and the scoped Start Quoting Add product handoff is available. After vehicle reconciliation passes, AHK can click the existing `click_start_quoting_add_product` op, which targets the Start Quoting `quotesButton` / Add product control, then re-read `gather_start_quoting_status` until Create Quotes becomes enabled. Only then does it click Create Quotes.
+
+This handoff is intentionally separate from unsafe Add Product fallback:
+
+- Allowed: scoped Start Quoting `quotesButton`, only after Product Tile Auto was verified, Product Overview was saved, vehicles reconciled, Auto is present/selected in Start Quoting, and Rating State is valid.
+- Refused: sidebar/left-nav `id=addProduct`, direct navigation, or using Add Product to compensate for missing Product Tile Auto verification.
+- Failure: if scoped Add product is missing/disabled, or Create Quotes remains disabled after the scoped handoff.
+
 ## Potential Vehicle Confirmation Guard
 
 Live evidence showed `confirm_potential_vehicle` could receive a broad Cars and Trucks container containing both CONFIRMED VEHICLES and POTENTIAL VEHICLES. That is unsafe because the first `Confirm` button inside the broad container can belong to an unrelated public-record vehicle.
@@ -173,7 +181,7 @@ Gather Data now classifies lead vehicles before confirmation/add:
 
 If no actionable vehicle exists, the workflow fails safely/manual with `NO_ACTIONABLE_LEAD_VEHICLE` or `VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED`. It does not guess, decode VINs, or select a different year.
 
-The confirmed-vehicle guard receives only actionable vehicles as expected vehicles. Ignored/deferred missing-year vehicles do not appear in `missingExpectedVehicles`, while unexpected confirmed public-record vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+The confirmed-vehicle guard receives complete actionable vehicles plus any partial year/make vehicles promoted from scoped confirmed-card evidence as expected vehicles. Ignored/deferred missing-year vehicles and unpromoted partials do not appear in `missingExpectedVehicles`, while unexpected confirmed public-record vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
 
 ## Vehicle Loop Idempotency
 
@@ -190,11 +198,45 @@ Preflight uses `gather_vehicle_add_status` for the exact lead vehicle. A vehicle
 
 When that strict confirmed-card evidence is present, the workflow logs `VEHICLE_ALREADY_CONFIRMED`, increments the satisfied count, and skips all confirm/add attempts for that vehicle. This makes RAPPORT retries idempotent: a retry begins by re-reading current confirmed cards and does not try to re-add an already confirmed Honda Pilot or Toyota Prius.
 
+Confirmed-card model matching now uses the same exact-normalized model keys for common punctuation variants before any Add Car or Truck row work. For example, `2019 Honda CRV`, `2019 Honda CR-V`, and `2019 Honda CR V` all match the confirmed card `2019 Honda CR-V ... CONFIRMED`. The matcher also normalizes `HR-V`, `CX-30`, `QX56`, Ford F-series spacing/hyphens, and `4Runner` spacing while preserving strict non-overmatch guards such as Prius/Prius Prime, Transit/Transit Connect, F150/F250, Silverado 1500/Silverado 2500, and CR-V/HR-V.
+
+If a retry starts after a previous failed attempt left an incomplete Add Car or Truck row open for a vehicle that is now proven already confirmed, `gather_vehicle_add_status` reports `duplicateAddRowOpenForConfirmedVehicle=1`. The workflow defers the duplicate-row failure until after it re-reads final confirmed/promoted vehicle reconciliation. If every expected complete vehicle and every safely promoted partial vehicle is already satisfied, the workflow can run the stale-row cleanup path instead of failing early.
+
+Partial year/make vehicles also get a confirmed-card preflight before any Add Car or Truck work. In `partialYearMakeMode=1`, `gather_vehicle_add_status` is read-only and inspects confirmed cards only. A partial vehicle is promoted only when exactly one confirmed same-year/same-make card exists, the card has visible model text, and the card has VIN or masked-VIN evidence. Example: a lead vehicle `2010 Nissan` can be promoted to `2010 Nissan CUBE` when Advisor already shows a single `2010 Nissan CUBE ... CONFIRMED` card with VIN evidence.
+
+The partial path does not select a model from a broad Add Car or Truck dropdown. If the Nissan model dropdown contains many options such as `370Z`, `ALTIMA`, `CUBE`, and `FRONTIER`, the workflow will not choose the first option. If no unique VIN-bearing confirmed card exists, the partial vehicle is deferred or fails safely depending on whether another vehicle is already satisfied.
+
+If a retry starts with an incomplete Add Car or Truck row open for a partial vehicle that is now satisfied by a promoted confirmed card, the workflow applies the same deferred cleanup rule. It never clicks Add on that duplicate row and never removes the confirmed card.
+
+## Stale Duplicate Add Row Cleanup
+
+When final Gather Data reconciliation proves all expected vehicles are already confirmed or safely promoted, the workflow may cancel a stale incomplete Add Car or Truck row. This is intentionally narrow:
+
+- AHK first calls `gather_confirmed_vehicles_status` with the final expected list, including promoted partials such as a unique VIN-bearing `2010 Nissan CUBE` card promoted from a `2010 Nissan` lead vehicle.
+- Only after that guard passes does AHK call `gather_stale_add_vehicle_row_status` with `allExpectedVehiclesSatisfied=1`.
+- The status op requires an Add Car or Truck / incomplete row, a row-scoped Cancel button, no meaningful VIN, no committed model/submodel, and no confirmed-card or potential-card context.
+- `cancel_stale_add_vehicle_row` clicks only that row's Cancel button, never Add, Remove, Confirm, or confirmed-card controls.
+- After Cancel, the op verifies the stale row is no longer open. AHK then re-reads the row status and final confirmed-vehicle reconciliation before moving to Start Quoting.
+- The cleanup runs at most once in the Gather Data flow. If the row is unsafe or Cancel does not close it, the workflow fails with a stale-row diagnostic instead of adding a duplicate.
+
+This cleanup does not loosen model selection. A broad model dropdown with many options remains unsafe for missing-model vehicles. The workflow does not choose the first available model; it relies on confirmed/promoted card evidence or a uniquely scoped one-option modal/dropdown.
+
 The older `vehicle_already_listed` check is no longer allowed to skip work by itself. If it reports listed but the confirmed-card preflight does not prove the vehicle is confirmed, the workflow logs that legacy evidence and continues with the normal potential-confirm/add path.
 
 After `confirm_potential_vehicle` clicks a matching potential card, the workflow no longer relies only on the narrow `vehicle_confirmed` wait condition. It polls `gather_vehicle_add_status` for the same exact vehicle and accepts success only when the confirmed-card predicate above becomes true. If a potential confirmation does not become a matching confirmed vehicle card, the workflow fails with a vehicle-confirm status timeout and captures diagnostics.
 
-After all actionable vehicles are processed, the workflow reconciles the page with `gather_confirmed_vehicles_status` using only actionable vehicles as expected. It logs satisfied/actionable/ignored/deferred counts plus missing and unexpected confirmed vehicles. Missing actionable confirmed vehicles fail with `MISSING_EXPECTED_CONFIRMED_VEHICLES`; unexpected confirmed vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+After all actionable vehicles and partial confirmed-card promotions are processed, the workflow reconciles the page with `gather_confirmed_vehicles_status` using complete actionable vehicles plus promoted partial vehicles as expected. Unpromoted partial vehicles are not reported as missing expected vehicles. Missing expected confirmed vehicles fail with `MISSING_EXPECTED_CONFIRMED_VEHICLES`; unexpected confirmed vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+
+Promoted partial vehicles are now first-class final expected vehicles. A year/make-only lead vehicle keeps a partial display key such as `2010|NISSAN`, so it can reach the partial confirmed-card preflight instead of being dropped during profile normalization. If a unique VIN-bearing confirmed card promotes that partial to a complete vehicle, such as `2010 Nissan CUBE`, the final expected list includes the promoted model with `promotedFromPartial=1` and `promotionSource=confirmed-card`.
+
+The final reconciliation trace logs:
+
+- `completeExpectedCount`
+- `promotedPartialExpectedCount`
+- `finalExpectedCount`
+- `finalExpectedVehicles`
+
+If a promoted partial exists but does not appear in the structured final expected args, the workflow fails before calling the final guard with `PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST`. Unpromoted partial vehicles remain deferred and are not included as missing expected vehicles.
 
 ## Final Confirmed-Vehicle Reconciliation
 
@@ -231,9 +273,21 @@ The match is still strict:
 - normalized model exact match is required
 - VIN is preferred when available but is not required when the lead has no VIN
 - `Toyota Prius` does not match `Toyota Prius Prime`
-- partial vehicles such as `2021 Mazda` are not promoted or counted as confirmed by this patch
+- partial vehicles such as `2021 Mazda` are promoted only from a unique VIN-bearing confirmed card during 102 Gather Data; broad model dropdowns remain unsafe
 
 The catalog-aware labels apply to confirmed-card evidence (`gather_vehicle_add_status` preflight/status and `gather_confirmed_vehicles_status` final guard). Potential-card confirmation, Add Car or Truck row selection, model dropdown selection, and ASC/109 handling are unchanged.
+
+## ASCPRODUCT Vehicle Reconciliation
+
+ASCPRODUCT is now a separate downstream reconciliation stage. It does not loosen the 102 Gather Data rules. Instead, it receives:
+
+- complete lead vehicles: exact year, recognized make, and non-empty normalized model
+- partial year/make vehicles: exact year and recognized make, with no model text
+- deferred vehicles: insufficient evidence for automatic action
+
+Complete ASCPRODUCT vehicle rows still require exact year, catalog-aware make family, and strict normalized model. Partial year/make rows may be promoted only from scoped live Advisor evidence: exactly one same-year/same-make row, visible model text, and VIN or masked VIN evidence. This is why a synthetic `2010 Nissan` lead can promote only when Advisor shows a single VIN-bearing `2010 Nissan <model>` row. If two same-year/same-make candidates appear, the workflow fails/defer safely instead of choosing a first model from a broad dropdown.
+
+Already added/confirmed ASCPRODUCT vehicle rows count as satisfied only after the row is re-read. Save and Continue remains blocked until driver rows are resolved, at least one expected or safely promoted vehicle is added/confirmed, and Advisor's `profile-summary-submitBtn` is enabled.
 
 ## Validation
 
