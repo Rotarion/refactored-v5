@@ -1533,6 +1533,59 @@ function appendVehicleInputRow(doc, index, yearValue = '') {
     doc.body.appendChild(node);
 }
 
+function appendStaleVehicleRow(doc, {
+  index = 5,
+  year = '',
+  vin = '',
+  make = '',
+  model = '',
+  subModel = '',
+  modelOptions = null,
+  cancelCloses = true,
+  includeCancel = true,
+  includeAdd = true
+} = {}) {
+  const row = new FakeElement('div', { className: 'add-vehicle-row', text: 'Add Car or Truck INCOMPLETE Car/Truck Vehicle Type Year VIN Manufacturer Model Sub-Model' });
+  const hideRow = () => {
+    const hide = (node) => {
+      node.hidden = true;
+      node.children.forEach(hide);
+    };
+    hide(row);
+  };
+  const nodes = [
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].VehTypeCd`, [
+      { value: 'CAR_TRUCK', text: 'Car/Truck', selected: true }
+    ]),
+    createInput(`ConsumerData.Assets.Vehicles[${index}].ModelYear`, year),
+    createInput(`ConsumerData.Assets.Vehicles[${index}].VehIdentificationNumber`, vin),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].Manufacturer`, [
+      { value: '', text: 'Select One', selected: !make },
+      { value: 'NISSAN', text: 'Nissan', selected: make === 'NISSAN' },
+      { value: 'HONDA', text: 'Honda', selected: make === 'HONDA' },
+      { value: 'HYUNDAI', text: 'Hyundai', selected: make === 'HYUNDAI' }
+    ], { disabled: !make }),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].Model`, modelOptions || [
+      { value: '', text: 'Select One', selected: !model },
+      { value: 'CUBE', text: 'CUBE', selected: model === 'CUBE' }
+    ], { disabled: !make }),
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].SubModel`, [
+      { value: '', text: 'Select One', selected: !subModel },
+      { value: 'BASE', text: 'Base', selected: subModel === 'BASE' }
+    ], { disabled: !model })
+  ];
+  nodes.forEach((node) => row.appendChild(node));
+  if (includeAdd)
+    row.appendChild(createButton('confirmNewVehicle', 'Add'));
+  if (includeCancel)
+    row.appendChild(createButton(`cancelVehicle-${index}`, 'Cancel', { onClick: cancelCloses ? hideRow : null }));
+  doc.body.appendChild(row);
+  if (make) nodes[3].value = make;
+  if (model) nodes[4].value = model;
+  if (subModel) nodes[5].value = subModel;
+  return row;
+}
+
 function createVehicleCascadeRow(index, { enableOnEvent = true, manufacturerReady = false, readOnlyYear = false } = {}) {
   const manufacturer = createSelect(`ConsumerData.Assets.Vehicles[${index}].Manufacturer`, manufacturerReady ? [
     { value: '', text: 'Select One' },
@@ -2029,6 +2082,122 @@ function testVehicleContracts() {
   assert.strictEqual(partialDuplicateStatus.result, 'ADDED');
   assert.strictEqual(partialDuplicateStatus.partialPromoted, '1');
   assert.strictEqual(partialDuplicateStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  const staleAllConfirmedDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2013 Hyundai SONATA FAKEHYUN*******02 Edit Remove CONFIRMED',
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  const staleRow = appendStaleVehicleRow(staleAllConfirmedDoc);
+  const staleStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleAllConfirmedDoc), ['result', 'rowIncomplete', 'cancelButtonScoped', 'safeToCancel', 'reason']);
+  assert.strictEqual(staleStatus.result, 'FOUND');
+  assert.strictEqual(staleStatus.rowIncomplete, '1');
+  assert.strictEqual(staleStatus.cancelButtonScoped, '1');
+  assert.strictEqual(staleStatus.safeToCancel, '1');
+  const staleConfirmedGuard = assertKeyBlock(runOperator('gather_confirmed_vehicles_status', {
+    expectedVehicles: [
+      { year: '2010', make: 'Nissan', model: 'CUBE', allowedMakeLabels: 'NISSAN', strictModelMatch: '1' },
+      { year: '2013', make: 'Hyundai', model: 'SONATA', allowedMakeLabels: 'HYUNDAI', strictModelMatch: '1' },
+      { year: '2019', make: 'Honda', model: 'CRV', allowedMakeLabels: 'HONDA', strictModelMatch: '1' }
+    ]
+  }, staleAllConfirmedDoc), ['result', 'matchedExpectedCount', 'unexpectedCount']);
+  assert.strictEqual(staleConfirmedGuard.result, 'OK');
+  assert.strictEqual(staleConfirmedGuard.matchedExpectedCount, '3');
+  assert.strictEqual(staleConfirmedGuard.unexpectedCount, '0');
+  const cancelStatus = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleAllConfirmedDoc), ['result', 'clicked', 'afterRowPresent']);
+  assert.strictEqual(cancelStatus.result, 'CANCELLED');
+  assert.strictEqual(cancelStatus.clicked, '1');
+  assert.strictEqual(cancelStatus.afterRowPresent, '0');
+  assert.strictEqual(staleRow.hidden, true);
+  const staleFilledDuplicateDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2013 Hyundai SONATA FAKEHYUN*******02 Edit Remove CONFIRMED',
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleFilledDuplicateDoc, {
+    year: '2010',
+    make: 'NISSAN',
+    modelOptions: [
+      { value: '', text: 'Select One', selected: true },
+      { value: '370Z', text: '370Z' },
+      { value: 'ALTIMA', text: 'ALTIMA' },
+      { value: 'CUBE', text: 'CUBE' }
+    ]
+  });
+  const staleFilledStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleFilledDuplicateDoc), ['result', 'safeToCancel', 'yearValue', 'manufacturerValue', 'modelValue']);
+  assert.strictEqual(staleFilledStatus.result, 'FOUND');
+  assert.strictEqual(staleFilledStatus.safeToCancel, '1');
+  assert.strictEqual(staleFilledStatus.yearValue, '2010');
+  assert.strictEqual(staleFilledStatus.manufacturerValue, 'NISSAN');
+  assert.strictEqual(staleFilledStatus.modelValue, '');
+  const staleUnsafeDoc = confirmedVehicleCardsDoc([
+    '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleUnsafeDoc);
+  const staleUnsafeStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '0'
+  }, staleUnsafeDoc), ['result', 'safeToCancel', 'reason']);
+  assert.strictEqual(staleUnsafeStatus.result, 'UNSAFE');
+  assert.strictEqual(staleUnsafeStatus.safeToCancel, '0');
+  assert.strictEqual(staleUnsafeStatus.reason, 'expected-vehicles-not-satisfied');
+  const staleDecoyDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  const confirmedEditButton = staleDecoyDoc.getElementById('confirmed-edit-0');
+  const confirmedRemoveButton = staleDecoyDoc.getElementById('confirmed-remove-0');
+  const potentialCard = new FakeElement('div', { className: 'vehicle-card potential-vehicle', text: 'POTENTIAL VEHICLES 2010 Nissan CUBE Confirm Remove' });
+  const potentialConfirm = createButton('potential-confirm', 'Confirm');
+  const potentialRemove = createButton('potential-remove', 'Remove');
+  potentialCard.appendChild(potentialConfirm);
+  potentialCard.appendChild(potentialRemove);
+  staleDecoyDoc.body.appendChild(potentialCard);
+  appendStaleVehicleRow(staleDecoyDoc);
+  const staleDecoyCancel = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleDecoyDoc), ['result', 'clicked']);
+  assert.strictEqual(staleDecoyCancel.result, 'CANCELLED');
+  assert.strictEqual(staleDecoyCancel.clicked, '1');
+  assert.strictEqual(confirmedEditButton.clickCalls, 0);
+  assert.strictEqual(confirmedRemoveButton.clickCalls, 0);
+  assert.strictEqual(potentialConfirm.clickCalls, 0);
+  assert.strictEqual(potentialRemove.clickCalls, 0);
+  const staleBroadDropdownDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleBroadDropdownDoc, {
+    year: '2010',
+    make: 'NISSAN',
+    modelOptions: [
+      { value: '', text: 'Select One', selected: true },
+      { value: '370Z', text: '370Z' },
+      { value: 'ALTIMA', text: 'ALTIMA' },
+      { value: 'CUBE', text: 'CUBE' },
+      { value: 'FRONTIER', text: 'FRONTIER' }
+    ]
+  });
+  const broadModel = staleBroadDropdownDoc.getElementById('ConsumerData.Assets.Vehicles[5].Model');
+  const staleBroadStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleBroadDropdownDoc), ['result', 'safeToCancel']);
+  assert.strictEqual(staleBroadStatus.result, 'FOUND');
+  assert.strictEqual(staleBroadStatus.safeToCancel, '1');
+  assert.strictEqual(broadModel.value, '');
+  const staleVerifyFailedDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleVerifyFailedDoc, { cancelCloses: false });
+  const staleVerifyFailed = assertKeyBlock(runOperator('cancel_stale_add_vehicle_row', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleVerifyFailedDoc), ['result', 'clicked', 'afterRowPresent', 'failedFields']);
+  assert.strictEqual(staleVerifyFailed.result, 'VERIFY_FAILED');
+  assert.strictEqual(staleVerifyFailed.clicked, '1');
+  assert.strictEqual(staleVerifyFailed.afterRowPresent, '1');
+  assert.strictEqual(staleVerifyFailed.failedFields, 'staleRowStillPresent');
   const potentialVehicleStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', { year: '2019', make: 'Honda', model: 'Pilot' }, new FakeDocument([
     textNode('POTENTIAL VEHICLES'),
     new FakeElement('div', { className: 'vehicle-card', text: '2019 Honda PILOT Confirm Remove' })
