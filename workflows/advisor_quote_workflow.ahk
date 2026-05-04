@@ -1945,6 +1945,59 @@ AdvisorQuoteStatusOptionMatches(actualValue, actualText, expectedValue, expected
     return false
 }
 
+AdvisorQuoteProfileFullName(profile) {
+    person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
+    fullName := person.Has("fullName") ? Trim(String(person["fullName"])) : ""
+    if (fullName = "")
+        fullName := Trim(String((person.Has("firstName") ? person["firstName"] : "") . " " . (person.Has("lastName") ? person["lastName"] : "")))
+    return fullName
+}
+
+AdvisorQuoteLeadMaritalStatus(profile) {
+    raw := (IsObject(profile) && profile.Has("raw")) ? String(profile["raw"]) : ""
+    fields := (IsObject(profile) && profile.Has("fields")) ? profile["fields"] : Map()
+    if (IsObject(fields) && fields.Has("MARITAL_STATUS")) {
+        normalizedField := AdvisorQuoteNormalizeMaritalStatus(fields["MARITAL_STATUS"])
+        if (normalizedField != "")
+            return normalizedField
+    }
+    if RegExMatch(raw, "i)\bMarital\s+Status\s*:\s*(Single|Married|Divorced|Widowed|Separated)\b", &m)
+        return AdvisorQuoteNormalizeMaritalStatus(m[1])
+    return ""
+}
+
+AdvisorQuoteNormalizeMaritalStatus(value) {
+    text := AdvisorNormalizeLooseToken(value)
+    if InStr(text, "SINGLE")
+        return "Single"
+    if InStr(text, "MARRIED")
+        return "Married"
+    if InStr(text, "DIVORCED")
+        return "Divorced"
+    if InStr(text, "WIDOW")
+        return "Widowed"
+    if InStr(text, "SEPARATED")
+        return "Separated"
+    return ""
+}
+
+AdvisorQuoteLeadSpouseName(profile) {
+    raw := (IsObject(profile) && profile.Has("raw")) ? String(profile["raw"]) : ""
+    if RegExMatch(raw, "i)\b(?:Spouse|Spouse\s+Name)\s*:\s*([^\r\n]+)", &m)
+        return Trim(String(m[1]))
+    return ""
+}
+
+AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName := "") {
+    names := []
+    primary := AdvisorQuoteProfileFullName(profile)
+    if (primary != "")
+        names.Push(primary)
+    if (AdvisorQuoteLeadMaritalStatus(profile) = "Married" && Trim(String(selectedSpouseName)) != "")
+        names.Push(Trim(String(selectedSpouseName)))
+    return JoinArray(names, "||")
+}
+
 AdvisorQuoteBuildVehicleJsArgs(vehicle, includeCatalogMakeLabels := false) {
     args := Map(
         "year", vehicle["year"],
@@ -1975,6 +2028,13 @@ AdvisorQuoteVehicleHasActionableFields(vehicle) {
         && vehicle.Has("year") && Trim(String(vehicle["year"])) != ""
         && vehicle.Has("make") && Trim(String(vehicle["make"])) != ""
         && vehicle.Has("model") && Trim(String(vehicle["model"])) != ""
+}
+
+AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+    return IsObject(vehicle)
+        && vehicle.Has("year") && Trim(String(vehicle["year"])) != ""
+        && vehicle.Has("make") && Trim(String(vehicle["make"])) != ""
+        && (!vehicle.Has("model") || Trim(String(vehicle["model"])) = "")
 }
 
 AdvisorQuoteVehicleLabel(vehicle) {
@@ -2041,6 +2101,48 @@ AdvisorQuoteClassifyGatherVehicles(profile) {
         "deferredVinVehicles", deferredVin,
         "blockingMissingVehicleData", blocking
     )
+}
+
+AdvisorQuoteClassifyAscVehicles(profile) {
+    vehicles := (IsObject(profile) && profile.Has("vehicles")) ? profile["vehicles"] : []
+    complete := []
+    partial := []
+    deferred := []
+
+    for _, vehicle in vehicles {
+        if AdvisorQuoteVehicleHasActionableFields(vehicle) {
+            complete.Push(vehicle)
+        } else if AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+            partial.Push(vehicle)
+        } else {
+            deferred.Push(vehicle)
+        }
+    }
+
+    return Map(
+        "completeVehicles", complete,
+        "partialYearMakeVehicles", partial,
+        "deferredVehicles", deferred
+    )
+}
+
+AdvisorQuoteBuildAscPartialVehiclesArgList(vehicles) {
+    result := []
+    if !IsObject(vehicles)
+        return result
+    for _, vehicle in vehicles {
+        year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+        make := IsObject(vehicle) && vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+        if (year = "" || make = "")
+            continue
+        result.Push(Map(
+            "year", year,
+            "make", make,
+            "model", "",
+            "allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(make, "", year)
+        ))
+    }
+    return result
 }
 
 AdvisorQuoteLogGatherVehiclePolicy(policy) {
@@ -3185,22 +3287,244 @@ AdvisorQuoteHandleDriversVehicles(profile, db) {
     if AdvisorQuoteIsIncidentsPage(db)
         return true
 
-    if !AdvisorQuoteResolveDrivers(profile, db)
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    AdvisorQuoteLogAscParticipantDetailStatus(participantStatus, "ASC_PARTICIPANT_DETAIL_STATUS")
+    if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND") {
+        AdvisorQuoteAppendLog("ASC_PARTICIPANT_DETAIL_NOT_FOUND", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus))
+        return false
+    }
+
+    maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db)
+    AdvisorQuoteAppendLog("ASC_PARTICIPANT_MARITAL_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus))
+    maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
+    if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"])
         return false
 
-    if !AdvisorQuoteResolveVehicles(profile, db)
+    selectedSpouseName := AdvisorQuoteStatusValue(maritalStatus, "selectedSpouseText")
+    if !AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName)
         return false
 
-    if !AdvisorQuoteHandleOpenModals(profile, db, 12000)
+    if !AdvisorQuoteReconcileAscVehicles(profile, db)
         return false
 
-    if !AdvisorQuoteWaitForContinueEnabled(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["transitionMs"])
-        return false
-
-    if !AdvisorQuoteClickById(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["actionMs"])
+    if !AdvisorQuoteAscSaveAndContinueIfReady(profile, db)
         return false
 
     return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+}
+
+AdvisorQuoteGetAscParticipantDetailStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_participant_detail_status", Map(), 2, 120))
+}
+
+AdvisorQuoteLogAscParticipantDetailStatus(status, eventType) {
+    AdvisorQuoteAppendLog(eventType, AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(status))
+}
+
+AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", ascProductRouteId=" AdvisorQuoteStatusValue(status, "ascProductRouteId")
+        . ", maritalStatusPresent=" AdvisorQuoteStatusValue(status, "maritalStatusPresent")
+        . ", maritalStatusSelected=" AdvisorQuoteStatusValue(status, "maritalStatusSelected")
+        . ", spouseDropdownPresent=" AdvisorQuoteStatusValue(status, "spouseDropdownPresent")
+        . ", spouseOptionCount=" AdvisorQuoteStatusValue(status, "spouseOptionCount")
+        . ", propertyOwnershipValue=" AdvisorQuoteStatusValue(status, "propertyOwnershipValue")
+        . ", ageFirstLicensedValue=" AdvisorQuoteStatusValue(status, "ageFirstLicensedValue")
+        . ", emailPresent=" AdvisorQuoteStatusValue(status, "emailPresent")
+        . ", phonePresent=" AdvisorQuoteStatusValue(status, "phonePresent")
+        . ", saveButtonPresent=" AdvisorQuoteStatusValue(status, "saveButtonPresent")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db) {
+    person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
+    args := Map(
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "primaryName", AdvisorQuoteProfileFullName(profile),
+        "primaryAge", "",
+        "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
+        "maxSpouseAgeDifference", "14",
+        "expectedPropertyOwnership", AdvisorQuoteResolveParticipantPropertyOwnership(profile, db)
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_resolve_participant_marital_and_spouse", args))
+}
+
+AdvisorQuoteBuildAscMaritalStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", selectedMaritalStatus=" AdvisorQuoteStatusValue(status, "selectedMaritalStatus")
+        . ", selectedSpouseText=" AdvisorQuoteStatusValue(status, "selectedSpouseText")
+        . ", selectedAgeDiff=" AdvisorQuoteStatusValue(status, "selectedAgeDiff")
+        . ", candidateCount=" AdvisorQuoteStatusValue(status, "candidateCount")
+        . ", spouseSelectionMethod=" AdvisorQuoteStatusValue(status, "spouseSelectionMethod")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+}
+
+AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName := "") {
+    Loop 8 {
+        status := AdvisorQuoteGetAscDriverRowsStatus()
+        AdvisorQuoteAppendLog("ASC_DRIVER_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverRowsStatusDetail(status))
+        if (AdvisorQuoteStatusValue(status, "result") = "NONE")
+            return true
+
+        result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
+        AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result))
+        outcome := AdvisorQuoteStatusValue(result, "result")
+        if (outcome = "OK")
+            return true
+        if AdvisorQuoteIsStateInList(outcome, ["AMBIGUOUS", "FAILED", "ERROR", ""])
+            return false
+
+        clickedCount := AdvisorQuoteStatusInteger(result, "addClickedCount") + AdvisorQuoteStatusInteger(result, "removeClickedCount")
+        if (clickedCount <= 0)
+            return false
+        if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+            return false
+        if !SafeSleep(db["timeouts"]["pollMs"])
+            return false
+    }
+    AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_FAILED", AdvisorQuoteGetLastStep(), "reason=max-iterations")
+    return false
+}
+
+AdvisorQuoteGetAscDriverRowsStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_driver_rows_status", Map(), 2, 120))
+}
+
+AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName := "") {
+    args := Map(
+        "primaryName", AdvisorQuoteProfileFullName(profile),
+        "primaryAge", "",
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "selectedSpouseName", selectedSpouseName,
+        "expectedDriverNames", AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName)
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_driver_rows", args))
+}
+
+AdvisorQuoteBuildAscDriverRowsStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", driverCount=" AdvisorQuoteStatusValue(status, "driverCount")
+        . ", unresolvedDriverCount=" AdvisorQuoteStatusValue(status, "unresolvedDriverCount")
+        . ", addedDriverCount=" AdvisorQuoteStatusValue(status, "addedDriverCount")
+        . ", removedDriverCount=" AdvisorQuoteStatusValue(status, "removedDriverCount")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", driverSummaries=" AdvisorQuoteStatusValue(status, "driverSummaries")
+}
+
+AdvisorQuoteBuildAscDriverReconcileDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", primaryAction=" AdvisorQuoteStatusValue(status, "primaryAction")
+        . ", spouseAction=" AdvisorQuoteStatusValue(status, "spouseAction")
+        . ", removedDrivers=" AdvisorQuoteStatusValue(status, "removedDrivers")
+        . ", unresolvedDrivers=" AdvisorQuoteStatusValue(status, "unresolvedDrivers")
+        . ", addClickedCount=" AdvisorQuoteStatusValue(status, "addClickedCount")
+        . ", removeClickedCount=" AdvisorQuoteStatusValue(status, "removeClickedCount")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+}
+
+AdvisorQuoteReconcileAscVehicles(profile, db) {
+    policy := AdvisorQuoteClassifyAscVehicles(profile)
+    AdvisorQuoteAppendLog(
+        "ASC_VEHICLE_POLICY",
+        AdvisorQuoteGetLastStep(),
+        "completeVehicleCount=" policy["completeVehicles"].Length
+            . ", partialVehicleCount=" policy["partialYearMakeVehicles"].Length
+            . ", deferredVehicleCount=" policy["deferredVehicles"].Length
+            . ", completeVehicles=" AdvisorQuoteVehicleListSummary(policy["completeVehicles"])
+            . ", partialVehicles=" AdvisorQuoteVehicleListSummary(policy["partialYearMakeVehicles"])
+            . ", deferredVehicles=" AdvisorQuoteVehicleListSummary(policy["deferredVehicles"])
+    )
+
+    Loop 10 {
+        status := AdvisorQuoteGetAscVehicleRowsStatus()
+        AdvisorQuoteAppendLog("ASC_VEHICLE_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleRowsStatusDetail(status))
+        result := AdvisorQuoteRunAscVehicleReconcile(policy)
+        AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleReconcileDetail(result))
+        outcome := AdvisorQuoteStatusValue(result, "result")
+        if (outcome = "OK")
+            return true
+        if AdvisorQuoteIsStateInList(outcome, ["AMBIGUOUS", "FAILED", "ERROR", ""])
+            return false
+
+        clickedEvidence := AdvisorQuoteStatusValue(result, "addedVehicles")
+            . AdvisorQuoteStatusValue(result, "removedVehicles")
+            . AdvisorQuoteStatusValue(result, "promotedPartialVehicles")
+        if (Trim(clickedEvidence) = "" && AdvisorQuoteStatusValue(result, "method") != "partial-vehicle-unique-vin-add")
+            return false
+        if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+            return false
+        if !SafeSleep(db["timeouts"]["pollMs"])
+            return false
+    }
+    AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_FAILED", AdvisorQuoteGetLastStep(), "reason=max-iterations")
+    return false
+}
+
+AdvisorQuoteGetAscVehicleRowsStatus() {
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_vehicle_rows_status", Map(), 2, 120))
+}
+
+AdvisorQuoteRunAscVehicleReconcile(policy) {
+    args := Map(
+        "expectedVehicles", AdvisorQuoteBuildExpectedVehiclesArgList(policy["completeVehicles"]),
+        "partialVehicles", AdvisorQuoteBuildAscPartialVehiclesArgList(policy["partialYearMakeVehicles"])
+    )
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_vehicle_rows", args))
+}
+
+AdvisorQuoteBuildAscVehicleRowsStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", vehicleCount=" AdvisorQuoteStatusValue(status, "vehicleCount")
+        . ", unresolvedVehicleCount=" AdvisorQuoteStatusValue(status, "unresolvedVehicleCount")
+        . ", addedVehicleCount=" AdvisorQuoteStatusValue(status, "addedVehicleCount")
+        . ", confirmedOrAddedVehicleCount=" AdvisorQuoteStatusValue(status, "confirmedOrAddedVehicleCount")
+        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", vehicleSummaries=" AdvisorQuoteStatusValue(status, "vehicleSummaries")
+}
+
+AdvisorQuoteBuildAscVehicleReconcileDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", addedVehicles=" AdvisorQuoteStatusValue(status, "addedVehicles")
+        . ", removedVehicles=" AdvisorQuoteStatusValue(status, "removedVehicles")
+        . ", promotedPartialVehicles=" AdvisorQuoteStatusValue(status, "promotedPartialVehicles")
+        . ", deferredPartialVehicles=" AdvisorQuoteStatusValue(status, "deferredPartialVehicles")
+        . ", confirmedVehicleCount=" AdvisorQuoteStatusValue(status, "confirmedVehicleCount")
+        . ", unresolvedVehicles=" AdvisorQuoteStatusValue(status, "unresolvedVehicles")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+}
+
+AdvisorQuoteAscSaveAndContinueIfReady(profile, db) {
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    driverStatus := AdvisorQuoteGetAscDriverRowsStatus()
+    vehicleStatus := AdvisorQuoteGetAscVehicleRowsStatus()
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_PARTICIPANT_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus))
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_DRIVER_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverRowsStatusDetail(driverStatus))
+    AdvisorQuoteAppendLog("ASC_SAVE_GATE_VEHICLE_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleRowsStatusDetail(vehicleStatus))
+
+    unresolvedDrivers := AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount")
+    unresolvedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "unresolvedVehicleCount")
+    confirmedOrAddedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "confirmedOrAddedVehicleCount")
+    saveEnabled := AdvisorQuoteStatusValue(participantStatus, "saveButtonEnabled")
+
+    if (unresolvedDrivers > 0 || unresolvedVehicles > 0 || confirmedOrAddedVehicles < 1 || saveEnabled != "1") {
+        AdvisorQuoteAppendLog(
+            "ASC109_SAVE_DISABLED_AFTER_RECONCILIATION",
+            AdvisorQuoteGetLastStep(),
+            "unresolvedDrivers=" unresolvedDrivers
+                . ", unresolvedVehicles=" unresolvedVehicles
+                . ", confirmedOrAddedVehicles=" confirmedOrAddedVehicles
+                . ", saveButtonEnabled=" saveEnabled
+        )
+        return false
+    }
+
+    if !AdvisorQuoteClickById(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["actionMs"])
+        return false
+    AdvisorQuoteAppendLog("ASC_SAVE_AND_CONTINUE_CLICKED", AdvisorQuoteGetLastStep(), "result=OK")
+    return true
 }
 
 AdvisorQuoteResolveDrivers(profile, db) {
@@ -3451,6 +3775,8 @@ AdvisorQuoteFillParticipantModal(profile, db) {
         "defensiveDriving", db["defaults"]["defensiveDriving"],
         "propertyOwnership", propertyOwnership,
         "oppositeGenderValue", oppositeGenderValue,
+        "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
+        "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
         "spouseSelectId", db["texts"]["spouseSelectId"]
     )
     raw := AdvisorQuoteRunOp("fill_participant_modal", args)
@@ -3788,6 +4114,9 @@ AdvisorQuoteIsJsActionOp(op) {
         "handle_vehicle_edit_modal",
         "ensure_auto_start_quoting_state",
         "set_select_product_defaults",
+        "asc_resolve_participant_marital_and_spouse",
+        "asc_reconcile_driver_rows",
+        "asc_reconcile_vehicle_rows",
         "fill_participant_modal",
         "select_remove_reason",
         "fill_vehicle_modal",

@@ -760,6 +760,40 @@
       { "tag": "button", "id": "2023-ford-f150-addToQuote", "text": "Add" }
     ]
   },
+  "asc-single-spouse-dropdown-visible": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Let's get some more details Add drivers Add vehicles Save and Continue",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "maritalStatusEntCd_0002", "name": "agreement.agreementParticipant.party.maritalStatusEntCd", "value": "Single", "checked": true },
+      { "tag": "input", "type": "radio", "id": "maritalStatusEntCd_0001", "name": "agreement.agreementParticipant.party.maritalStatusEntCd", "value": "Married" },
+      { "tag": "select", "id": "maritalStatusWithSpouse_spouseName", "name": "agreement.agreementParticipant.party.spouse.id", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "candidate-old", "text": "Test Older Driver" },
+        { "value": "candidate-near", "text": "Test Near Candidate" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40", "children": [{ "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }] },
+      { "tag": "div", "className": "driver-row", "text": "Test Older Driver Age 66", "children": [{ "tag": "button", "id": "test-older-driver-remove", "text": "Remove" }] },
+      { "tag": "div", "className": "driver-row", "text": "Test Near Candidate Age 37", "children": [{ "tag": "button", "id": "test-near-candidate-remove", "text": "Remove" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "asc-partial-unique-vin-vehicle": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add vehicles at least one vehicle must be added",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan cube VIN: FAKECUBE*******03", "children": [{ "tag": "button", "id": "nissan-cube-add", "text": "Add" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "asc-partial-ambiguous-vehicles": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add vehicles",
+    "nodes": [
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan cube VIN: FAKECUBE*******03", "children": [{ "tag": "button", "id": "nissan-cube-add", "text": "Add" }] },
+      { "tag": "div", "className": "vehicle-row", "text": "2010 Nissan Altima VIN: FAKEALTI*******04", "children": [{ "tag": "button", "id": "nissan-altima-add", "text": "Add" }] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "scan-current-page-rich": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
     "bodyText": "Begin Quoting Create New Prospect sanitized body sample with enough content to verify scanner shape without raw customer data.",

@@ -11,6 +11,8 @@ The source now mostly respects this separation in `AdvisorQuoteHandleGatherData(
 
 Operational risk is still high downstream. ASCPRODUCT currently has page detectors and action handlers, but no route-family status object, no durable reconciliation plan, no iframe inventory, no explicit insurance-history model, and only heuristic driver/spouse handling.
 
+Implementation update: the Drivers and Vehicles stage now has a bounded ASCPRODUCT reconciliation path. It detects `/apps/ASCPRODUCT/<dynamicId>/`, reads participant detail status, resolves marital/spouse from lead truth, reconciles driver rows, reconciles complete and partial vehicle rows, then clicks Save and Continue only after re-reading committed state. The numeric route id is logged as evidence only and is not a condition.
+
 ## 2. Current 102 contract
 
 Current 102 Gather Data vehicle contract:
@@ -166,7 +168,7 @@ Rules:
 - Do not use broad containers.
 - Use single-card scoped confirm/remove logic only.
 
-Current gap: `AdvisorQuoteResolveVehicles()` (`workflows/...:2642`) uses `profile["vehicles"]` directly and JS `find_vehicle_add_button` (`operator.template.js:2521`) scores add buttons against year/make/model. It has no access to the 102 deferred plan or public-record confidence status.
+Implementation update: `AdvisorQuoteHandleDriversVehicles()` now calls `asc_vehicle_rows_status` and `asc_reconcile_vehicle_rows` instead of the old direct `AdvisorQuoteResolveVehicles()` path for ASCPRODUCT Drivers and Vehicles. Complete vehicles are passed as structured expected vehicles with catalog-aware make labels and strict model matching. Partial year/make vehicles are passed separately and may be promoted only from a unique VIN-bearing live row with visible model text.
 
 ## 8. Driver/spouse action model
 
@@ -188,7 +190,7 @@ Current source:
 - `AdvisorQuoteFillParticipantModal()` at `:2807` calls JS `fill_participant_modal` at `operator.template.js:2558`.
 - `AdvisorQuoteSelectRemoveReason()` at `:2854` calls JS `select_remove_reason` at `operator.template.js:2676`.
 
-Major gap: current AHK keeps a second driver automatically when `driverSlugs.Length = 2`. That resembles the aggressive spouse clause, but it does not yet prove spouse relationship, age range, or uniqueness.
+Implementation update: the old "keep a second driver when there are two rows" heuristic is no longer used by the ASCPRODUCT Drivers and Vehicles handler. Lead `Single` keeps/sets Single and skips the spouse dropdown. Lead `Married` selects a spouse only by exact lead spouse name or by one unique candidate within the configured age window; ambiguous/no-safe-spouse cases fail safely. Driver add/remove acts one scoped row at a time and AHK re-reads state after modal handling.
 
 ## 9. Participant detail defaults
 
@@ -302,4 +304,3 @@ Needed before implementation beyond ASC-0:
 - No-prior/no-insurance branch.
 - Incidents page and quote landing page after the downstream flow.
 - Any ASCPRODUCT page where current scanner misses visible controls; only then prioritize iframe diagnostics as a blocker fix.
-
