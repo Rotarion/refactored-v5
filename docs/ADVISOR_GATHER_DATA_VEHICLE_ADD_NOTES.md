@@ -192,13 +192,26 @@ When that strict confirmed-card evidence is present, the workflow logs `VEHICLE_
 
 Confirmed-card model matching now uses the same exact-normalized model keys for common punctuation variants before any Add Car or Truck row work. For example, `2019 Honda CRV`, `2019 Honda CR-V`, and `2019 Honda CR V` all match the confirmed card `2019 Honda CR-V ... CONFIRMED`. The matcher also normalizes `HR-V`, `CX-30`, `QX56`, Ford F-series spacing/hyphens, and `4Runner` spacing while preserving strict non-overmatch guards such as Prius/Prius Prime, Transit/Transit Connect, F150/F250, Silverado 1500/Silverado 2500, and CR-V/HR-V.
 
-If a retry starts after a previous failed attempt left an incomplete Add Car or Truck row open for a vehicle that is now proven already confirmed, `gather_vehicle_add_status` reports `duplicateAddRowOpenForConfirmedVehicle=1`. The workflow does not continue filling that duplicate row. Because there is no proven row-scoped cancel action for this live shape, it fails closed with `DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE` and captures a scan instead of adding a duplicate or removing a confirmed card.
+If a retry starts after a previous failed attempt left an incomplete Add Car or Truck row open for a vehicle that is now proven already confirmed, `gather_vehicle_add_status` reports `duplicateAddRowOpenForConfirmedVehicle=1`. The workflow defers the duplicate-row failure until after it re-reads final confirmed/promoted vehicle reconciliation. If every expected complete vehicle and every safely promoted partial vehicle is already satisfied, the workflow can run the stale-row cleanup path instead of failing early.
 
 Partial year/make vehicles also get a confirmed-card preflight before any Add Car or Truck work. In `partialYearMakeMode=1`, `gather_vehicle_add_status` is read-only and inspects confirmed cards only. A partial vehicle is promoted only when exactly one confirmed same-year/same-make card exists, the card has visible model text, and the card has VIN or masked-VIN evidence. Example: a lead vehicle `2010 Nissan` can be promoted to `2010 Nissan CUBE` when Advisor already shows a single `2010 Nissan CUBE ... CONFIRMED` card with VIN evidence.
 
 The partial path does not select a model from a broad Add Car or Truck dropdown. If the Nissan model dropdown contains many options such as `370Z`, `ALTIMA`, `CUBE`, and `FRONTIER`, the workflow will not choose the first option. If no unique VIN-bearing confirmed card exists, the partial vehicle is deferred or fails safely depending on whether another vehicle is already satisfied.
 
-If a retry starts with an incomplete Add Car or Truck row open for a partial vehicle that is now satisfied by a promoted confirmed card, the workflow fails closed with `DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE` unless a future patch proves a row-scoped safe cancel. It never clicks Add on that duplicate row and never removes the confirmed card.
+If a retry starts with an incomplete Add Car or Truck row open for a partial vehicle that is now satisfied by a promoted confirmed card, the workflow applies the same deferred cleanup rule. It never clicks Add on that duplicate row and never removes the confirmed card.
+
+## Stale Duplicate Add Row Cleanup
+
+When final Gather Data reconciliation proves all expected vehicles are already confirmed or safely promoted, the workflow may cancel a stale incomplete Add Car or Truck row. This is intentionally narrow:
+
+- AHK first calls `gather_confirmed_vehicles_status` with the final expected list, including promoted partials such as a unique VIN-bearing `2010 Nissan CUBE` card promoted from a `2010 Nissan` lead vehicle.
+- Only after that guard passes does AHK call `gather_stale_add_vehicle_row_status` with `allExpectedVehiclesSatisfied=1`.
+- The status op requires an Add Car or Truck / incomplete row, a row-scoped Cancel button, no meaningful VIN, no committed model/submodel, and no confirmed-card or potential-card context.
+- `cancel_stale_add_vehicle_row` clicks only that row's Cancel button, never Add, Remove, Confirm, or confirmed-card controls.
+- After Cancel, the op verifies the stale row is no longer open. AHK then re-reads the row status and final confirmed-vehicle reconciliation before moving to Start Quoting.
+- The cleanup runs at most once in the Gather Data flow. If the row is unsafe or Cancel does not close it, the workflow fails with a stale-row diagnostic instead of adding a duplicate.
+
+This cleanup does not loosen model selection. A broad model dropdown with many options remains unsafe for missing-model vehicles. The workflow does not choose the first available model; it relies on confirmed/promoted card evidence or a uniquely scoped one-option modal/dropdown.
 
 The older `vehicle_already_listed` check is no longer allowed to skip work by itself. If it reports listed but the confirmed-card preflight does not prove the vehicle is confirmed, the workflow logs that legacy evidence and continues with the normal potential-confirm/add path.
 

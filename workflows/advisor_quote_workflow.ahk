@@ -1436,6 +1436,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     satisfiedVehicles := []
     promotedPartialVehicles := []
     deferredPartialVehicles := []
+    staleDuplicateRowSeen := false
+    staleDuplicateRowDetails := ""
     for _, vehicle in actionableVehicles {
         if StopRequested() {
             failureReason := "Stopped manually."
@@ -1470,16 +1472,16 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         )
         if alreadyConfirmed {
             if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(preflightStatus) {
+                staleDuplicateRowSeen := true
+                staleDuplicateRowDetails := AdvisorQuoteStatusValue(preflightStatus, "duplicateAddRowDetails")
                 AdvisorQuoteAppendLog(
-                    "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE",
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE_DEFERRED",
                     AdvisorQuoteGetLastStep(),
                     "vehicle=" vehicle["displayKey"]
                         . ", matchedText=" AdvisorQuoteStatusValue(preflightStatus, "matchedText")
                         . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(preflightStatus, "duplicateAddRowDetails")
+                        . ", cleanupDeferredUntilFinalConfirmedReconciliation=1"
                 )
-                failureReason := "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE: " vehicle["displayKey"] " is already confirmed, but an incomplete Add Car/Truck row is open. Close the duplicate row before retrying."
-                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "duplicate-add-row-open-for-confirmed-vehicle")
-                return false
             }
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
@@ -1552,17 +1554,17 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         if AdvisorQuoteGatherVehiclePartialStatusPromoted(partialStatus) {
             promotedVehicle := AdvisorQuoteBuildGatherPromotedPartialVehicle(partialVehicle, partialStatus)
             if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(partialStatus) {
+                staleDuplicateRowSeen := true
+                staleDuplicateRowDetails := AdvisorQuoteStatusValue(partialStatus, "duplicateAddRowDetails")
                 AdvisorQuoteAppendLog(
-                    "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE",
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE_DEFERRED",
                     AdvisorQuoteGetLastStep(),
                     "vehicle=" partialVehicle["displayKey"]
                         . ", promotedVehicle=" AdvisorQuoteVehicleLabel(promotedVehicle)
                         . ", promotedVehicleText=" AdvisorQuoteStatusValue(partialStatus, "promotedVehicleText")
                         . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(partialStatus, "duplicateAddRowDetails")
+                        . ", cleanupDeferredUntilFinalConfirmedReconciliation=1"
                 )
-                failureReason := "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE: " partialVehicle["displayKey"] " is already satisfied by " AdvisorQuoteVehicleLabel(promotedVehicle) ", but an incomplete Add Car/Truck row is open. Close the duplicate row before retrying."
-                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "duplicate-add-row-open-for-promoted-confirmed-vehicle")
-                return false
             }
             vehicleSatisfiedCount += 1
             promotedPartialVehicles.Push(promotedVehicle)
@@ -1654,6 +1656,9 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "confirmed-vehicles-unsafe")
         return false
     }
+
+    if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, &failureReason, &failureScanPath)
+        return false
 
     startQuotingStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
     AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
@@ -2332,6 +2337,16 @@ AdvisorQuoteGetGatherConfirmedVehiclesStatus(profile) {
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_confirmed_vehicles_status", args))
 }
 
+AdvisorQuoteGetGatherStaleAddVehicleRowStatus(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_stale_add_vehicle_row_status", args))
+}
+
+AdvisorQuoteCancelStaleAddVehicleRow(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("cancel_stale_add_vehicle_row", args))
+}
+
 AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(status) {
     return "result=" AdvisorQuoteStatusValue(status, "result")
         . ", confirmedCount=" AdvisorQuoteStatusValue(status, "confirmedCount")
@@ -2343,6 +2358,78 @@ AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(status) {
         . ", missingExpectedVehicles=" AdvisorQuoteStatusValue(status, "missingExpectedVehicles")
         . ", unresolvedLeadVehicles=" AdvisorQuoteStatusValue(status, "unresolvedLeadVehicles")
         . ", method=" AdvisorQuoteStatusValue(status, "method")
+}
+
+AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", rowTitle=" AdvisorQuoteStatusValue(status, "rowTitle")
+        . ", rowIncomplete=" AdvisorQuoteStatusValue(status, "rowIncomplete")
+        . ", yearValue=" AdvisorQuoteStatusValue(status, "yearValue")
+        . ", vinValue=" AdvisorQuoteStatusValue(status, "vinValue")
+        . ", manufacturerValue=" AdvisorQuoteStatusValue(status, "manufacturerValue")
+        . ", modelValue=" AdvisorQuoteStatusValue(status, "modelValue")
+        . ", subModelValue=" AdvisorQuoteStatusValue(status, "subModelValue")
+        . ", addButtonPresent=" AdvisorQuoteStatusValue(status, "addButtonPresent")
+        . ", cancelButtonPresent=" AdvisorQuoteStatusValue(status, "cancelButtonPresent")
+        . ", cancelButtonScoped=" AdvisorQuoteStatusValue(status, "cancelButtonScoped")
+        . ", safeToCancel=" AdvisorQuoteStatusValue(status, "safeToCancel")
+        . ", reason=" AdvisorQuoteStatusValue(status, "reason")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteBuildGatherStaleVehicleCancelDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", clicked=" AdvisorQuoteStatusValue(status, "clicked")
+        . ", cancelButtonText=" AdvisorQuoteStatusValue(status, "cancelButtonText")
+        . ", cancelButtonClass=" AdvisorQuoteStatusValue(status, "cancelButtonClass")
+        . ", beforeRowText=" AdvisorQuoteStatusValue(status, "beforeRowText")
+        . ", afterRowPresent=" AdvisorQuoteStatusValue(status, "afterRowPresent")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+}
+
+AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehicles, staleDuplicateRowSeen := false, staleDuplicateRowDetails := "", &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    status := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
+    AdvisorQuoteAppendLog(
+        "STALE_ADD_VEHICLE_ROW_STATUS",
+        AdvisorQuoteGetLastStep(),
+        AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status)
+            . ", staleDuplicateRowSeen=" (staleDuplicateRowSeen ? "1" : "0")
+            . ", staleDuplicateRowDetails=" staleDuplicateRowDetails
+    )
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "" || result = "NONE")
+        return true
+    if (AdvisorQuoteStatusValue(status, "safeToCancel") != "1") {
+        failureReason := "STALE_ADD_ROW_CANCEL_UNSAFE: stale Add Car/Truck row exists but is not safe to cancel. reason=" AdvisorQuoteStatusValue(status, "reason")
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-unsafe")
+        return false
+    }
+
+    cancelStatus := AdvisorQuoteCancelStaleAddVehicleRow(true)
+    AdvisorQuoteAppendLog("STALE_ADD_VEHICLE_ROW_CANCEL", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus))
+    if (AdvisorQuoteStatusValue(cancelStatus, "result") != "CANCELLED") {
+        failureReason := "STALE_ADD_ROW_CANCEL_FAILED: " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-failed")
+        return false
+    }
+
+    rowStatus := AdvisorQuoteGetGatherVehicleRowStatus()
+    AdvisorQuoteLogGatherVehicleRowStatus(rowStatus, "STALE_ADD_ROW_POST_CANCEL_ROW_STATUS")
+    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(expectedVehicles)
+    AdvisorQuoteAppendLog("GATHER_CONFIRMED_VEHICLES_STATUS_AFTER_STALE_ROW_CANCEL", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(confirmedStatus))
+    safeReason := ""
+    if !AdvisorQuoteGatherConfirmedVehiclesSafe(confirmedStatus, "", &safeReason) {
+        failureReason := "STALE_ADD_ROW_CANCEL_RECONCILIATION_FAILED: " safeReason
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-reconciliation-failed")
+        return false
+    }
+    return true
 }
 
 AdvisorQuoteGatherConfirmedVehiclesSafe(status, profile, &failureReason := "") {

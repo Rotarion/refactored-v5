@@ -68,6 +68,11 @@ AssertEqual(nissanPartialVehicle["year"], "2010", "Year/make-only Nissan should 
 AssertEqual(nissanPartialVehicle["make"], "NISSAN", "Year/make-only Nissan should preserve make")
 AssertEqual(nissanPartialVehicle["model"], "", "Year/make-only Nissan should remain partial with no model")
 
+nissanPartialWithFollowingLabels := AdvisorNormalizeVehicleDescriptor("2010 Nissan Driver 1 Name-Age:: Driver 2 Name-Age:: Calidad: A+ Idioma: Spanish")
+AssertEqual(nissanPartialWithFollowingLabels["year"], "2010", "Year/make-only Nissan with following lead labels should preserve year")
+AssertEqual(nissanPartialWithFollowingLabels["make"], "NISSAN", "Year/make-only Nissan with following lead labels should preserve make")
+AssertEqual(nissanPartialWithFollowingLabels["model"], "", "Following lead labels should not become Nissan model text")
+
 joseSample :=
 (
 "Name:

@@ -2757,10 +2757,11 @@ copy(String((() => {
   const readVehicleRow = (index) => {
     const vehicleType = vehicleField(index, 'VehTypeCd');
     const year = vehicleField(index, 'ModelYear');
+    const vin = vehicleField(index, 'VehIdentificationNumber');
     const manufacturer = vehicleField(index, 'Manufacturer');
     const model = vehicleField(index, 'Model');
     const subModel = vehicleField(index, 'SubModel');
-    return { vehicleType, year, manufacturer, model, subModel };
+    return { vehicleType, year, vin, manufacturer, model, subModel };
   };
   const vehicleFieldValue = (el) => safe(el && el.value).trim();
   const vehicleFieldTextValue = (el) => {
@@ -2825,10 +2826,40 @@ copy(String((() => {
     if (!row) return '';
     return compact([
       `year=${vehicleFieldValue(row.year)}`,
+      `vin=${vehicleFieldValue(row.vin)}`,
       `make=${vehicleFieldValue(row.manufacturer)}`,
       `model=${vehicleFieldValue(row.model)}`,
       `subModel=${vehicleFieldValue(row.subModel)}`
     ].join(','), 160);
+  };
+  const vehicleRowControls = (row) => row ? [row.vehicleType, row.year, row.vin, row.manufacturer, row.model, row.subModel].filter(Boolean) : [];
+  const findVehicleRowContainer = (row) => {
+    const controls = vehicleRowControls(row);
+    const seed = row && (row.year || row.vehicleType || row.manufacturer || row.model || row.subModel || row.vin);
+    if (!seed) return null;
+    let fallback = null;
+    for (let depth = 0, current = seed.parentElement; depth < 8 && current; depth++, current = current.parentElement) {
+      if (!visible(current)) continue;
+      if (!controls.every((control) => current.contains(control))) continue;
+      const text = normLower(getText(current));
+      const actions = Array.from(current.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')).filter(visible);
+      const hasCancel = actions.some((action) => answerTextMatches([getText(action), safe(action.value)].join(' '), 'Cancel'));
+      const hasAdd = actions.some((action) => answerTextMatches([getText(action), safe(action.value)].join(' '), 'Add'));
+      const looksLikeAddRow = text.includes('add car or truck') || text.includes('vehicle type') || hasAdd || controls.length >= 4;
+      const broadVehicleSection = text.includes('confirmed vehicles') || text.includes('potential vehicles') || text.includes('start quoting');
+      if (looksLikeAddRow && !broadVehicleSection) {
+        if (hasCancel) return current;
+        if (!fallback) fallback = current;
+      }
+    }
+    return fallback;
+  };
+  const rowScopedButton = (container, wantedText) => {
+    const wanted = safe(wantedText);
+    const buttons = Array.from((container && container.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')) || [])
+      .filter((button) => visible(button) && !isDisabledLike(button))
+      .filter((button) => answerTextMatches([getText(button), safe(button.value), safe(button.getAttribute('aria-label'))].join(' '), wanted));
+    return buttons.length === 1 ? buttons[0] : null;
   };
   const gatherVehicleAddRowState = (source = {}, matchArgs = {}) => {
     const rowIndexArg = safe(source.index).trim();
@@ -2836,12 +2867,200 @@ copy(String((() => {
     const indexes = vehicleRowIndexes();
     const hasAnyRow = indexes.length > 0;
     const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
-    const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
+    const rowOpen = !!(row && (row.year || row.vin || row.manufacturer || row.model || row.subModel));
     const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
     const rowIncomplete = rowOpen && !rowComplete;
     const rowGone = !rowOpen && !hasAnyRow;
     const rowMatchesExpectedContext = rowIncomplete && vehicleRowMatchesExpectedContext(row, matchArgs);
     return { rowIndex, row, hasAnyRow, rowOpen, rowComplete, rowIncomplete, rowGone, rowMatchesExpectedContext };
+  };
+  const findStaleAddVehicleRow = (source = {}) => {
+    const allExpectedSatisfied = safe(source.allExpectedVehiclesSatisfied) === '1' || source.allExpectedVehiclesSatisfied === true;
+    const indexes = vehicleRowIndexes();
+    const candidates = [];
+    for (const idx of indexes) {
+      const row = readVehicleRow(idx);
+      if (!vehicleRowControls(row).some((control) => control && visible(control))) continue;
+      const state = gatherVehicleAddRowState({ index: String(idx) }, {});
+      if (!state.rowOpen) continue;
+      const container = findVehicleRowContainer(row);
+      const rowText = compact(getText(container), 220);
+      const lowerText = normLower(rowText);
+      const cancelButton = rowScopedButton(container, 'Cancel');
+      const addButton = rowScopedButton(container, 'Add');
+      const vinValue = vehicleFieldValue(row.vin);
+      const modelValue = vehicleFieldValue(row.model);
+      const subModelValue = vehicleFieldValue(row.subModel);
+      const unsafeContext = lowerText.includes('confirmed vehicles')
+        || lowerText.includes('potential vehicles')
+        || lowerText.includes('edit remove confirmed')
+        || lowerText.includes('confirm remove');
+      const rowIncomplete = state.rowIncomplete;
+      const meaningfulVin = normalizeVehicleVin(vinValue).length >= 6;
+      let reason = 'safe';
+      if (!allExpectedSatisfied) reason = 'expected-vehicles-not-satisfied';
+      else if (!rowIncomplete) reason = 'row-not-incomplete';
+      else if (!container) reason = 'row-container-not-found';
+      else if (unsafeContext) reason = 'unsafe-vehicle-section-context';
+      else if (meaningfulVin) reason = 'vin-present';
+      else if (!cancelButton) reason = 'cancel-button-not-scoped';
+      const safeToCancel = reason === 'safe';
+      candidates.push({
+        rowIndex: idx,
+        row,
+        state,
+        container,
+        rowText,
+        cancelButton,
+        addButton,
+        rowIncomplete,
+        meaningfulVin,
+        unsafeContext,
+        safeToCancel,
+        reason,
+        yearValue: vehicleFieldValue(row.year),
+        vinValue,
+        manufacturerValue: vehicleFieldValue(row.manufacturer),
+        modelValue,
+        subModelValue,
+        rowTitle: lowerText.includes('add car or truck') ? 'Add Car or Truck' : ''
+      });
+    }
+    const incomplete = candidates.filter((candidate) => candidate.rowIncomplete);
+    const safeCandidate = incomplete.find((candidate) => candidate.safeToCancel);
+    return safeCandidate || incomplete[0] || null;
+  };
+  const staleAddVehicleRowStatus = (source = {}) => {
+    try {
+      const candidate = findStaleAddVehicleRow(source);
+      if (!candidate) {
+        return {
+          result: 'NONE',
+          rowIndex: '',
+          rowTitle: '',
+          rowIncomplete: '0',
+          yearValue: '',
+          vinValue: '',
+          manufacturerValue: '',
+          modelValue: '',
+          subModelValue: '',
+          addButtonPresent: '0',
+          cancelButtonPresent: '0',
+          cancelButtonScoped: '0',
+          safeToCancel: '0',
+          reason: 'no-stale-row',
+          evidence: '',
+          missing: 'staleAddVehicleRow'
+        };
+      }
+      return {
+        result: candidate.safeToCancel ? 'FOUND' : 'UNSAFE',
+        rowIndex: String(candidate.rowIndex),
+        rowTitle: candidate.rowTitle,
+        rowIncomplete: candidate.rowIncomplete ? '1' : '0',
+        yearValue: candidate.yearValue,
+        vinValue: candidate.vinValue,
+        manufacturerValue: candidate.manufacturerValue,
+        modelValue: candidate.modelValue,
+        subModelValue: candidate.subModelValue,
+        addButtonPresent: candidate.addButton ? '1' : '0',
+        cancelButtonPresent: candidate.cancelButton ? '1' : '0',
+        cancelButtonScoped: candidate.cancelButton ? '1' : '0',
+        safeToCancel: candidate.safeToCancel ? '1' : '0',
+        reason: candidate.reason,
+        evidence: compact(candidate.rowText, 180),
+        missing: candidate.safeToCancel ? '' : candidate.reason
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        rowIndex: '',
+        rowTitle: '',
+        rowIncomplete: '0',
+        yearValue: '',
+        vinValue: '',
+        manufacturerValue: '',
+        modelValue: '',
+        subModelValue: '',
+        addButtonPresent: '0',
+        cancelButtonPresent: '0',
+        cancelButtonScoped: '0',
+        safeToCancel: '0',
+        reason: 'error',
+        evidence: '',
+        missing: compact(err && err.message, 160)
+      };
+    }
+  };
+  const cancelStaleAddVehicleRow = (source = {}) => {
+    try {
+      const before = findStaleAddVehicleRow(source);
+      if (!before) {
+        return linesOut({
+          result: 'NO_STALE_ROW',
+          rowIndex: '',
+          clicked: '0',
+          cancelButtonText: '',
+          cancelButtonClass: '',
+          beforeRowText: '',
+          afterRowPresent: '0',
+          failedFields: '',
+          evidence: 'no-stale-row'
+        });
+      }
+      if (!before.safeToCancel || !before.cancelButton) {
+        return linesOut({
+          result: 'UNSAFE',
+          rowIndex: String(before.rowIndex),
+          clicked: '0',
+          cancelButtonText: before.cancelButton ? compact(getText(before.cancelButton), 80) : '',
+          cancelButtonClass: before.cancelButton ? safe(before.cancelButton.className) : '',
+          beforeRowText: compact(before.rowText, 180),
+          afterRowPresent: '1',
+          failedFields: before.reason,
+          evidence: before.reason
+        });
+      }
+      const clicked = clickCenterEl(before.cancelButton);
+      if (!clicked) {
+        return linesOut({
+          result: 'CLICK_FAILED',
+          rowIndex: String(before.rowIndex),
+          clicked: '0',
+          cancelButtonText: compact(getText(before.cancelButton), 80),
+          cancelButtonClass: safe(before.cancelButton.className),
+          beforeRowText: compact(before.rowText, 180),
+          afterRowPresent: '1',
+          failedFields: 'cancelButton',
+          evidence: 'cancel-click-failed'
+        });
+      }
+      const after = findStaleAddVehicleRow(source);
+      const afterRowPresent = !!(after && after.rowIndex === before.rowIndex && after.state && after.state.rowOpen);
+      return linesOut({
+        result: afterRowPresent ? 'VERIFY_FAILED' : 'CANCELLED',
+        rowIndex: String(before.rowIndex),
+        clicked: '1',
+        cancelButtonText: compact(getText(before.cancelButton), 80),
+        cancelButtonClass: safe(before.cancelButton.className),
+        beforeRowText: compact(before.rowText, 180),
+        afterRowPresent: afterRowPresent ? '1' : '0',
+        failedFields: afterRowPresent ? 'staleRowStillPresent' : '',
+        evidence: afterRowPresent ? 'row-still-present-after-cancel' : 'row-closed'
+      });
+    } catch (err) {
+      return linesOut({
+        result: 'ERROR',
+        rowIndex: '',
+        clicked: '0',
+        cancelButtonText: '',
+        cancelButtonClass: '',
+        beforeRowText: '',
+        afterRowPresent: '1',
+        failedFields: 'exception',
+        evidence: compact(err && err.message, 160)
+      });
+    }
   };
   const vehicleAliasValues = (wantedText) => {
     const wanted = normUpper(wantedText);
@@ -4270,6 +4489,14 @@ copy(String((() => {
 
     case 'gather_vehicle_add_status': {
       return gatherVehicleAddStatus(args);
+    }
+
+    case 'gather_stale_add_vehicle_row_status': {
+      return linesOut(staleAddVehicleRowStatus(args));
+    }
+
+    case 'cancel_stale_add_vehicle_row': {
+      return cancelStaleAddVehicleRow(args);
     }
 
     case 'gather_vehicle_edit_status': {
