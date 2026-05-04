@@ -67,11 +67,19 @@ nissanPartialVehicle := AdvisorNormalizeVehicleDescriptor("2010 Nissan")
 AssertEqual(nissanPartialVehicle["year"], "2010", "Year/make-only Nissan should preserve year")
 AssertEqual(nissanPartialVehicle["make"], "NISSAN", "Year/make-only Nissan should preserve make")
 AssertEqual(nissanPartialVehicle["model"], "", "Year/make-only Nissan should remain partial with no model")
+AssertEqual(nissanPartialVehicle["displayKey"], "2010|NISSAN", "Year/make-only Nissan should keep a partial display key")
 
 nissanPartialWithFollowingLabels := AdvisorNormalizeVehicleDescriptor("2010 Nissan Driver 1 Name-Age:: Driver 2 Name-Age:: Calidad: A+ Idioma: Spanish")
 AssertEqual(nissanPartialWithFollowingLabels["year"], "2010", "Year/make-only Nissan with following lead labels should preserve year")
 AssertEqual(nissanPartialWithFollowingLabels["make"], "NISSAN", "Year/make-only Nissan with following lead labels should preserve make")
 AssertEqual(nissanPartialWithFollowingLabels["model"], "", "Following lead labels should not become Nissan model text")
+AssertEqual(nissanPartialWithFollowingLabels["displayKey"], "2010|NISSAN", "Following lead labels should preserve partial display key")
+
+nissanPartialWithNote := AdvisorNormalizeVehicleDescriptor("2010 Nissan Note: informational coverage text")
+AssertEqual(nissanPartialWithNote["year"], "2010", "Year/make-only Nissan before Note label should preserve year")
+AssertEqual(nissanPartialWithNote["make"], "NISSAN", "Year/make-only Nissan before Note label should preserve make")
+AssertEqual(nissanPartialWithNote["model"], "", "Note label should not become Nissan model text")
+AssertEqual(nissanPartialWithNote["displayKey"], "2010|NISSAN", "Note label should preserve partial display key")
 
 joseSample :=
 (
@@ -215,6 +223,18 @@ AssertEqual(gatherPartialPolicy["actionableVehicles"].Length, 2, "Gather policy 
 AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"].Length, 1, "Gather policy should keep year/make-only vehicles in partial preflight")
 AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "Gather partial should preserve year/make identity")
 
+gatherRawRecoveryProfile := Map(
+    "raw", "PERSONAL LEAD - Test Lead One 04/22/2026 10:00:00 AM 123 Example St Example City FL 32001 (555) 010-0001 test.lead.one@example.com Jan 1985 Male 2019 Honda CR-V 2013 Hyundai Sonata 2010 Nissan Note: synthetic coverage note Driver 1 Name-Age::",
+    "vehicles", [
+        TestVehicle("2019", "HONDA", "CRV"),
+        TestVehicle("2013", "HYUNDAI", "SONATA")
+    ]
+)
+gatherRawRecoveryPolicy := AdvisorQuoteClassifyGatherVehicles(gatherRawRecoveryProfile)
+AssertEqual(gatherRawRecoveryPolicy["actionableVehicles"].Length, 2, "Gather policy should keep profile complete vehicles actionable during raw recovery")
+AssertEqual(gatherRawRecoveryPolicy["partialYearMakeVehicles"].Length, 1, "Gather policy should recover omitted year/make-only vehicle from raw lead text")
+AssertEqual(gatherRawRecoveryPolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "Recovered raw partial should preserve year/make identity")
+
 singleLeadProfile := Map("raw", "Marital Status: Single", "person", Map("fullName", "Test Single Lead"))
 AssertEqual(AdvisorQuoteLeadMaritalStatus(singleLeadProfile), "Single", "Lead marital status parser should preserve Single truth")
 
@@ -271,9 +291,24 @@ AssertEqual(promotedPartial["year"], "2010", "Promoted partial should preserve y
 AssertEqual(promotedPartial["make"], "NISSAN", "Promoted partial should preserve make")
 AssertEqual(promotedPartial["model"], "CUBE", "Promoted partial should use confirmed-card model")
 AssertEqual(promotedPartial["displayKey"], "2010|NISSAN|CUBE", "Promoted partial should contribute a complete display key")
-finalExpectedWithPromoted := AdvisorQuoteBuildExpectedVehiclesArgList([TestVehicle("2019", "HONDA", "CRV"), promotedPartial])
-AssertEqual(finalExpectedWithPromoted.Length, 2, "Final guard should include complete vehicles plus promoted partials")
-AssertEqual(finalExpectedWithPromoted[2]["model"], "CUBE", "Final guard should include promoted partial model")
+AssertEqual(promotedPartial["promotedFromPartial"], "1", "Promoted partial should carry first-class promotion marker")
+finalExpectedVehiclesWithPromoted := AdvisorQuoteBuildGatherFinalExpectedVehicles(
+    [TestVehicle("2019", "HONDA", "CRV"), TestVehicle("2013", "HYUNDAI", "SONATA")],
+    [promotedPartial]
+)
+finalExpectedWithPromoted := AdvisorQuoteBuildExpectedVehiclesArgList(finalExpectedVehiclesWithPromoted)
+AssertEqual(finalExpectedVehiclesWithPromoted.Length, 3, "Final expected list should include complete vehicles plus promoted partials")
+AssertEqual(AdvisorQuoteVehicleListSummary(finalExpectedVehiclesWithPromoted), "2019|HONDA|CRV || 2013|HYUNDAI|SONATA || 2010|NISSAN|CUBE", "Final expected summary should include promoted partial")
+AssertEqual(finalExpectedWithPromoted.Length, 3, "Final guard should include complete vehicles plus promoted partials")
+AssertEqual(finalExpectedWithPromoted[3]["model"], "CUBE", "Final guard should include promoted partial model")
+AssertEqual(finalExpectedWithPromoted[3]["promotedFromPartial"], "1", "Final guard args should preserve promoted partial marker")
+AssertEqual(AdvisorQuoteCountExpectedArgsMatchingVehicles(finalExpectedWithPromoted, [promotedPartial]), 1, "Promoted partial should be counted in final expected args")
+AssertEqual(AdvisorQuoteExpectedArgsMissingVehiclesSummary(finalExpectedWithPromoted, [promotedPartial]), "", "Promoted partial should not be reported dropped from final expected args")
+
+unpromotedPartialFinalExpected := AdvisorQuoteBuildGatherFinalExpectedVehicles([TestVehicle("2019", "HONDA", "CRV")], [])
+unpromotedPartialFinalArgs := AdvisorQuoteBuildExpectedVehiclesArgList(unpromotedPartialFinalExpected)
+AssertEqual(unpromotedPartialFinalArgs.Length, 1, "Unpromoted partials should stay deferred and out of final expected args")
+AssertEqual(unpromotedPartialFinalArgs[1]["model"], "CRV", "Unpromoted partial final args should contain only complete expected vehicles")
 
 missingConfirmedStatus := Map(
     "result", "OK",

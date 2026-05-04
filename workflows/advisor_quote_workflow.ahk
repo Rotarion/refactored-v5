@@ -1607,20 +1607,42 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
     }
 
-    expectedVehiclesForGuardList := AdvisorQuoteJoinVehicleLists(actionableVehicles, promotedPartialVehicles)
-    expectedVehicleCountForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(expectedVehiclesForGuardList).Length
+    expectedVehiclesForGuardList := AdvisorQuoteBuildGatherFinalExpectedVehicles(actionableVehicles, promotedPartialVehicles)
+    expectedVehicleArgsForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(expectedVehiclesForGuardList)
+    expectedVehicleCountForFinalGuard := expectedVehicleArgsForFinalGuard.Length
+    promotedPartialExpectedCount := AdvisorQuoteCountExpectedArgsMatchingVehicles(expectedVehicleArgsForFinalGuard, promotedPartialVehicles)
     expectedVehiclesForFinalGuard := AdvisorQuoteVehicleListSummary(expectedVehiclesForGuardList)
+    missingPromotedPartialExpectedVehicles := AdvisorQuoteExpectedArgsMissingVehiclesSummary(expectedVehicleArgsForFinalGuard, promotedPartialVehicles)
+    if (promotedPartialVehicles.Length > 0 && missingPromotedPartialExpectedVehicles != "") {
+        failureReason := "PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST: " missingPromotedPartialExpectedVehicles
+        AdvisorQuoteAppendLog(
+            "PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST",
+            AdvisorQuoteGetLastStep(),
+            "completeExpectedCount=" actionableVehicles.Length
+                . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
+                . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+                . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+                . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
+                . ", missingPromotedPartialExpectedVehicles=" missingPromotedPartialExpectedVehicles
+        )
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "promoted-partial-dropped-from-expected-list")
+        return false
+    }
     AdvisorQuoteAppendLog(
         "GATHER_CONFIRMED_VEHICLES_ARGS",
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionableVehicles.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionableVehicles)
+            . ", completeExpectedCount=" actionableVehicles.Length
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
+            . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+            . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
             . ", ignoredMissingYearVehicleCount=" vehiclePolicy["ignoredMissingYearVehicles"].Length
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(vehiclePolicy["ignoredMissingYearVehicles"])
             . ", deferredVinVehicleCount=" vehiclePolicy["deferredVinVehicles"].Length
@@ -1636,12 +1658,16 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         AdvisorQuoteGetLastStep(),
         "vehicleSatisfiedCount=" vehicleSatisfiedCount
             . ", actionableVehicleCount=" actionableVehicles.Length
+            . ", completeExpectedCount=" actionableVehicles.Length
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
+            . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+            . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
             . ", ignoredMissingYearVehicleCount=" vehiclePolicy["ignoredMissingYearVehicles"].Length
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(vehiclePolicy["ignoredMissingYearVehicles"])
@@ -2166,8 +2192,44 @@ AdvisorQuoteJoinVehicleLists(lists*) {
     return result
 }
 
-AdvisorQuoteClassifyGatherVehicles(profile) {
+AdvisorQuoteGetGatherProfileVehicles(profile) {
+    result := []
+    seen := Map()
+
     vehicles := (IsObject(profile) && profile.Has("vehicles")) ? profile["vehicles"] : []
+    if IsObject(vehicles) {
+        for _, vehicle in vehicles
+            AdvisorQuoteAppendUniqueVehicleByDisplayKey(result, seen, vehicle)
+    }
+
+    raw := (IsObject(profile) && profile.Has("raw")) ? Trim(String(profile["raw"])) : ""
+    if (raw != "") {
+        for _, vehicleText in ExtractVehicleList(raw) {
+            normalized := AdvisorNormalizeVehicleDescriptor(vehicleText)
+            AdvisorQuoteAppendUniqueVehicleByDisplayKey(result, seen, normalized)
+        }
+    }
+
+    return result
+}
+
+AdvisorQuoteAppendUniqueVehicleByDisplayKey(vehicleList, seenVehicleKeys, vehicle) {
+    if !IsObject(vehicle)
+        return false
+    if !vehicle.Has("displayKey")
+        return false
+    key := Trim(String(vehicle["displayKey"]))
+    if (key = "")
+        return false
+    if seenVehicleKeys.Has(key)
+        return false
+    seenVehicleKeys[key] := true
+    vehicleList.Push(vehicle)
+    return true
+}
+
+AdvisorQuoteClassifyGatherVehicles(profile) {
+    vehicles := AdvisorQuoteGetGatherProfileVehicles(profile)
     actionable := []
     partial := []
     missingYearNoVin := []
@@ -2315,9 +2377,72 @@ AdvisorQuoteBuildExpectedVehiclesArgList(vehicles) {
             "allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(make, model, year),
             "strictModelMatch", "1"
         )
+        if IsObject(vehicle) {
+            for _, metaKey in ["promotedFromPartial", "promotionSource", "promotedVehicleText", "originalLeadText", "promotedVinEvidence"] {
+                if vehicle.Has(metaKey)
+                    item[metaKey] := vehicle[metaKey]
+            }
+        }
         result.Push(item)
     }
     return result
+}
+
+AdvisorQuoteBuildGatherFinalExpectedVehicles(actionableVehicles, promotedPartialVehicles) {
+    return AdvisorQuoteJoinVehicleLists(actionableVehicles, promotedPartialVehicles)
+}
+
+AdvisorQuoteVehicleIdentityKey(vehicle) {
+    if !IsObject(vehicle)
+        return ""
+    year := vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+    make := vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+    model := vehicle.Has("model") ? Trim(String(vehicle["model"])) : ""
+    return AdvisorBuildVehicleDisplayKey(year, make, model)
+}
+
+AdvisorQuoteExpectedArgIdentityKey(expected) {
+    if !IsObject(expected)
+        return ""
+    year := expected.Has("year") ? Trim(String(expected["year"])) : ""
+    make := expected.Has("make") ? Trim(String(expected["make"])) : ""
+    model := expected.Has("model") ? Trim(String(expected["model"])) : ""
+    return AdvisorBuildVehicleDisplayKey(year, make, model)
+}
+
+AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle) {
+    targetKey := AdvisorQuoteVehicleIdentityKey(vehicle)
+    if (targetKey = "")
+        return false
+    if !IsObject(expectedArgs)
+        return false
+    for _, expected in expectedArgs {
+        if (AdvisorQuoteExpectedArgIdentityKey(expected) = targetKey)
+            return true
+    }
+    return false
+}
+
+AdvisorQuoteCountExpectedArgsMatchingVehicles(expectedArgs, vehicles) {
+    count := 0
+    if !IsObject(vehicles)
+        return count
+    for _, vehicle in vehicles {
+        if AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle)
+            count += 1
+    }
+    return count
+}
+
+AdvisorQuoteExpectedArgsMissingVehiclesSummary(expectedArgs, vehicles) {
+    missing := []
+    if IsObject(vehicles) {
+        for _, vehicle in vehicles {
+            if !AdvisorQuoteExpectedArgsContainVehicle(expectedArgs, vehicle)
+                missing.Push(AdvisorQuoteVehicleLabel(vehicle))
+        }
+    }
+    return JoinArray(missing, " || ")
 }
 
 AdvisorQuoteBuildExpectedVehiclesText(profile) {
@@ -2785,8 +2910,11 @@ AdvisorQuoteBuildGatherPromotedPartialVehicle(vehicle, status) {
         "vinSuffix", "",
         "raw", raw,
         "displayKey", AdvisorBuildVehicleDisplayKey(year, make, promotedModel),
+        "originalLeadText", raw,
+        "promotedFromPartial", "1",
         "promotionSource", AdvisorQuoteStatusValue(status, "promotionSource"),
-        "promotedVehicleText", AdvisorQuoteStatusValue(status, "promotedVehicleText")
+        "promotedVehicleText", AdvisorQuoteStatusValue(status, "promotedVehicleText"),
+        "promotedVinEvidence", AdvisorQuoteStatusValue(status, "promotedVinEvidence")
     )
 }
 

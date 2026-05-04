@@ -96,8 +96,10 @@ AdvisorBuildVehicleDisplayKey(year, make, model) {
     y := Trim(String(year))
     mk := AdvisorNormalizeLooseToken(make)
     md := AdvisorNormalizeVehicleModelToken(model)
-    if (y = "" || mk = "" || md = "")
+    if (y = "" || mk = "")
         return ""
+    if (md = "")
+        return y "|" mk
     return y "|" mk "|" md
 }
 
@@ -164,6 +166,7 @@ AdvisorTrimVehicleDescriptorTail(text) {
         "\bQue\s+Cobertura\b",
         "\bCurrent\s+Insurance\s+Company\b",
         "\bSkyline\s+Agent\b",
+        "\bNote\s*:",
         "\bSource\s*:"
     ]
     for _, pattern in labelPatterns {
