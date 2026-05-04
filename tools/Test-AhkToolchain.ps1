@@ -152,7 +152,11 @@ function Select-RecommendedInterpreter {
 
 function Select-RecommendedCompiler {
     param([object[]]$Candidates)
-    return @($Candidates | Where-Object { $_.kind -eq "compiler" } | Select-Object -First 1)[0]
+    $compilers = @($Candidates | Where-Object { $_.kind -eq "compiler" } | Select-Object -First 1)
+    if (-not $compilers.Count) {
+        return $null
+    }
+    return $compilers[0]
 }
 
 function Save-RunResult {
