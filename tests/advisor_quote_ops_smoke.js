@@ -1048,6 +1048,132 @@ function testResidentRunnerContracts() {
   assert.strictEqual(refused.result, 'BLOCKED');
   assert.strictEqual(refused.mutatingRequestRefused, '1');
 
+  const pollKeys = [
+    'result', 'conditionName', 'statusOp', 'matched', 'steps', 'elapsedMs', 'url', 'routeFamily',
+    'detectedState', 'lastValue', 'blockedReason', 'eventSeq', 'readOnly', 'mutatingRequestRefused'
+  ];
+  const pollRefusedReadOnly = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_rapport',
+    readOnly: '0',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollRefusedReadOnly.result, 'REFUSED');
+  assert.strictEqual(pollRefusedReadOnly.mutatingRequestRefused, '1');
+
+  const pollRefusedMutating = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    statusOp: 'click_by_id',
+    readOnly: '1',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollRefusedMutating.result, 'REFUSED');
+  assert.strictEqual(pollRefusedMutating.blockedReason, 'mutating-op-refused');
+  assert.strictEqual(pollRefusedMutating.mutatingRequestRefused, '1');
+
+  const pollRapport = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_rapport',
+    readOnly: '1',
+    allowedConditions: 'is_rapport',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollRapport.result, 'OK');
+  assert.strictEqual(pollRapport.matched, '1');
+  assert.strictEqual(pollRapport.lastValue, '1');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  runnerContext.context.document = productOverviewDoc();
+  runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/intel/102/overview';
+  const pollProductOverview = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'on_product_overview',
+    readOnly: '1',
+    allowedConditions: 'on_product_overview',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollProductOverview.result, 'OK');
+  assert.strictEqual(pollProductOverview.matched, '1');
+
+  runnerContext.context.document = driversVehiclesDoc();
+  runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile';
+  const pollAsc = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_asc',
+    readOnly: '1',
+    allowedConditions: 'is_asc',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollAsc.result, 'OK');
+  assert.strictEqual(pollAsc.matched, '1');
+
+  const pollDrivers = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'drivers_or_incidents',
+    readOnly: '1',
+    allowedConditions: 'drivers_or_incidents',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollDrivers.result, 'OK');
+  assert.strictEqual(pollDrivers.matched, '1');
+
+  const pollNoMatch = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'on_product_overview',
+    readOnly: '1',
+    allowedConditions: 'on_product_overview',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollNoMatch.result, 'MAX_STEPS');
+  assert.strictEqual(pollNoMatch.matched, '0');
+
+  const pollStale = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_asc',
+    readOnly: '1',
+    allowedConditions: 'is_asc',
+    expectedBuildHash: 'hash-b',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollStale.result, 'STALE_BUILD');
+
+  runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'stop',
+    reason: 'poll-stop'
+  }), runnerContext);
+  const pollStopped = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_asc',
+    readOnly: '1',
+    allowedConditions: 'is_asc',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '2'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollStopped.result, 'STOPPED');
+  runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'reset',
+    clearEvents: '0',
+    reason: 'after-poll-stop'
+  }), runnerContext);
+
   runnerContext.context.document = pageDoc('Drivers and vehicles Add drivers Add vehicles', [
     createButton('profile-summary-submitBtn', 'Save')
   ]);

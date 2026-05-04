@@ -4181,6 +4181,185 @@ copy(String((() => {
     try { return compact(JSON.stringify(value), 220); } catch {}
     return compact(String(value), 220);
   };
+  const advisorRunnerAllowedReadOnlyConditions = Object.freeze([
+    'on_customer_summary_overview',
+    'on_product_overview',
+    'gather_data',
+    'is_rapport',
+    'is_select_product',
+    'is_asc',
+    'consumer_reports_ready',
+    'drivers_or_incidents',
+    'after_driver_vehicle_continue',
+    'quote_landing',
+    'incidents_done',
+    'continue_enabled',
+    'vehicle_select_enabled',
+    'vehicle_added_tile',
+    'vehicle_confirmed'
+  ]);
+  const advisorRunnerAllowedReadOnlyStatusOps = Object.freeze([
+    'detect_state',
+    'gather_start_quoting_status',
+    'gather_confirmed_vehicles_status',
+    'asc_participant_detail_status',
+    'asc_driver_rows_status',
+    'asc_vehicle_rows_status',
+    'product_overview_tile_status',
+    'customer_summary_overview_status',
+    'gather_vehicle_add_status',
+    'gather_vehicle_row_status',
+    'gather_vehicle_edit_status'
+  ]);
+  const advisorRunnerDisallowedMutatingOps = Object.freeze([
+    'click_product_overview_tile',
+    'ensure_product_overview_tile_selected',
+    'click_product_overview_subnav_from_rapport',
+    'click_customer_summary_start_here',
+    'handle_address_verification',
+    'handle_duplicate_prospect',
+    'fill_gather_defaults',
+    'confirm_potential_vehicle',
+    'prepare_vehicle_row',
+    'set_vehicle_year_and_wait_manufacturer',
+    'handle_vehicle_edit_modal',
+    'ensure_start_quoting_auto_checkbox',
+    'ensure_auto_start_quoting_state',
+    'click_create_quotes_order_reports',
+    'click_start_quoting_add_product',
+    'set_select_product_defaults',
+    'select_vehicle_dropdown_option',
+    'fill_participant_modal',
+    'select_remove_reason',
+    'fill_vehicle_modal',
+    'handle_incidents',
+    'click_by_id',
+    'click_by_text',
+    'asc_resolve_participant_marital_and_spouse',
+    'asc_reconcile_driver_rows',
+    'asc_reconcile_vehicle_rows',
+    'cancel_stale_add_vehicle_row'
+  ]);
+  const advisorRunnerList = (value) => {
+    if (Array.isArray(value)) return value.map((item) => safe(item).trim()).filter(Boolean);
+    return safe(value).split(/[|,;\s]+/).map((item) => item.trim()).filter(Boolean);
+  };
+  const advisorRunnerAllowedByCaller = (name, sourceValue) => {
+    const names = advisorRunnerList(sourceValue);
+    return !names.length || names.includes(name);
+  };
+  const readAdvisorWaitCondition = (source = {}) => {
+    const name = safe(source.name || source.conditionName);
+    const url = pageUrl();
+    switch (name) {
+      case 'post_prospect_submit':
+        return (url.includes(safe(source.rapportContains)) || url.includes(safe(source.selectProductContains)) || isCustomerSummaryOverviewPage(source) || isProductOverviewPage(source) || isDuplicatePage(source) || isAddressVerificationPage()) ? '1' : '0';
+      case 'prospect_form_ready': {
+        const selectors = source.selectors || {};
+        const requiredIds = [
+          selectors.prospectFirstNameId,
+          selectors.prospectLastNameId,
+          selectors.prospectDobId,
+          selectors.prospectAddressId,
+          selectors.prospectCityId,
+          selectors.prospectStateId,
+          selectors.prospectZipId,
+          selectors.beginQuotingContinueId
+        ].filter(Boolean);
+        return requiredIds.every((id) => {
+          const el = findByStableId(id);
+          return !!el && visible(el);
+        }) ? '1' : '0';
+      }
+      case 'duplicate_to_next':
+        return (isCustomerSummaryOverviewPage(source) || isGatherDataPage(source) || url.includes(safe(source.selectProductContains)) || isProductOverviewPage(source) || isSelectProductFormPage(source)) ? '1' : '0';
+      case 'gather_data':
+        return isGatherDataPage(source) ? '1' : '0';
+      case 'on_customer_summary_overview':
+        return isCustomerSummaryOverviewPage(source) ? '1' : '0';
+      case 'on_product_overview':
+        return isProductOverviewPage(source) ? '1' : '0';
+      case 'to_select_product':
+        return isSelectProductFormPage(source) ? '1' : '0';
+      case 'gather_start_quoting_transition':
+        return (isConsumerReportsPage(source) || isDriversAndVehiclesPage(source) || isIncidentsPage(source) || isQuoteLandingPage(source)) ? '1' : '0';
+      case 'vehicle_added_tile':
+        return isVehicleAlreadyListedMatch(source) ? '1' : '0';
+      case 'vehicle_confirmed':
+        return isVehicleAlreadyListedMatch(source) ? '1' : '0';
+      case 'vehicle_select_enabled': {
+        const idx = Number(source.index);
+        const fieldName = safe(source.fieldName);
+        const minOptions = Number(source.minOptions || 1);
+        const el = document.getElementById(`ConsumerData.Assets.Vehicles[${idx}].${fieldName}`);
+        return (!!el && !el.disabled && (el.options || []).length >= minOptions) ? '1' : '0';
+      }
+      case 'on_select_product':
+        return isSelectProductFormPage(source) ? '1' : '0';
+      case 'select_product_to_consumer':
+        return (isConsumerReportsPage(source) || isDriversAndVehiclesPage(source) || isIncidentsPage(source) || isQuoteLandingPage(source)) ? '1' : '0';
+      case 'consumer_reports_ready':
+        return isConsumerReportsPage(source) ? '1' : '0';
+      case 'drivers_or_incidents':
+        return (isDriversAndVehiclesPage(source) || isIncidentsPage(source)) ? '1' : '0';
+      case 'after_driver_vehicle_continue':
+        return (isIncidentsPage(source) || isQuoteLandingPage(source)) ? '1' : '0';
+      case 'add_asset_modal_closed':
+        return document.getElementById(safe(source.addAssetSaveId)) ? '0' : '1';
+      case 'continue_enabled': {
+        const btn = document.getElementById(safe(source.buttonId));
+        return (!!btn && !btn.disabled) ? '1' : '0';
+      }
+      case 'incidents_done':
+        return isQuoteLandingPage(source) ? '1' : '0';
+      case 'quote_landing':
+        return isQuoteLandingPage(source) ? '1' : '0';
+      case 'is_duplicate':
+        return isDuplicatePage(source) ? '1' : '0';
+      case 'is_customer_summary_overview':
+        return isCustomerSummaryOverviewPage(source) ? '1' : '0';
+      case 'is_rapport':
+        return isGatherDataPage(source) ? '1' : '0';
+      case 'is_product_overview':
+        return isProductOverviewPage(source) ? '1' : '0';
+      case 'is_select_product':
+        return isSelectProductFormPage(source) ? '1' : '0';
+      case 'is_asc':
+        return isAscProductPage(source) ? '1' : '0';
+      case 'is_incidents':
+        return isIncidentsPage(source) ? '1' : '0';
+      default:
+        return '0';
+    }
+  };
+  const readAdvisorStatusOp = (opName, source = {}) => {
+    switch (opName) {
+      case 'detect_state':
+        return detectAdvisorRuntimeState(source);
+      case 'gather_start_quoting_status':
+        return linesOut(buildStartQuotingStatus(source));
+      case 'gather_confirmed_vehicles_status':
+        return gatherConfirmedVehiclesStatus(source);
+      case 'asc_participant_detail_status':
+        return linesOut(ascParticipantDetailStatus(source));
+      case 'asc_driver_rows_status':
+        return linesOut(ascDriverRowsStatus(source));
+      case 'asc_vehicle_rows_status':
+        return linesOut(ascVehicleRowsStatus(source));
+      case 'product_overview_tile_status':
+        return linesOut(readOverviewProductTileState(source));
+      case 'customer_summary_overview_status':
+        return linesOut(customerSummaryOverviewStatus(source));
+      case 'gather_vehicle_add_status':
+        return gatherVehicleAddStatus(source);
+      case 'gather_vehicle_row_status':
+        return linesOut(gatherVehicleRowStatus(source));
+      case 'gather_vehicle_edit_status':
+        return linesOut(readVehicleEditStatusFields());
+      default:
+        return '';
+    }
+  };
   const createAdvisorResidentRunner = (version, buildHash, maxEventCount) => {
     const runnerId = `advisor-runner-${advisorRunnerNow()}-${Math.floor(Math.random() * 100000)}`;
     const maxEvents = advisorRunnerClampInt(maxEventCount, 200, 20, 500);
@@ -4490,6 +4669,144 @@ copy(String((() => {
         } finally {
           this.running = false;
         }
+      },
+      runReadOnlyPoll(source = {}) {
+        const conditionName = safe(source.conditionName || source.name).trim();
+        const statusOp = safe(source.statusOp || source.opName).trim();
+        const requestedName = conditionName || statusOp;
+        const started = advisorRunnerNow();
+        let steps = 0;
+        let lastValue = '';
+        let page = this.readPage(source);
+        const baseResult = (result, extra = {}) => Object.assign({
+          result,
+          conditionName,
+          statusOp,
+          matched: '0',
+          steps: String(steps),
+          elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+          url: page.url,
+          routeFamily: page.routeFamily,
+          detectedState: page.detectedState,
+          lastValue: compact(lastValue, 240),
+          blockedReason: '',
+          eventSeq: String(this.eventSeq),
+          readOnly: '1',
+          mutatingRequestRefused: '0'
+        }, extra);
+
+        if (!advisorRunnerBool(source.readOnly)) {
+          this.lastBlockedReason = 'read-only-required';
+          this.addEvent('blocked', 'read-only-required', { requestedName });
+          return baseResult('REFUSED', {
+            blockedReason: 'read-only-required',
+            readOnly: advisorRunnerBool(source.readOnly) ? '1' : '0',
+            mutatingRequestRefused: '1'
+          });
+        }
+        if (!requestedName) {
+          this.lastBlockedReason = 'missing-read-only-target';
+          this.addEvent('blocked', 'missing-read-only-target');
+          return baseResult('REFUSED', { blockedReason: 'missing-read-only-target' });
+        }
+        if (advisorRunnerDisallowedMutatingOps.includes(requestedName)) {
+          this.lastBlockedReason = 'mutating-op-refused';
+          this.addEvent('blocked', 'mutating-op-refused', { requestedName });
+          return baseResult('REFUSED', {
+            blockedReason: 'mutating-op-refused',
+            mutatingRequestRefused: '1'
+          });
+        }
+        if (conditionName) {
+          if (!advisorRunnerAllowedReadOnlyConditions.includes(conditionName) || !advisorRunnerAllowedByCaller(conditionName, source.allowedConditions)) {
+            this.lastBlockedReason = 'condition-not-allowed';
+            this.addEvent('blocked', 'condition-not-allowed', { conditionName });
+            return baseResult('REFUSED', { blockedReason: 'condition-not-allowed' });
+          }
+        } else if (!advisorRunnerAllowedReadOnlyStatusOps.includes(statusOp) || !advisorRunnerAllowedByCaller(statusOp, source.allowedStatusOps)) {
+          this.lastBlockedReason = 'status-op-not-allowed';
+          this.addEvent('blocked', 'status-op-not-allowed', { statusOp });
+          return baseResult('REFUSED', { blockedReason: 'status-op-not-allowed' });
+        }
+
+        const expectedBuildHash = safe(source.expectedBuildHash).trim();
+        if (expectedBuildHash && expectedBuildHash !== this.buildHash) {
+          this.lastBlockedReason = 'stale-build';
+          this.addEvent('blocked', 'stale-build', { expectedBuildHash });
+          return baseResult('STALE_BUILD', { blockedReason: 'stale-build' });
+        }
+        const expectedHost = safe(source.expectedHost).trim();
+        if (expectedHost && !page.url.includes(expectedHost)) {
+          this.lastBlockedReason = 'wrong-context';
+          this.addEvent('blocked', 'wrong-context', { expectedHost, url: page.url });
+          return baseResult('WRONG_CONTEXT', { blockedReason: 'wrong-context' });
+        }
+
+        const timeoutMs = source.timeoutMs === undefined ? 1000 : advisorRunnerClampInt(source.timeoutMs, 0, 0, 5000);
+        const pollMs = source.pollMs === undefined ? 100 : advisorRunnerClampInt(source.pollMs, 0, 0, 1000);
+        const maxSteps = advisorRunnerClampInt(source.maxSteps, 20, 1, 100);
+        const requireKnownRoute = source.requireKnownRoute === undefined ? true : advisorRunnerBool(source.requireKnownRoute);
+        const deadline = started + timeoutMs;
+
+        this.running = true;
+        this.lastAction = 'runReadOnlyPoll';
+        this.addEvent('poll-start', 'runReadOnlyPoll', { conditionName, statusOp, timeoutMs, pollMs, maxSteps });
+        try {
+          if (timeoutMs <= 0) {
+            this.lastBlockedReason = 'timeout';
+            return baseResult('TIMEOUT', { blockedReason: 'timeout' });
+          }
+          while (steps < maxSteps) {
+            if (this.stopRequested) {
+              this.lastBlockedReason = 'stop-requested';
+              this.addEvent('blocked', 'stop-requested', { conditionName, statusOp });
+              return baseResult('STOPPED', { blockedReason: 'stop-requested' });
+            }
+            page = this.readPage(source);
+            if (requireKnownRoute && (page.routeFamily === 'UNKNOWN' || page.detectedState === 'NO_CONTEXT')) {
+              this.lastBlockedReason = 'unknown-route';
+              this.addEvent('blocked', 'unknown-route', page);
+              return baseResult('WRONG_CONTEXT', { blockedReason: 'unknown-route' });
+            }
+            steps += 1;
+            this.stepCount += 1;
+            if (conditionName) {
+              lastValue = readAdvisorWaitCondition(Object.assign({}, source.conditionArgs || {}, source, { name: conditionName }));
+              if (lastValue === '1') {
+                this.lastBlockedReason = '';
+                this.addEvent('poll-match', conditionName, { steps });
+                return baseResult('OK', { matched: '1', blockedReason: '' });
+              }
+            } else {
+              lastValue = readAdvisorStatusOp(statusOp, Object.assign({}, source.conditionArgs || {}, source));
+              if (safe(lastValue).trim()) {
+                this.lastBlockedReason = '';
+                this.addEvent('poll-status', statusOp, { steps });
+                return baseResult('OK', { matched: '1', blockedReason: '' });
+              }
+            }
+            if (advisorRunnerNow() >= deadline) {
+              this.lastBlockedReason = 'timeout';
+              this.addEvent('blocked', 'timeout', { conditionName, statusOp, steps });
+              return baseResult('TIMEOUT', { blockedReason: 'timeout' });
+            }
+            const waitUntil = Math.min(deadline, advisorRunnerNow() + pollMs);
+            while (pollMs > 0 && advisorRunnerNow() < waitUntil) {
+              // Bounded synchronous wait keeps the DevTools bridge contract non-async.
+            }
+          }
+          this.lastBlockedReason = 'max-steps';
+          this.addEvent('blocked', 'max-steps', { conditionName, statusOp, steps });
+          return baseResult('MAX_STEPS', { blockedReason: 'max-steps' });
+        } catch (err) {
+          this.lastError = safe(err && err.message || err);
+          this.lastBlockedReason = 'error';
+          this.addEvent('error', this.lastError, { conditionName, statusOp });
+          page = this.readPage(source);
+          return baseResult('ERROR', { blockedReason: 'error', lastValue: compact(this.lastError, 240) });
+        } finally {
+          this.running = false;
+        }
       }
     };
     runner.addEvent('bootstrap', 'runner-created', { version, buildHash });
@@ -4599,6 +4916,7 @@ copy(String((() => {
       if (command === 'reset') return linesOut(runner.reset(advisorRunnerBool(source.clearEvents), safe(source.reason || '')));
       if (command === 'getEvents') return linesOut(runner.getEvents(source));
       if (command === 'runUntilBlocked') return linesOut(runner.runUntilBlocked(source));
+      if (command === 'runReadOnlyPoll') return linesOut(runner.runReadOnlyPoll(source));
       return linesOut({
         result: 'ERROR',
         running: runner.running ? '1' : '0',
@@ -5842,89 +6160,7 @@ copy(String((() => {
     }
 
     case 'wait_condition': {
-      const name = safe(args.name);
-      const url = pageUrl();
-      const text = bodyText();
-      switch (name) {
-        case 'post_prospect_submit':
-          return (url.includes(safe(args.rapportContains)) || url.includes(safe(args.selectProductContains)) || isCustomerSummaryOverviewPage(args) || isProductOverviewPage(args) || isDuplicatePage(args) || isAddressVerificationPage()) ? '1' : '0';
-        case 'prospect_form_ready': {
-          const selectors = args.selectors || {};
-          const requiredIds = [
-            selectors.prospectFirstNameId,
-            selectors.prospectLastNameId,
-            selectors.prospectDobId,
-            selectors.prospectAddressId,
-            selectors.prospectCityId,
-            selectors.prospectStateId,
-            selectors.prospectZipId,
-            selectors.beginQuotingContinueId
-          ].filter(Boolean);
-          return requiredIds.every((id) => {
-            const el = findByStableId(id);
-            return !!el && visible(el);
-          }) ? '1' : '0';
-        }
-        case 'duplicate_to_next':
-          return (isCustomerSummaryOverviewPage(args) || isGatherDataPage(args) || url.includes(safe(args.selectProductContains)) || isProductOverviewPage(args) || isSelectProductFormPage(args)) ? '1' : '0';
-        case 'gather_data':
-          return isGatherDataPage(args) ? '1' : '0';
-        case 'on_customer_summary_overview':
-          return isCustomerSummaryOverviewPage(args) ? '1' : '0';
-        case 'on_product_overview':
-          return isProductOverviewPage(args) ? '1' : '0';
-        case 'to_select_product':
-          return isSelectProductFormPage(args) ? '1' : '0';
-        case 'gather_start_quoting_transition':
-          return (isConsumerReportsPage(args) || isDriversAndVehiclesPage(args) || isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
-        case 'vehicle_added_tile':
-          return isVehicleAlreadyListedMatch(args) ? '1' : '0';
-        case 'vehicle_confirmed':
-          return isVehicleAlreadyListedMatch(args) ? '1' : '0';
-        case 'vehicle_select_enabled': {
-          const idx = Number(args.index);
-          const fieldName = safe(args.fieldName);
-          const minOptions = Number(args.minOptions || 1);
-          const el = document.getElementById(`ConsumerData.Assets.Vehicles[${idx}].${fieldName}`);
-          return (!!el && !el.disabled && (el.options || []).length >= minOptions) ? '1' : '0';
-        }
-        case 'on_select_product':
-          return isSelectProductFormPage(args) ? '1' : '0';
-        case 'select_product_to_consumer':
-          return (isConsumerReportsPage(args) || isDriversAndVehiclesPage(args) || isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
-        case 'consumer_reports_ready':
-          return isConsumerReportsPage(args) ? '1' : '0';
-        case 'drivers_or_incidents':
-          return (isDriversAndVehiclesPage(args) || isIncidentsPage(args)) ? '1' : '0';
-        case 'after_driver_vehicle_continue':
-          return (isIncidentsPage(args) || isQuoteLandingPage(args)) ? '1' : '0';
-        case 'add_asset_modal_closed':
-          return document.getElementById(safe(args.addAssetSaveId)) ? '0' : '1';
-        case 'continue_enabled': {
-          const btn = document.getElementById(safe(args.buttonId));
-          return (!!btn && !btn.disabled) ? '1' : '0';
-        }
-        case 'incidents_done':
-          return isQuoteLandingPage(args) ? '1' : '0';
-        case 'quote_landing':
-          return isQuoteLandingPage(args) ? '1' : '0';
-        case 'is_duplicate':
-          return isDuplicatePage(args) ? '1' : '0';
-        case 'is_customer_summary_overview':
-          return isCustomerSummaryOverviewPage(args) ? '1' : '0';
-        case 'is_rapport':
-          return isGatherDataPage(args) ? '1' : '0';
-        case 'is_product_overview':
-          return isProductOverviewPage(args) ? '1' : '0';
-        case 'is_select_product':
-          return isSelectProductFormPage(args) ? '1' : '0';
-        case 'is_asc':
-          return isAscProductPage(args) ? '1' : '0';
-        case 'is_incidents':
-          return isIncidentsPage(args) ? '1' : '0';
-        default:
-          return '0';
-      }
+      return readAdvisorWaitCondition(args);
     }
 
     default:

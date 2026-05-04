@@ -20,6 +20,94 @@ Phase 1 has been implemented as a skeleton only:
 
 The production Advisor workflow is not routed through the runner by default. Existing calls still use `AdvisorQuoteRunOp()` and the normal `ops_result.js` one-op bridge. The resident runner can be exercised manually through the AHK wrappers, but only after the feature flag is explicitly enabled.
 
+## Phase 2 Read-Only Polling Pilot
+
+Phase 2 adds an opt-in resident command named `runReadOnlyPoll`. It is a bounded read-only polling command for selected wait/status reads only. The feature flag remains off by default:
+
+```text
+advisorQuoteResidentRunnerFeatureEnabled := false
+advisorQuoteResidentRunnerReadOnlyOnly := true
+```
+
+When the flag is disabled, production behavior is unchanged and `AdvisorQuoteWaitForCondition()` continues to use the old `AdvisorQuoteRunOp("wait_condition", ...)` polling loop. When the flag is explicitly enabled, AHK may try `AdvisorQuoteRunnerWaitCondition()` for allowlisted conditions. Any missing runner, stale build, wrong context, refused command, error, empty result, or unsupported condition falls back to the old op path without changing the business decision.
+
+`runReadOnlyPoll` accepts:
+
+- `conditionName` or `statusOp`
+- `conditionArgs`
+- `timeoutMs`
+- `pollMs`
+- `maxSteps`
+- `expectedBuildHash`
+- `readOnly=1`
+- `allowedConditions`
+- `allowedStatusOps`
+
+It returns key=value fields:
+
+- `result=OK|TIMEOUT|MAX_STEPS|STOPPED|STALE_BUILD|WRONG_CONTEXT|REFUSED|ERROR`
+- `conditionName=`
+- `statusOp=`
+- `matched=1|0`
+- `steps=`
+- `elapsedMs=`
+- `url=`
+- `routeFamily=`
+- `detectedState=`
+- `lastValue=`
+- `blockedReason=`
+- `eventSeq=`
+- `readOnly=1`
+- `mutatingRequestRefused=0|1`
+
+The command refuses to run unless `readOnly=1`, refuses unknown conditions/status ops, refuses known mutating ops, checks stale build evidence, can reject wrong context, and hard-caps `timeoutMs`, `pollMs`, and `maxSteps`. The loop is synchronous to preserve the existing DevTools `copy(String(...))` contract, so it is bounded aggressively and must return control quickly.
+
+Allowed Phase 2 wait conditions:
+
+- `on_customer_summary_overview`
+- `on_product_overview`
+- `gather_data`
+- `is_rapport`
+- `is_select_product`
+- `is_asc`
+- `consumer_reports_ready`
+- `drivers_or_incidents`
+- `after_driver_vehicle_continue`
+- `quote_landing`
+- `incidents_done`
+- `continue_enabled`
+- `vehicle_select_enabled`
+- `vehicle_added_tile`
+- `vehicle_confirmed`
+
+Allowed Phase 2 status ops:
+
+- `detect_state`
+- `gather_start_quoting_status`
+- `gather_confirmed_vehicles_status`
+- `asc_participant_detail_status`
+- `asc_driver_rows_status`
+- `asc_vehicle_rows_status`
+- `product_overview_tile_status`
+- `customer_summary_overview_status`
+- `gather_vehicle_add_status`
+- `gather_vehicle_row_status`
+- `gather_vehicle_edit_status`
+
+Explicitly disallowed mutating ops inside the runner include Product Overview tile actions, Customer Summary START HERE, duplicate/address verification handlers, Gather Data fill/vehicle actions, Start Quoting actions, Select Product writes, vehicle dropdown selection, participant/vehicle modal fills, incident handling, generic click helpers, ASC spouse/driver/vehicle reconciliation, and stale-row cancel.
+
+Phase 2 AHK wrappers:
+
+- `AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "")`
+- `AdvisorQuoteRunnerReadStatus(opName, args)`
+
+Phase 2 trace logs:
+
+- `ADVISOR_RUNNER_WAIT_ATTEMPT`
+- `ADVISOR_RUNNER_WAIT_USED`
+- `ADVISOR_RUNNER_WAIT_FALLBACK`
+- `ADVISOR_RUNNER_WAIT_RESULT`
+
 ## Current Bridge Flow
 
 ### Advisor-specific bridge

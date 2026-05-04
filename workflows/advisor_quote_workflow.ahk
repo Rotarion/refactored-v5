@@ -4583,11 +4583,11 @@ AdvisorQuoteResidentRunnerEnabled() {
 }
 
 AdvisorQuoteResidentRunnerVersion() {
-    return "phase1"
+    return "phase2"
 }
 
 AdvisorQuoteResidentRunnerBuildHash() {
-    return "advisor-resident-runner-phase1"
+    return "advisor-resident-runner-phase2-read-only-poll"
 }
 
 AdvisorQuoteRunnerBuildCommandArgs(command, args := Map()) {
@@ -4666,6 +4666,134 @@ AdvisorQuoteRunnerRunUntilBlocked(args := Map()) {
     if (advisorQuoteResidentRunnerReadOnlyOnly = true)
         runnerArgs["readOnly"] := "1"
     return AdvisorQuoteRunnerCommand("runUntilBlocked", runnerArgs, "ADVISOR_RUNNER_RUN_UNTIL_BLOCKED")
+}
+
+AdvisorQuoteRunnerWaitAllowlist() {
+    return [
+        "on_customer_summary_overview",
+        "on_product_overview",
+        "gather_data",
+        "is_rapport",
+        "is_select_product",
+        "is_asc",
+        "consumer_reports_ready",
+        "drivers_or_incidents",
+        "after_driver_vehicle_continue",
+        "quote_landing",
+        "incidents_done",
+        "continue_enabled",
+        "vehicle_select_enabled",
+        "vehicle_added_tile",
+        "vehicle_confirmed"
+    ]
+}
+
+AdvisorQuoteRunnerStatusAllowlist() {
+    return [
+        "detect_state",
+        "gather_start_quoting_status",
+        "gather_confirmed_vehicles_status",
+        "asc_participant_detail_status",
+        "asc_driver_rows_status",
+        "asc_vehicle_rows_status",
+        "product_overview_tile_status",
+        "customer_summary_overview_status",
+        "gather_vehicle_add_status",
+        "gather_vehicle_row_status",
+        "gather_vehicle_edit_status"
+    ]
+}
+
+AdvisorQuoteRunnerNotUsed(reason, extra := Map()) {
+    result := Map("used", "0", "fallbackReason", reason)
+    if IsObject(extra) {
+        for key, value in extra
+            result[String(key)] := value
+    }
+    return result
+}
+
+AdvisorQuoteRunnerUsedResult(value, status) {
+    result := Map("used", "1", "value", value)
+    if IsObject(status) {
+        for key, val in status
+            result[String(key)] := val
+    }
+    return result
+}
+
+AdvisorQuoteRunnerAllowedWaitCondition(name) {
+    return AdvisorQuoteIsStateInList(String(name), AdvisorQuoteRunnerWaitAllowlist())
+}
+
+AdvisorQuoteRunnerAllowedStatusOp(opName) {
+    return AdvisorQuoteIsStateInList(String(opName), AdvisorQuoteRunnerStatusAllowlist())
+}
+
+AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "") {
+    global advisorQuoteResidentRunnerReadOnlyOnly
+    if !AdvisorQuoteResidentRunnerEnabled()
+        return AdvisorQuoteRunnerNotUsed("feature-disabled")
+    if (advisorQuoteResidentRunnerReadOnlyOnly != true)
+        return AdvisorQuoteRunnerNotUsed("read-only-guard-disabled")
+    if !AdvisorQuoteRunnerAllowedWaitCondition(name)
+        return AdvisorQuoteRunnerNotUsed("condition-not-allowlisted")
+    if StopRequested()
+        return AdvisorQuoteRunnerNotUsed("stop-requested")
+    if !AdvisorQuoteEnsureResidentRunner()
+        return AdvisorQuoteRunnerNotUsed("bootstrap-failed")
+
+    runnerArgs := AdvisorQuoteMergeArgs(args, Map(
+        "conditionName", name,
+        "conditionArgs", args,
+        "readOnly", "1",
+        "allowedConditions", name,
+        "timeoutMs", timeoutMs,
+        "pollMs", pollMs,
+        "maxSteps", 100
+    ))
+    status := AdvisorQuoteRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_WAIT_RESULT")
+    result := AdvisorQuoteStatusValue(status, "result")
+    matched := AdvisorQuoteStatusValue(status, "matched")
+    if (result = "OK" && matched = "1")
+        return AdvisorQuoteRunnerUsedResult(true, status)
+    if (result = "TIMEOUT" || result = "MAX_STEPS")
+        return AdvisorQuoteRunnerUsedResult(false, status)
+    if (result = "STOPPED")
+        return AdvisorQuoteRunnerUsedResult(false, status)
+    if AdvisorQuoteIsStateInList(result, ["", "MISSING", "STALE", "STALE_BUILD", "WRONG_CONTEXT", "ERROR", "EMPTY", "DISABLED", "STOP_REQUESTED", "REFUSED"])
+        return AdvisorQuoteRunnerNotUsed(result = "" ? "empty-result" : result, status)
+    return AdvisorQuoteRunnerNotUsed("unhandled-result-" result, status)
+}
+
+AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
+    global advisorQuoteResidentRunnerReadOnlyOnly
+    if !AdvisorQuoteResidentRunnerEnabled()
+        return AdvisorQuoteRunnerNotUsed("feature-disabled")
+    if (advisorQuoteResidentRunnerReadOnlyOnly != true)
+        return AdvisorQuoteRunnerNotUsed("read-only-guard-disabled")
+    if !AdvisorQuoteRunnerAllowedStatusOp(opName)
+        return AdvisorQuoteRunnerNotUsed("status-op-not-allowlisted")
+    if StopRequested()
+        return AdvisorQuoteRunnerNotUsed("stop-requested")
+    if !AdvisorQuoteEnsureResidentRunner()
+        return AdvisorQuoteRunnerNotUsed("bootstrap-failed")
+
+    runnerArgs := AdvisorQuoteMergeArgs(args, Map(
+        "statusOp", opName,
+        "conditionArgs", args,
+        "readOnly", "1",
+        "allowedStatusOps", opName,
+        "timeoutMs", 1000,
+        "pollMs", 0,
+        "maxSteps", 1
+    ))
+    status := AdvisorQuoteRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_STATUS_POLL")
+    result := AdvisorQuoteStatusValue(status, "result")
+    matched := AdvisorQuoteStatusValue(status, "matched")
+    if (result = "OK" && matched = "1")
+        return AdvisorQuoteRunnerUsedResult(true, status)
+    return AdvisorQuoteRunnerNotUsed(result = "" ? "empty-result" : result, status)
 }
 
 AdvisorQuoteRunJsOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
@@ -4907,6 +5035,28 @@ AdvisorQuoteMergeArgs(baseArgs, extraArgs := Map()) {
 }
 
 AdvisorQuoteWaitForCondition(name, timeoutMs, pollMs := 350, args := Map()) {
+    if AdvisorQuoteResidentRunnerEnabled() && AdvisorQuoteRunnerAllowedWaitCondition(name) {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_WAIT_ATTEMPT", AdvisorQuoteGetLastStep(), "conditionName=" name ", timeoutMs=" timeoutMs ", pollMs=" pollMs)
+        runnerWait := AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs, pollMs)
+        if (AdvisorQuoteStatusValue(runnerWait, "used") = "1") {
+            result := AdvisorQuoteStatusValue(runnerWait, "result")
+            steps := AdvisorQuoteStatusValue(runnerWait, "steps")
+            elapsedMs := AdvisorQuoteStatusValue(runnerWait, "elapsedMs")
+            AdvisorQuoteAppendLog("ADVISOR_RUNNER_WAIT_USED", AdvisorQuoteGetLastStep(), "conditionName=" name ", result=" result ", steps=" steps ", elapsedMs=" elapsedMs)
+            AdvisorQuoteAppendLog("ADVISOR_RUNNER_WAIT_RESULT", AdvisorQuoteGetLastStep(), "conditionName=" name ", result=" result ", matched=" AdvisorQuoteStatusValue(runnerWait, "matched") ", steps=" steps ", elapsedMs=" elapsedMs)
+            return runnerWait["value"] = true
+        }
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RUNNER_WAIT_FALLBACK",
+            AdvisorQuoteGetLastStep(),
+            "conditionName=" name
+                . ", timeoutMs=" timeoutMs
+                . ", pollMs=" pollMs
+                . ", result=" AdvisorQuoteStatusValue(runnerWait, "result")
+                . ", fallbackReason=" AdvisorQuoteStatusValue(runnerWait, "fallbackReason")
+        )
+    }
+
     start := A_TickCount
     nextHeartbeat := A_TickCount + 5000
     while ((A_TickCount - start) < timeoutMs) {

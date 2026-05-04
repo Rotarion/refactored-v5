@@ -32,13 +32,14 @@ It is a contract inventory, not a refactor design.
 - Stale Gather Data row note: `gather_stale_add_vehicle_row_status` and `cancel_stale_add_vehicle_row` were added to clean up a stale incomplete Add Car/Truck row only after all expected vehicles are already confirmed or safely promoted. The cancel action is row-scoped, never clicks Add/Remove, and verifies the row closed before the workflow continues.
 - ASCPRODUCT reconciliation note: the Drivers and Vehicles stage now uses `asc_*` status/action ops for participant marital/spouse truth, driver row add/remove, vehicle row add/promote, and save gating. ASCPRODUCT route detection is dynamic (`/apps/ASCPRODUCT/<id>/`) and does not depend on fixed route ids such as 109 or 112.
 - Resident runner Phase 1 note: `resident_runner_command` was added as a disabled-by-default, read-only resident runner skeleton. It can bootstrap `window.__advisorRunner` and report status/events through the existing `copy(String(...))` bridge, but production workflow remains on the old op path unless the AHK feature flag is explicitly enabled. Phase 1 runner commands do not click, select, add, remove, confirm, direct-navigate, or answer fields.
+- Resident runner Phase 2 note: `resident_runner_command command=runReadOnlyPoll` adds bounded read-only polling for allowlisted wait conditions and status ops. It requires `readOnly=1`, refuses unknown or mutating requests, hard-caps `timeoutMs`/`pollMs`/`maxSteps`, returns key=value status, and remains behind `advisorQuoteResidentRunnerFeatureEnabled := false` by default. `AdvisorQuoteWaitForCondition()` may try the runner only when the flag is enabled and the condition is allowlisted; otherwise it uses the existing `wait_condition` op loop.
 
 ## Top-Level Op Inventory
 
 | Op name | Arg categories | Return format | Known success values | Known failure values | Known AHK caller | Smoke coverage | High risk |
 |---|---|---:|---|---|---|---|---|
 | `detect_state` | `selectors`, `urls`, `texts` | raw string | page state names | `NO_CONTEXT`, `GATEWAY`, `ADVISOR_OTHER` | `AdvisorQuoteDetectState()` | yes | high |
-| `resident_runner_command` | `command`, version/build hash, bounded command-specific args | key=value block | `OK`, `ALREADY_BOOTSTRAPPED`, `MAX_STEPS`, `TIMEOUT`, `STOPPED` depending command | `MISSING`, `STALE`, `STALE_BUILD`, `BUSY`, `BLOCKED`, `WRONG_CONTEXT`, `ERROR` | Phase 1 AHK wrappers only; disabled by default | yes | medium |
+| `resident_runner_command` | `command`, version/build hash, bounded command-specific args | key=value block | `OK`, `ALREADY_BOOTSTRAPPED`, `MAX_STEPS`, `TIMEOUT`, `STOPPED` depending command | `MISSING`, `STALE`, `STALE_BUILD`, `BUSY`, `BLOCKED`, `WRONG_CONTEXT`, `REFUSED`, `ERROR` | Resident runner AHK wrappers only; disabled by default | yes | medium |
 | `click_product_overview_tile` | `texts`, `urls`, product tile text | raw string | `OK`; already-selected tile returns `OK` without another click | `NOT_OVERVIEW`, `NO_TILE`, `CLICK_FAILED` | `AdvisorQuoteClickProductOverviewTile()` | yes | high |
 | `product_overview_tile_status` | `texts`, `urls`, product tile text | key=value block | `result=SELECTED`, `present=1`, `selected=1` | `result=NOT_OVERVIEW`, `result=NO_TILE`, `result=FOUND`, `selected=0` | `AdvisorQuoteGetProductOverviewTileStatus()` | yes | high |
 | `ensure_product_overview_tile_selected` | `texts`, `urls`, product tile text | key=value block | `SELECTED`, `CLICKED_SELECTED` | `NO_TILE`, `NOT_OVERVIEW`, `CLICK_FAILED`, `VERIFY_FAILED`, `ERROR` | available for Product Overview diagnostics; workflow currently uses status+click+poll | yes | high |
@@ -101,6 +102,108 @@ Covered by the smoke test: all known `wait_condition` names now have direct offl
 
 Negative-evidence risk: `add_asset_modal_closed` returns `1` when `document.getElementById(args.addAssetSaveId)` is absent. That can succeed because the modal is truly closed, because the id changed, or because the DOM fixture/page is incomplete.
 
+## Resident Runner Phase 2 Contract
+
+`resident_runner_command` supports `runReadOnlyPoll` in addition to the Phase 1 commands. This command is a read-only allowlisted polling pilot, not autonomous JS automation.
+
+Accepted args:
+
+- `conditionName` or `statusOp`
+- `conditionArgs`
+- `timeoutMs`
+- `pollMs`
+- `maxSteps`
+- `expectedBuildHash`
+- `readOnly=1`
+- `allowedConditions`
+- `allowedStatusOps`
+
+Return fields:
+
+- `result=OK|TIMEOUT|MAX_STEPS|STOPPED|STALE_BUILD|WRONG_CONTEXT|REFUSED|ERROR`
+- `conditionName`
+- `statusOp`
+- `matched=1|0`
+- `steps`
+- `elapsedMs`
+- `url`
+- `routeFamily`
+- `detectedState`
+- `lastValue`
+- `blockedReason`
+- `eventSeq`
+- `readOnly`
+- `mutatingRequestRefused`
+
+Allowed wait conditions:
+
+- `on_customer_summary_overview`
+- `on_product_overview`
+- `gather_data`
+- `is_rapport`
+- `is_select_product`
+- `is_asc`
+- `consumer_reports_ready`
+- `drivers_or_incidents`
+- `after_driver_vehicle_continue`
+- `quote_landing`
+- `incidents_done`
+- `continue_enabled`
+- `vehicle_select_enabled`
+- `vehicle_added_tile`
+- `vehicle_confirmed`
+
+Allowed status ops:
+
+- `detect_state`
+- `gather_start_quoting_status`
+- `gather_confirmed_vehicles_status`
+- `asc_participant_detail_status`
+- `asc_driver_rows_status`
+- `asc_vehicle_rows_status`
+- `product_overview_tile_status`
+- `customer_summary_overview_status`
+- `gather_vehicle_add_status`
+- `gather_vehicle_row_status`
+- `gather_vehicle_edit_status`
+
+Disallowed mutating ops inside the runner:
+
+- `click_product_overview_tile`
+- `ensure_product_overview_tile_selected`
+- `click_product_overview_subnav_from_rapport`
+- `click_customer_summary_start_here`
+- `handle_address_verification`
+- `handle_duplicate_prospect`
+- `fill_gather_defaults`
+- `confirm_potential_vehicle`
+- `prepare_vehicle_row`
+- `set_vehicle_year_and_wait_manufacturer`
+- `handle_vehicle_edit_modal`
+- `ensure_start_quoting_auto_checkbox`
+- `ensure_auto_start_quoting_state`
+- `click_create_quotes_order_reports`
+- `click_start_quoting_add_product`
+- `set_select_product_defaults`
+- `select_vehicle_dropdown_option`
+- `fill_participant_modal`
+- `select_remove_reason`
+- `fill_vehicle_modal`
+- `handle_incidents`
+- `click_by_id`
+- `click_by_text`
+- `asc_resolve_participant_marital_and_spouse`
+- `asc_reconcile_driver_rows`
+- `asc_reconcile_vehicle_rows`
+- `cancel_stale_add_vehicle_row`
+
+AHK wrappers:
+
+- `AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "")`
+- `AdvisorQuoteRunnerReadStatus(opName, args)`
+
+The feature flag remains `advisorQuoteResidentRunnerFeatureEnabled := false` by default, with `advisorQuoteResidentRunnerReadOnlyOnly := true`. Any runner error, missing/stale runner, wrong context, refused request, empty result, or unsupported condition/status op falls back to the old AHK-mediated op path. Mutating ops remain on the existing op path.
+
 ## Page State Values
 
 `detect_state` can return:
@@ -154,7 +257,7 @@ The smoke test covers representative DOM/location cases for `CUSTOMER_SUMMARY_OV
 - `ensure_start_quoting_auto_checkbox` returns keys: `result`, `autoPresent`, `autoCheckedBefore`, `autoCheckedAfter`, `clicked`, `directSetUsed`, `method`, `failedFields`, and `alerts`. It targets only `ConsumerReports.Auto.Product-intel#102`.
 - `address_verification_status` returns keys: `result`, `modalPresent`, `radioCount`, `continuePresent`, `continueEnabled`, `enteredText`, `suggestionCount`, `suggestions`, `selectedValue`, `evidence`, `missing`, and `url`.
 - `handle_address_verification` returns keys: `result`, `method`, `selectedValue`, `selectedText`, `selectedIndex`, `radioSelected`, `continueButtonPresent`, `continueButtonEnabledBefore`, `continueButtonEnabledAfter`, `continueClicked`, `enteredText`, `suggestions`, `matchScore`, `matchedBy`, `failedFields`, and `evidence`. On unit-preserving fallback it can also return `unitDroppedOrNotShown`.
-- `resident_runner_command` supports `bootstrap`, `status`, `stop`, `reset`, `getEvents`, and read-only `runUntilBlocked`. `bootstrap` installs `window.__advisorRunner`; `status` returns runner health plus `routeFamily` and `detectedState`; `stop` sets only a runner stop flag; `reset` clears runner state when not running; `getEvents` returns a capped `eventsJson`; `runUntilBlocked` requires `readOnly=1`, reads only URL/route/state/modal evidence, and returns quickly on `MAX_STEPS`, `TIMEOUT`, `STOPPED`, `STALE_BUILD`, or `BLOCKED`. Phase 1 refuses non-read-only run requests with `mutatingRequestRefused=1`.
+- `resident_runner_command` supports `bootstrap`, `status`, `stop`, `reset`, `getEvents`, read-only `runUntilBlocked`, and Phase 2 `runReadOnlyPoll`. `bootstrap` installs `window.__advisorRunner`; `status` returns runner health plus `routeFamily` and `detectedState`; `stop` sets only a runner stop flag; `reset` clears runner state when not running; `getEvents` returns a capped `eventsJson`; `runUntilBlocked` requires `readOnly=1`, reads only URL/route/state/modal evidence, and returns quickly on `MAX_STEPS`, `TIMEOUT`, `STOPPED`, `STALE_BUILD`, or `BLOCKED`. `runReadOnlyPoll` requires `readOnly=1`, polls only allowlisted wait/status reads, and returns `OK`, `TIMEOUT`, `MAX_STEPS`, `STOPPED`, `STALE_BUILD`, `WRONG_CONTEXT`, `REFUSED`, or `ERROR`. Non-read-only or mutating runner requests are refused with `mutatingRequestRefused=1`.
 
 ## Coverage Summary
 
