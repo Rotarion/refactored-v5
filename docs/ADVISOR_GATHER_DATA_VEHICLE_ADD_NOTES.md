@@ -235,6 +235,18 @@ The match is still strict:
 
 The catalog-aware labels apply to confirmed-card evidence (`gather_vehicle_add_status` preflight/status and `gather_confirmed_vehicles_status` final guard). Potential-card confirmation, Add Car or Truck row selection, model dropdown selection, and ASC/109 handling are unchanged.
 
+## ASCPRODUCT Vehicle Reconciliation
+
+ASCPRODUCT is now a separate downstream reconciliation stage. It does not loosen the 102 Gather Data rules. Instead, it receives:
+
+- complete lead vehicles: exact year, recognized make, and non-empty normalized model
+- partial year/make vehicles: exact year and recognized make, with no model text
+- deferred vehicles: insufficient evidence for automatic action
+
+Complete ASCPRODUCT vehicle rows still require exact year, catalog-aware make family, and strict normalized model. Partial year/make rows may be promoted only from scoped live Advisor evidence: exactly one same-year/same-make row, visible model text, and VIN or masked VIN evidence. This is why a synthetic `2010 Nissan` lead can promote only when Advisor shows a single VIN-bearing `2010 Nissan <model>` row. If two same-year/same-make candidates appear, the workflow fails/defer safely instead of choosing a first model from a broad dropdown.
+
+Already added/confirmed ASCPRODUCT vehicle rows count as satisfied only after the row is re-read. Save and Continue remains blocked until driver rows are resolved, at least one expected or safely promoted vehicle is added/confirmed, and Advisor's `profile-summary-submitBtn` is enabled.
+
 ## Validation
 
 - `node assets/js/advisor_quote/build_operator.js --check`: passed.

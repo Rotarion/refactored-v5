@@ -117,6 +117,26 @@ AdvisorCanonicalizeVehicleModelAndTrim(model, trimHint := "") {
         remainingTrim := (m.Count >= 2) ? m[2] : ""
         normalizedModel := "F" m[1]
         normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "CR" && RegExMatch(normalizedTrim, "^V(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "CRV"
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "CX" && RegExMatch(normalizedTrim, "^(\d{2})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "CX" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "QX" && RegExMatch(normalizedTrim, "^(\d{2})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "QX" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "GLE" && RegExMatch(normalizedTrim, "^(\d{3})(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 2) ? m[2] : ""
+        normalizedModel := "GLE" m[1]
+        normalizedTrim := Trim(String(remainingTrim))
+    } else if (normalizedModel = "4" && RegExMatch(normalizedTrim, "^RUNNER(?:\s+(.*))?$", &m)) {
+        remainingTrim := (m.Count >= 1) ? m[1] : ""
+        normalizedModel := "4RUNNER"
+        normalizedTrim := Trim(String(remainingTrim))
     }
     return Map(
         "model", normalizedModel,

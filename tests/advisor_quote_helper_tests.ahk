@@ -51,6 +51,19 @@ infinitiQx56Vehicle := AdvisorNormalizeVehicleDescriptor("2012 INFINITI QX56")
 AssertEqual(infinitiQx56Vehicle["make"], "INFINITI", "Infiniti QX56 make should still normalize")
 AssertEqual(infinitiQx56Vehicle["model"], "QX56", "Infiniti QX56 model should still normalize")
 
+hondaCrvVehicle := AdvisorNormalizeVehicleDescriptor("2019 Honda CR-V")
+AssertEqual(hondaCrvVehicle["make"], "HONDA", "Honda CR-V make should normalize")
+AssertEqual(hondaCrvVehicle["model"], "CRV", "Honda CR-V should normalize to CRV for strict model matching")
+
+hyundaiSonataVehicle := AdvisorNormalizeVehicleDescriptor("2013 Hyundai Sonata")
+AssertEqual(hyundaiSonataVehicle["make"], "HYUNDAI", "Hyundai Sonata make should normalize")
+AssertEqual(hyundaiSonataVehicle["model"], "SONATA", "Hyundai Sonata model should normalize")
+
+nissanPartialVehicle := AdvisorNormalizeVehicleDescriptor("2010 Nissan")
+AssertEqual(nissanPartialVehicle["year"], "2010", "Year/make-only Nissan should preserve year")
+AssertEqual(nissanPartialVehicle["make"], "NISSAN", "Year/make-only Nissan should preserve make")
+AssertEqual(nissanPartialVehicle["model"], "", "Year/make-only Nissan should remain partial with no model")
+
 joseSample :=
 (
 "Name:
@@ -172,6 +185,18 @@ AssertFalse(AdvisorVehicleCatalogModelMatches("Prius", "Prius Prime"), "Prius mu
 AssertTrue(AdvisorVehicleCatalogModelMatches("F-150", "F150"), "F-150 variants should normalize")
 AssertFalse(AdvisorVehicleCatalogModelMatches("F-150", "F-250"), "F150 must not match F250")
 
+ascVehiclePolicy := AdvisorQuoteClassifyAscVehicles(Map("vehicles", [
+    TestVehicle("2019", "HONDA", "CRV"),
+    TestVehicle("2013", "HYUNDAI", "SONATA"),
+    TestVehicle("2010", "NISSAN", "")
+]))
+AssertEqual(ascVehiclePolicy["completeVehicles"].Length, 2, "ASC policy should keep year/make/model vehicles complete")
+AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"].Length, 1, "ASC policy should classify year/make-only vehicle as partial")
+AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "ASC partial should preserve year/make identity")
+
+singleLeadProfile := Map("raw", "Marital Status: Single", "person", Map("fullName", "Test Single Lead"))
+AssertEqual(AdvisorQuoteLeadMaritalStatus(singleLeadProfile), "Single", "Lead marital status parser should preserve Single truth")
+
 missingOnlyPolicy := AdvisorQuoteClassifyGatherVehicles(Map("vehicles", [
     TestVehicle("", "TOYOTA", "PRIUS PRIME")
 ]))
@@ -229,10 +254,15 @@ safeConfirmedStatus := Map(
 safeReason := ""
 AssertTrue(AdvisorQuoteGatherConfirmedVehiclesSafe(safeConfirmedStatus, Map(), &safeReason), "Ignored missing-year vehicles should not block final reconciliation when expected actionable vehicles match")
 
-if (A_Args.Length && (A_Args[1] = "--headless" || A_Args[1] = "headless"))
-    ExitApp(0)
-else
-    MsgBox("advisor_quote_helper_tests passed")
+headless := false
+for _, arg in A_Args {
+    if (arg = "--headless" || arg = "headless") {
+        headless := true
+        break
+    }
+}
+
+ExitApp(0)
 
 TestVehicle(year, make, model, vin := "") {
     display := Trim(String(year) "|" String(make) "|" String(model), "|")
