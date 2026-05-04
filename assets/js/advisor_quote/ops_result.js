@@ -1149,6 +1149,7 @@ copy(String((() => {
   };
   const normalizeVehicleModelKey = (value) => normalizeVehicleText(value)
     .replace(/\bCR\s+V\b/g, 'CRV')
+    .replace(/\bHR\s+V\b/g, 'HRV')
     .replace(/\bCX\s+30\b/g, 'CX30')
     .replace(/\bGLE\s+350\b/g, 'GLE350')
     .replace(/\b4\s+RUNNER\b/g, '4RUNNER')
@@ -1157,6 +1158,21 @@ copy(String((() => {
     .replace(/\bF\s+(150|250|350|450)\b/g, 'F$1')
     .replace(/[^A-Z0-9]/g, '');
   const vehicleTokenRegex = (token) => new RegExp(`(^|[^A-Z0-9])${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Z0-9]|$)`);
+  const vehicleCompactModelRegex = (key) => {
+    if (/^(CR|HR)V$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])${key.slice(0, 1)}[\\s-]*R[\\s-]*V([^A-Z0-9]|$)`);
+    if (/^CX\d{2}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])C[\\s-]*X[\\s-]*${key.slice(2)}([^A-Z0-9]|$)`);
+    if (/^QX\d{2}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])Q[\\s-]*X[\\s-]*${key.slice(2)}([^A-Z0-9]|$)`);
+    if (/^GLE\d{3}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])GLE[\\s-]*${key.slice(3)}([^A-Z0-9]|$)`);
+    if (/^F\d{3,4}$/.test(key))
+      return new RegExp(`(^|[^A-Z0-9])F[\\s-]*${key.slice(1)}([^A-Z0-9]|$)`);
+    if (key === '4RUNNER')
+      return /(^|[^A-Z0-9])4[\s-]*RUNNER([^A-Z0-9]|$)/;
+    return null;
+  };
   const vehicleMakeMatches = (haystack, match) => {
     const labels = (match.allowedMakeLabels || []).map(normalizeVehicleText).filter(Boolean);
     if (labels.length)
@@ -1171,13 +1187,14 @@ copy(String((() => {
     if (key === 'PRIUS' && /(^|[^A-Z0-9])PRIUS\s+PRIME([^A-Z0-9]|$)/.test(haystack)) return false;
     if (key === 'TRANSIT' && /(^|[^A-Z0-9])TRANSIT\s+(CONN|CONNECT)([^A-Z0-9]|$)/.test(haystack)) return false;
     if (key === 'EXPRESS' && /(^|[^A-Z0-9])CITY\s+EXPRESS([^A-Z0-9]|$)/.test(haystack)) return false;
-    if (/^F(150|250|350|450)$/.test(key)) return vehicleTokenRegex(key).test(haystack);
     if (/^SILVERADO(1500|2500|3500)$/.test(key)) {
       const series = key.match(/(1500|2500|3500)$/)[1];
       return haystackKey.includes(`SILVERADO${series}`);
     }
     if (key === 'GRANDCARAVAN')
       return haystackKey.includes('GRANDCARAVAN');
+    const compactRegex = vehicleCompactModelRegex(key);
+    if (compactRegex) return compactRegex.test(haystack);
     return vehicleTokenRegex(model).test(haystack);
   };
   const getVehicleMatchArgs = (source = {}) => {
@@ -2987,6 +3004,14 @@ copy(String((() => {
     return { vehicleType, year, manufacturer, model, subModel };
   };
   const vehicleFieldValue = (el) => safe(el && el.value).trim();
+  const vehicleFieldTextValue = (el) => {
+    const value = vehicleFieldValue(el);
+    if (el && el.tagName === 'SELECT') {
+      const selected = Array.from(el.options || []).find((opt) => opt.selected) || (el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null);
+      return [value, vehicleOptionText(selected)].filter(Boolean).join(' ').trim();
+    }
+    return value;
+  };
   const vehicleFieldReady = (el) => !!(el && visible(el) && !isDisabledLike(el) && !el.readOnly);
   const vehicleRowComplete = (row) => !!(
     vehicleFieldValue(row.year)
@@ -3022,6 +3047,30 @@ copy(String((() => {
     .slice(0, max)
     .map((opt) => compact(vehicleOptionText(opt), 40))
     .join('|');
+  const vehicleRowMatchesExpectedContext = (row, match) => {
+    if (!row || !match) return false;
+    const rowYear = normalizeDigits(vehicleFieldValue(row.year));
+    if (match.year && rowYear && rowYear !== normalizeDigits(match.year)) return false;
+    const rowMake = normalizeVehicleText(vehicleFieldTextValue(row.manufacturer));
+    if (match.make && rowMake && !vehicleMakeMatches(rowMake, match)) return false;
+    const rowModel = vehicleFieldTextValue(row.model);
+    if (rowModel && !/select one/i.test(rowModel) && match.model) {
+      const modelMatches = match.strictModelMatch
+        ? vehicleStrictModelMatches(normalizeVehicleText(rowModel), match.model)
+        : normalizeVehicleText(rowModel).includes(match.model);
+      if (!modelMatches) return false;
+    }
+    return true;
+  };
+  const vehicleRowDetails = (row) => {
+    if (!row) return '';
+    return compact([
+      `year=${vehicleFieldValue(row.year)}`,
+      `make=${vehicleFieldValue(row.manufacturer)}`,
+      `model=${vehicleFieldValue(row.model)}`,
+      `subModel=${vehicleFieldValue(row.subModel)}`
+    ].join(','), 160);
+  };
   const vehicleAliasValues = (wantedText) => {
     const wanted = normUpper(wantedText);
     const groups = [
@@ -3329,7 +3378,14 @@ copy(String((() => {
     const matchArgs = getVehicleMatchArgs(source);
     const year = normUpper(source.year);
     const candidates = findVehicleMatchCandidates(source);
-    const candidateTexts = candidates.slice(0, 5).map((candidate) => compact(candidate.cardText, 120));
+    const confirmedCandidates = confirmedVehicleCandidates()
+      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }))
+      .filter((candidate) => candidate.details.score >= candidate.details.threshold)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const candidateTexts = confirmedCandidates.concat(candidates)
+      .map((candidate) => compact(candidate.cardText, 120))
+      .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
+      .slice(0, 5);
     const isConfirmedVehicleCandidate = (candidate) => {
       if (!candidate || !candidate.details || !candidate.details.yearMatch || !candidate.details.makeMatch || !candidate.details.modelMatch)
         return false;
@@ -3341,7 +3397,7 @@ copy(String((() => {
       const actionEvidence = cardText.includes('edit') || cardText.includes('remove');
       return sectionEvidence || actionEvidence;
     };
-    const confirmed = candidates.find(isConfirmedVehicleCandidate) || null;
+    const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate) || candidates.find(isConfirmedVehicleCandidate) || null;
     const matched = confirmed || candidates[0] || null;
     const matchedText = matched ? compact(matched.cardText, 180) : '';
     const matchedNorm = normUpper(matchedText);
@@ -3360,6 +3416,7 @@ copy(String((() => {
     const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
     const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
     const rowIncomplete = rowOpen && !rowComplete;
+    const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowIncomplete && vehicleRowMatchesExpectedContext(row, matchArgs);
     const rowGone = !rowOpen && !hasAnyRow;
     const addButton = findGatherAddVehicleButton();
     const text = bodyText();
@@ -3404,9 +3461,12 @@ copy(String((() => {
       rowIndex: rowIndex >= 0 ? String(rowIndex) : '',
       rowComplete: rowComplete ? '1' : '0',
       rowIncomplete: rowIncomplete ? '1' : '0',
+      duplicateAddRowOpenForConfirmedVehicle: duplicateAddRowOpenForConfirmedVehicle ? '1' : '0',
+      duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(row) : '',
       rowGone: rowGone ? '1' : '0',
       addButtonPresent: addButton ? '1' : '0',
       warningStillPresent: warningStillPresent ? '1' : '0',
+      expectedModelKey: normalizeVehicleModelKey(source.model),
       matchedText,
       candidateTexts: candidateTexts.join(' || '),
       alerts: alerts.join(' || '),

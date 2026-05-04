@@ -55,6 +55,10 @@ hondaCrvVehicle := AdvisorNormalizeVehicleDescriptor("2019 Honda CR-V")
 AssertEqual(hondaCrvVehicle["make"], "HONDA", "Honda CR-V make should normalize")
 AssertEqual(hondaCrvVehicle["model"], "CRV", "Honda CR-V should normalize to CRV for strict model matching")
 
+hondaHrvVehicle := AdvisorNormalizeVehicleDescriptor("2019 Honda HR V")
+AssertEqual(hondaHrvVehicle["make"], "HONDA", "Honda HR V make should normalize")
+AssertEqual(hondaHrvVehicle["model"], "HRV", "Honda HR V should normalize to HRV for strict model matching")
+
 hyundaiSonataVehicle := AdvisorNormalizeVehicleDescriptor("2013 Hyundai Sonata")
 AssertEqual(hyundaiSonataVehicle["make"], "HYUNDAI", "Hyundai Sonata make should normalize")
 AssertEqual(hyundaiSonataVehicle["model"], "SONATA", "Hyundai Sonata model should normalize")
@@ -184,6 +188,9 @@ AssertTrue(LabelListContains(AdvisorVehicleAllowedMakeLabelsText("Dodge", "Grand
 AssertFalse(AdvisorVehicleCatalogModelMatches("Prius", "Prius Prime"), "Prius must not match Prius Prime")
 AssertTrue(AdvisorVehicleCatalogModelMatches("F-150", "F150"), "F-150 variants should normalize")
 AssertFalse(AdvisorVehicleCatalogModelMatches("F-150", "F-250"), "F150 must not match F250")
+AssertTrue(AdvisorVehicleCatalogModelMatches("CR-V", "CRV"), "CR-V variants should normalize")
+AssertTrue(AdvisorVehicleCatalogModelMatches("HR V", "HR-V"), "HR-V variants should normalize")
+AssertFalse(AdvisorVehicleCatalogModelMatches("CR-V", "HR-V"), "CR-V must not match HR-V")
 
 ascVehiclePolicy := AdvisorQuoteClassifyAscVehicles(Map("vehicles", [
     TestVehicle("2019", "HONDA", "CRV"),

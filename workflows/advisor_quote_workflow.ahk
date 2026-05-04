@@ -1466,6 +1466,18 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 . ", skippedBecauseAlreadyConfirmed=" (alreadyConfirmed ? "1" : "0")
         )
         if alreadyConfirmed {
+            if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(preflightStatus) {
+                AdvisorQuoteAppendLog(
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" vehicle["displayKey"]
+                        . ", matchedText=" AdvisorQuoteStatusValue(preflightStatus, "matchedText")
+                        . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(preflightStatus, "duplicateAddRowDetails")
+                )
+                failureReason := "DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE: " vehicle["displayKey"] " is already confirmed, but an incomplete Add Car/Truck row is open. Close the duplicate row before retrying."
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "duplicate-add-row-open-for-confirmed-vehicle")
+                return false
+            }
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
@@ -2552,6 +2564,10 @@ AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(status) {
         && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
 }
 
+AdvisorQuoteGatherVehicleDuplicateAddRowOpen(status) {
+    return AdvisorQuoteStatusValue(status, "duplicateAddRowOpenForConfirmedVehicle") = "1"
+}
+
 AdvisorQuoteWaitForGatherVehicleAddStatus(vehicle, db, index := "") {
     start := A_TickCount
     timeoutMs := db["timeouts"]["transitionMs"]
@@ -2629,8 +2645,12 @@ AdvisorQuoteLogGatherVehicleAddStatus(status, eventType, vehicle := "") {
             . ", rowOpen=" AdvisorQuoteStatusValue(status, "rowOpen")
             . ", rowGone=" AdvisorQuoteStatusValue(status, "rowGone")
             . ", rowComplete=" AdvisorQuoteStatusValue(status, "rowComplete")
+            . ", rowIncomplete=" AdvisorQuoteStatusValue(status, "rowIncomplete")
+            . ", duplicateAddRowOpenForConfirmedVehicle=" AdvisorQuoteStatusValue(status, "duplicateAddRowOpenForConfirmedVehicle")
+            . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(status, "duplicateAddRowDetails")
             . ", warningStillPresent=" AdvisorQuoteStatusValue(status, "warningStillPresent")
             . ", method=" AdvisorQuoteStatusValue(status, "method")
+            . ", expectedModelKey=" AdvisorQuoteStatusValue(status, "expectedModelKey")
             . ", matchedText=" AdvisorQuoteStatusValue(status, "matchedText")
             . ", candidateTexts=" AdvisorQuoteStatusValue(status, "candidateTexts")
             . ", alerts=" AdvisorQuoteStatusValue(status, "alerts")
