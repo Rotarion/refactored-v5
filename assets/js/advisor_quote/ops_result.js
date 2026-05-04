@@ -1237,6 +1237,29 @@ copy(String((() => {
       vinSuffixMatch
     };
   };
+  const vehicleVinEvidenceText = (text) => {
+    const tokens = safe(text).toUpperCase().match(/[A-HJ-NPR-Z0-9*]{8,20}/g) || [];
+    return tokens.find((token) => /[A-Z]/.test(token) && /\d/.test(token) && (token.length === 17 || token.includes('*'))) || '';
+  };
+  const partialVehicleModelTextFromCard = (cardText, match) => {
+    const text = normalizeVehicleText(cardText);
+    const labels = (match.allowedMakeLabels || []).concat([match.make]).map(normalizeVehicleText).filter(Boolean);
+    const year = safe(match.year).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!year || !labels.length) return '';
+    for (const label of labels) {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${year}\\b[\\s\\S]{0,120}?\\b${escapedLabel}\\b\\s+([A-Z0-9][A-Z0-9\\s./*-]{0,100})`, 'i');
+      const m = text.match(regex);
+      if (!m) continue;
+      let model = safe(m[1]);
+      model = model.replace(/\bVIN\b[\s\S]*$/i, '');
+      model = model.replace(/\b[A-HJ-NPR-Z0-9*]{8,20}\b[\s\S]*$/i, '');
+      model = model.replace(/\b(?:EDIT|REMOVE|CONFIRMED|ADDED|TO|QUOTE)\b[\s\S]*$/i, '');
+      model = model.replace(/\s+/g, ' ').trim();
+      if (model) return model;
+    }
+    return '';
+  };
   const pickVehicleCard = (seed) => {
     let fallback = null;
     for (let depth = 0, current = seed; depth < 8 && current; depth++, current = current.parentElement) {
@@ -3071,6 +3094,19 @@ copy(String((() => {
       `subModel=${vehicleFieldValue(row.subModel)}`
     ].join(','), 160);
   };
+  const gatherVehicleAddRowState = (source = {}, matchArgs = {}) => {
+    const rowIndexArg = safe(source.index).trim();
+    const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
+    const indexes = vehicleRowIndexes();
+    const hasAnyRow = indexes.length > 0;
+    const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
+    const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
+    const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
+    const rowIncomplete = rowOpen && !rowComplete;
+    const rowGone = !rowOpen && !hasAnyRow;
+    const rowMatchesExpectedContext = rowIncomplete && vehicleRowMatchesExpectedContext(row, matchArgs);
+    return { rowIndex, row, hasAnyRow, rowOpen, rowComplete, rowIncomplete, rowGone, rowMatchesExpectedContext };
+  };
   const vehicleAliasValues = (wantedText) => {
     const wanted = normUpper(wantedText);
     const groups = [
@@ -3376,16 +3412,15 @@ copy(String((() => {
   };
   const gatherVehicleAddStatus = (source = {}) => {
     const matchArgs = getVehicleMatchArgs(source);
+    const partialYearMakeMode = safe(source.partialYearMakeMode) === '1' || source.partialYearMakeMode === true;
     const year = normUpper(source.year);
-    const candidates = findVehicleMatchCandidates(source);
-    const confirmedCandidates = confirmedVehicleCandidates()
-      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }))
-      .filter((candidate) => candidate.details.score >= candidate.details.threshold)
-      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
-    const candidateTexts = confirmedCandidates.concat(candidates)
-      .map((candidate) => compact(candidate.cardText, 120))
-      .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
-      .slice(0, 5);
+    const rowState = gatherVehicleAddRowState(source, matchArgs);
+    const addButton = findGatherAddVehicleButton();
+    const text = bodyText();
+    const warningStillPresent = includesText(text, 'confirm or add at least 1 car or truck') || includesText(text, 'auto originally asked for');
+    const alerts = collectVisibleAlerts();
+    const alertText = lower(alerts.join(' || '));
+    const failedAlert = /incomplete|required|invalid|error/.test(alertText);
     const isConfirmedVehicleCandidate = (candidate) => {
       if (!candidate || !candidate.details || !candidate.details.yearMatch || !candidate.details.makeMatch || !candidate.details.modelMatch)
         return false;
@@ -3397,6 +3432,112 @@ copy(String((() => {
       const actionEvidence = cardText.includes('edit') || cardText.includes('remove');
       return sectionEvidence || actionEvidence;
     };
+    const partialConfirmedDetails = (candidate) => {
+      const cardText = normalizeVehicleText(candidate.cardText);
+      const rawText = candidate.cardText;
+      const yearMatch = !!matchArgs.year && new RegExp(`(^|\\s)${matchArgs.year}(\\s|$)`).test(cardText);
+      const makeMatch = vehicleMakeMatches(cardText, matchArgs);
+      const confirmedStatusMatched = normLower(rawText).includes('confirmed');
+      const lowerText = normLower(rawText);
+      const sectionEvidence = lowerText.includes('cars and trucks') || lowerText.includes('confirmed vehicles');
+      const actionEvidence = lowerText.includes('edit') || lowerText.includes('remove');
+      const contextMatched = confirmedStatusMatched
+        && !lowerText.includes('potential vehicles')
+        && !lowerText.includes('unknown vehicles')
+        && (sectionEvidence || actionEvidence);
+      const promotedModel = partialVehicleModelTextFromCard(rawText, matchArgs);
+      const vinEvidenceText = vehicleVinEvidenceText(rawText);
+      return {
+        yearMatch,
+        makeMatch,
+        confirmedStatusMatched,
+        contextMatched,
+        modelMatch: !!promotedModel,
+        promotedModel,
+        vinEvidenceText,
+        vinEvidence: !!vinEvidenceText
+      };
+    };
+    if (partialYearMakeMode) {
+      const partialCandidates = confirmedVehicleCandidates()
+        .map((candidate) => ({ ...candidate, details: partialConfirmedDetails(candidate) }))
+        .filter((candidate) => candidate.details.yearMatch && candidate.details.makeMatch && candidate.details.contextMatched)
+        .sort((a, b) => a.cardText.length - b.cardText.length);
+      const candidateTexts = partialCandidates
+        .map((candidate) => compact(candidate.cardText, 120))
+        .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
+        .slice(0, 5);
+      const candidate = partialCandidates.length === 1 ? partialCandidates[0] : null;
+      const duplicateAddRowOpenForConfirmedVehicle = !!(candidate && rowState.rowIncomplete && rowState.rowMatchesExpectedContext);
+      let result = 'MISSING';
+      let method = 'partial-confirmed-card-none';
+      let failedFields = '';
+      let matchedText = '';
+      let promotedModel = '';
+      let vinEvidenceText = '';
+      let partialPromoted = false;
+      if (partialCandidates.length > 1) {
+        result = 'AMBIGUOUS';
+        method = 'partial-confirmed-card-ambiguous';
+        failedFields = 'partialVehicleAmbiguous';
+      } else if (candidate) {
+        matchedText = compact(candidate.cardText, 180);
+        promotedModel = candidate.details.promotedModel;
+        vinEvidenceText = candidate.details.vinEvidenceText;
+        if (!promotedModel) {
+          method = 'partial-confirmed-card-model-missing';
+          failedFields = 'partialVehicleModelMissing';
+        } else if (!vinEvidenceText) {
+          method = 'partial-confirmed-card-no-vin';
+          failedFields = 'partialVehicleNoVin';
+        } else {
+          result = 'ADDED';
+          method = 'partial-confirmed-card';
+          partialPromoted = true;
+        }
+      }
+      return linesOut({
+        result,
+        vehicleMatched: partialPromoted ? '1' : '0',
+        confirmedVehicleMatched: partialPromoted ? '1' : '0',
+        confirmedStatusMatched: candidate && candidate.details.confirmedStatusMatched ? '1' : '0',
+        yearMatched: candidate && candidate.details.yearMatch ? '1' : '0',
+        makeMatched: candidate && candidate.details.makeMatch ? '1' : '0',
+        modelMatched: partialPromoted ? '1' : '0',
+        vinMatched: '0',
+        vinEvidence: vinEvidenceText ? '1' : '0',
+        partialPromoted: partialPromoted ? '1' : '0',
+        promotedModel,
+        promotedVehicleText: matchedText,
+        promotedVinEvidence: vinEvidenceText ? '1' : '0',
+        promotionSource: partialPromoted ? 'confirmed-card' : '',
+        rowOpen: rowState.rowOpen ? '1' : '0',
+        rowIndex: rowState.rowIndex >= 0 ? String(rowState.rowIndex) : '',
+        rowComplete: rowState.rowComplete ? '1' : '0',
+        rowIncomplete: rowState.rowIncomplete ? '1' : '0',
+        duplicateAddRowOpenForConfirmedVehicle: duplicateAddRowOpenForConfirmedVehicle ? '1' : '0',
+        duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(rowState.row) : '',
+        rowGone: rowState.rowGone ? '1' : '0',
+        addButtonPresent: addButton ? '1' : '0',
+        warningStillPresent: warningStillPresent ? '1' : '0',
+        expectedModelKey: '',
+        matchedText,
+        candidateTexts: candidateTexts.join(' || '),
+        candidateCount: String(partialCandidates.length),
+        failedFields,
+        alerts: alerts.join(' || '),
+        method
+      });
+    }
+    const candidates = findVehicleMatchCandidates(source);
+    const confirmedCandidates = confirmedVehicleCandidates()
+      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }))
+      .filter((candidate) => candidate.details.score >= candidate.details.threshold)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const candidateTexts = confirmedCandidates.concat(candidates)
+      .map((candidate) => compact(candidate.cardText, 120))
+      .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
+      .slice(0, 5);
     const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate) || candidates.find(isConfirmedVehicleCandidate) || null;
     const matched = confirmed || candidates[0] || null;
     const matchedText = matched ? compact(matched.cardText, 180) : '';
@@ -3408,22 +3549,7 @@ copy(String((() => {
     const vehicleMatched = !!matched && yearMatched && makeMatched && modelMatched;
     const confirmedVehicleMatched = !!confirmed;
     const confirmedStatusMatched = !!confirmed && normLower(confirmed.cardText).includes('confirmed');
-    const rowIndexArg = safe(source.index).trim();
-    const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
-    const indexes = vehicleRowIndexes();
-    const hasAnyRow = indexes.length > 0;
-    const row = rowIndex >= 0 ? readVehicleRow(rowIndex) : null;
-    const rowOpen = !!(row && (row.year || row.manufacturer || row.model || row.subModel));
-    const rowComplete = !!(row && vehicleFieldValue(row.year) && vehicleFieldValue(row.manufacturer) && vehicleFieldValue(row.model) && vehicleFieldValue(row.subModel));
-    const rowIncomplete = rowOpen && !rowComplete;
-    const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowIncomplete && vehicleRowMatchesExpectedContext(row, matchArgs);
-    const rowGone = !rowOpen && !hasAnyRow;
-    const addButton = findGatherAddVehicleButton();
-    const text = bodyText();
-    const warningStillPresent = includesText(text, 'confirm or add at least 1 car or truck') || includesText(text, 'auto originally asked for');
-    const alerts = collectVisibleAlerts();
-    const alertText = lower(alerts.join(' || '));
-    const failedAlert = /incomplete|required|invalid|error/.test(alertText);
+    const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowState.rowIncomplete && rowState.rowMatchesExpectedContext;
     let result = 'MISSING';
     let method = 'no-vehicle-evidence';
     if (confirmedVehicleMatched) {
@@ -3435,16 +3561,16 @@ copy(String((() => {
     } else if (vehicleMatched) {
       result = 'IN_PROGRESS';
       method = 'vehicle-text-unconfirmed';
-    } else if (rowComplete) {
+    } else if (rowState.rowComplete) {
       result = 'READY_ROW';
       method = 'row-complete';
     } else if (failedAlert) {
       result = 'FAILED';
       method = 'validation-alert';
-    } else if (rowIncomplete || (rowGone && warningStillPresent)) {
+    } else if (rowState.rowIncomplete || (rowState.rowGone && warningStillPresent)) {
       result = 'IN_PROGRESS';
-      method = rowIncomplete ? 'row-incomplete' : 'row-gone-warning-present';
-    } else if (rowGone && !warningStillPresent) {
+      method = rowState.rowIncomplete ? 'row-incomplete' : 'row-gone-warning-present';
+    } else if (rowState.rowGone && !warningStillPresent) {
       result = 'IN_PROGRESS';
       method = 'row-gone-no-vehicle-text';
     }
@@ -3457,18 +3583,26 @@ copy(String((() => {
       makeMatched: makeMatched ? '1' : '0',
       modelMatched: modelMatched ? '1' : '0',
       vinMatched: (matchArgs.vin || matchArgs.vinSuffix) && vinMatched ? '1' : '0',
-      rowOpen: rowOpen ? '1' : '0',
-      rowIndex: rowIndex >= 0 ? String(rowIndex) : '',
-      rowComplete: rowComplete ? '1' : '0',
-      rowIncomplete: rowIncomplete ? '1' : '0',
+      vinEvidence: matchedText && vehicleVinEvidenceText(matchedText) ? '1' : '0',
+      partialPromoted: '0',
+      promotedModel: '',
+      promotedVehicleText: '',
+      promotedVinEvidence: '0',
+      promotionSource: '',
+      rowOpen: rowState.rowOpen ? '1' : '0',
+      rowIndex: rowState.rowIndex >= 0 ? String(rowState.rowIndex) : '',
+      rowComplete: rowState.rowComplete ? '1' : '0',
+      rowIncomplete: rowState.rowIncomplete ? '1' : '0',
       duplicateAddRowOpenForConfirmedVehicle: duplicateAddRowOpenForConfirmedVehicle ? '1' : '0',
-      duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(row) : '',
-      rowGone: rowGone ? '1' : '0',
+      duplicateAddRowDetails: duplicateAddRowOpenForConfirmedVehicle ? vehicleRowDetails(rowState.row) : '',
+      rowGone: rowState.rowGone ? '1' : '0',
       addButtonPresent: addButton ? '1' : '0',
       warningStillPresent: warningStillPresent ? '1' : '0',
       expectedModelKey: normalizeVehicleModelKey(source.model),
       matchedText,
       candidateTexts: candidateTexts.join(' || '),
+      candidateCount: String(candidateTexts.length),
+      failedFields: '',
       alerts: alerts.join(' || '),
       method
     });

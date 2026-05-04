@@ -201,6 +201,15 @@ AssertEqual(ascVehiclePolicy["completeVehicles"].Length, 2, "ASC policy should k
 AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"].Length, 1, "ASC policy should classify year/make-only vehicle as partial")
 AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "ASC partial should preserve year/make identity")
 
+gatherPartialPolicy := AdvisorQuoteClassifyGatherVehicles(Map("vehicles", [
+    TestVehicle("2019", "HONDA", "CRV"),
+    TestVehicle("2013", "HYUNDAI", "SONATA"),
+    TestVehicle("2010", "NISSAN", "")
+]))
+AssertEqual(gatherPartialPolicy["actionableVehicles"].Length, 2, "Gather policy should keep complete vehicles actionable")
+AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"].Length, 1, "Gather policy should keep year/make-only vehicles in partial preflight")
+AssertEqual(gatherPartialPolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "Gather partial should preserve year/make identity")
+
 singleLeadProfile := Map("raw", "Marital Status: Single", "person", Map("fullName", "Test Single Lead"))
 AssertEqual(AdvisorQuoteLeadMaritalStatus(singleLeadProfile), "Single", "Lead marital status parser should preserve Single truth")
 
@@ -237,6 +246,29 @@ partialVehicleStatus := Map(
     "modelMatched", "0"
 )
 AssertFalse(AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(partialVehicleStatus), "Confirmed-card status must still match exact model")
+
+partialPromotedStatus := Map(
+    "result", "ADDED",
+    "partialPromoted", "1",
+    "confirmedVehicleMatched", "1",
+    "confirmedStatusMatched", "1",
+    "yearMatched", "1",
+    "makeMatched", "1",
+    "modelMatched", "1",
+    "promotedModel", "CUBE",
+    "promotedVinEvidence", "1",
+    "promotionSource", "confirmed-card",
+    "promotedVehicleText", "2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED"
+)
+AssertTrue(AdvisorQuoteGatherVehiclePartialStatusPromoted(partialPromotedStatus), "Unique VIN-bearing confirmed card should promote partial year/make vehicle")
+promotedPartial := AdvisorQuoteBuildGatherPromotedPartialVehicle(nissanPartialVehicle, partialPromotedStatus)
+AssertEqual(promotedPartial["year"], "2010", "Promoted partial should preserve year")
+AssertEqual(promotedPartial["make"], "NISSAN", "Promoted partial should preserve make")
+AssertEqual(promotedPartial["model"], "CUBE", "Promoted partial should use confirmed-card model")
+AssertEqual(promotedPartial["displayKey"], "2010|NISSAN|CUBE", "Promoted partial should contribute a complete display key")
+finalExpectedWithPromoted := AdvisorQuoteBuildExpectedVehiclesArgList([TestVehicle("2019", "HONDA", "CRV"), promotedPartial])
+AssertEqual(finalExpectedWithPromoted.Length, 2, "Final guard should include complete vehicles plus promoted partials")
+AssertEqual(finalExpectedWithPromoted[2]["model"], "CUBE", "Final guard should include promoted partial model")
 
 missingConfirmedStatus := Map(
     "result", "OK",
