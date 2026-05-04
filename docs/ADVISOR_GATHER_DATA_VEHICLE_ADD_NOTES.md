@@ -173,7 +173,7 @@ Gather Data now classifies lead vehicles before confirmation/add:
 
 If no actionable vehicle exists, the workflow fails safely/manual with `NO_ACTIONABLE_LEAD_VEHICLE` or `VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED`. It does not guess, decode VINs, or select a different year.
 
-The confirmed-vehicle guard receives only actionable vehicles as expected vehicles. Ignored/deferred missing-year vehicles do not appear in `missingExpectedVehicles`, while unexpected confirmed public-record vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+The confirmed-vehicle guard receives complete actionable vehicles plus any partial year/make vehicles promoted from scoped confirmed-card evidence as expected vehicles. Ignored/deferred missing-year vehicles and unpromoted partials do not appear in `missingExpectedVehicles`, while unexpected confirmed public-record vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
 
 ## Vehicle Loop Idempotency
 
@@ -218,6 +218,17 @@ The older `vehicle_already_listed` check is no longer allowed to skip work by it
 After `confirm_potential_vehicle` clicks a matching potential card, the workflow no longer relies only on the narrow `vehicle_confirmed` wait condition. It polls `gather_vehicle_add_status` for the same exact vehicle and accepts success only when the confirmed-card predicate above becomes true. If a potential confirmation does not become a matching confirmed vehicle card, the workflow fails with a vehicle-confirm status timeout and captures diagnostics.
 
 After all actionable vehicles and partial confirmed-card promotions are processed, the workflow reconciles the page with `gather_confirmed_vehicles_status` using complete actionable vehicles plus promoted partial vehicles as expected. Unpromoted partial vehicles are not reported as missing expected vehicles. Missing expected confirmed vehicles fail with `MISSING_EXPECTED_CONFIRMED_VEHICLES`; unexpected confirmed vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+
+Promoted partial vehicles are now first-class final expected vehicles. A year/make-only lead vehicle keeps a partial display key such as `2010|NISSAN`, so it can reach the partial confirmed-card preflight instead of being dropped during profile normalization. If a unique VIN-bearing confirmed card promotes that partial to a complete vehicle, such as `2010 Nissan CUBE`, the final expected list includes the promoted model with `promotedFromPartial=1` and `promotionSource=confirmed-card`.
+
+The final reconciliation trace logs:
+
+- `completeExpectedCount`
+- `promotedPartialExpectedCount`
+- `finalExpectedCount`
+- `finalExpectedVehicles`
+
+If a promoted partial exists but does not appear in the structured final expected args, the workflow fails before calling the final guard with `PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST`. Unpromoted partial vehicles remain deferred and are not included as missing expected vehicles.
 
 ## Final Confirmed-Vehicle Reconciliation
 
