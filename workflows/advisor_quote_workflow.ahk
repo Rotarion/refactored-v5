@@ -1423,7 +1423,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     vehiclePolicy := AdvisorQuoteClassifyGatherVehicles(profile)
     AdvisorQuoteLogGatherVehiclePolicy(vehiclePolicy)
     actionableVehicles := vehiclePolicy["actionableVehicles"]
-    if (actionableVehicles.Length = 0) {
+    partialYearMakeVehicles := vehiclePolicy["partialYearMakeVehicles"]
+    if (actionableVehicles.Length = 0 && partialYearMakeVehicles.Length = 0) {
         failureReason := (vehiclePolicy["deferredVinVehicles"].Length > 0)
             ? "VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED: Gather Data has no actionable year/make/model vehicle."
             : "NO_ACTIONABLE_LEAD_VEHICLE: Gather Data has no lead vehicle with year, make, and model."
@@ -1433,6 +1434,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
     vehicleSatisfiedCount := 0
     satisfiedVehicles := []
+    promotedPartialVehicles := []
+    deferredPartialVehicles := []
     for _, vehicle in actionableVehicles {
         if StopRequested() {
             failureReason := "Stopped manually."
@@ -1536,13 +1539,84 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         satisfiedVehicles.Push(vehicle)
     }
 
-    expectedVehicleCountForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(actionableVehicles).Length
-    expectedVehiclesForFinalGuard := AdvisorQuoteVehicleListSummary(actionableVehicles)
+    for _, partialVehicle in partialYearMakeVehicles {
+        if StopRequested() {
+            failureReason := "Stopped manually."
+            return false
+        }
+
+        AdvisorQuoteSetStep("GATHER_DATA_PARTIAL_VEHICLE_CHECK", "Checking partial vehicle: " partialVehicle["displayKey"])
+        partialStatus := AdvisorQuoteGetGatherPartialVehicleConfirmedStatus(partialVehicle)
+        AdvisorQuoteLogGatherVehicleAddStatus(partialStatus, "VEHICLE_PARTIAL_PREFLIGHT_STATUS", partialVehicle)
+
+        if AdvisorQuoteGatherVehiclePartialStatusPromoted(partialStatus) {
+            promotedVehicle := AdvisorQuoteBuildGatherPromotedPartialVehicle(partialVehicle, partialStatus)
+            if AdvisorQuoteGatherVehicleDuplicateAddRowOpen(partialStatus) {
+                AdvisorQuoteAppendLog(
+                    "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" partialVehicle["displayKey"]
+                        . ", promotedVehicle=" AdvisorQuoteVehicleLabel(promotedVehicle)
+                        . ", promotedVehicleText=" AdvisorQuoteStatusValue(partialStatus, "promotedVehicleText")
+                        . ", duplicateAddRowDetails=" AdvisorQuoteStatusValue(partialStatus, "duplicateAddRowDetails")
+                )
+                failureReason := "DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE: " partialVehicle["displayKey"] " is already satisfied by " AdvisorQuoteVehicleLabel(promotedVehicle) ", but an incomplete Add Car/Truck row is open. Close the duplicate row before retrying."
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "duplicate-add-row-open-for-promoted-confirmed-vehicle")
+                return false
+            }
+            vehicleSatisfiedCount += 1
+            promotedPartialVehicles.Push(promotedVehicle)
+            satisfiedVehicles.Push(promotedVehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_PARTIAL_ALREADY_CONFIRMED",
+                AdvisorQuoteGetLastStep(),
+                "partialVehicle=" partialVehicle["displayKey"]
+                    . ", promotedVehicle=" AdvisorQuoteVehicleLabel(promotedVehicle)
+                    . ", promotedModel=" AdvisorQuoteStatusValue(partialStatus, "promotedModel")
+                    . ", promotedVinEvidence=" AdvisorQuoteStatusValue(partialStatus, "promotedVinEvidence")
+                    . ", promotionSource=" AdvisorQuoteStatusValue(partialStatus, "promotionSource")
+                    . ", matchedText=" AdvisorQuoteStatusValue(partialStatus, "matchedText")
+            )
+            continue
+        }
+
+        result := AdvisorQuoteStatusValue(partialStatus, "result")
+        if (result = "AMBIGUOUS") {
+            failureReason := "PARTIAL_VEHICLE_AMBIGUOUS: " partialVehicle["displayKey"] " matched multiple confirmed year/make cards; no model was selected."
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "partial-vehicle-ambiguous")
+            return false
+        }
+
+        deferredPartialVehicles.Push(partialVehicle)
+        AdvisorQuoteAppendLog(
+            "VEHICLE_PARTIAL_DEFERRED",
+            AdvisorQuoteGetLastStep(),
+            "partialVehicle=" partialVehicle["displayKey"]
+                . ", result=" result
+                . ", failedFields=" AdvisorQuoteStatusValue(partialStatus, "failedFields")
+                . ", candidateCount=" AdvisorQuoteStatusValue(partialStatus, "candidateCount")
+                . ", candidateTexts=" AdvisorQuoteStatusValue(partialStatus, "candidateTexts")
+        )
+    }
+
+    if (vehicleSatisfiedCount = 0) {
+        failureReason := "NO_SAFE_GATHER_VEHICLE_SATISFIED: no complete vehicle or unique VIN-bearing confirmed partial vehicle could be satisfied."
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-gather-vehicle-satisfied")
+        return false
+    }
+
+    expectedVehiclesForGuardList := AdvisorQuoteJoinVehicleLists(actionableVehicles, promotedPartialVehicles)
+    expectedVehicleCountForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(expectedVehiclesForGuardList).Length
+    expectedVehiclesForFinalGuard := AdvisorQuoteVehicleListSummary(expectedVehiclesForGuardList)
     AdvisorQuoteAppendLog(
         "GATHER_CONFIRMED_VEHICLES_ARGS",
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionableVehicles.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionableVehicles)
+            . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
+            . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
             . ", ignoredMissingYearVehicleCount=" vehiclePolicy["ignoredMissingYearVehicles"].Length
@@ -1553,13 +1627,17 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
             . ", confirmedGuardArgsSummary=" expectedVehiclesForFinalGuard
     )
-    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(actionableVehicles)
+    confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(expectedVehiclesForGuardList)
     AdvisorQuoteAppendLog("GATHER_CONFIRMED_VEHICLES_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(confirmedStatus))
     AdvisorQuoteAppendLog(
         "GATHER_VEHICLE_RECONCILIATION",
         AdvisorQuoteGetLastStep(),
         "vehicleSatisfiedCount=" vehicleSatisfiedCount
             . ", actionableVehicleCount=" actionableVehicles.Length
+            . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
+            . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
             . ", expectedVehiclesForFinalGuard=" expectedVehiclesForFinalGuard
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
@@ -2072,9 +2150,21 @@ AdvisorQuoteVehicleListSummary(vehicles) {
     return JoinArray(parts, " || ")
 }
 
+AdvisorQuoteJoinVehicleLists(lists*) {
+    result := []
+    for _, list in lists {
+        if !IsObject(list)
+            continue
+        for _, vehicle in list
+            result.Push(vehicle)
+    }
+    return result
+}
+
 AdvisorQuoteClassifyGatherVehicles(profile) {
     vehicles := (IsObject(profile) && profile.Has("vehicles")) ? profile["vehicles"] : []
     actionable := []
+    partial := []
     missingYearNoVin := []
     deferredVin := []
     blocking := []
@@ -2086,6 +2176,10 @@ AdvisorQuoteClassifyGatherVehicles(profile) {
         }
         if AdvisorQuoteVehicleHasVinEvidence(vehicle) {
             deferredVin.Push(vehicle)
+            continue
+        }
+        if AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
+            partial.Push(vehicle)
             continue
         }
         year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
@@ -2109,6 +2203,7 @@ AdvisorQuoteClassifyGatherVehicles(profile) {
 
     return Map(
         "actionableVehicles", actionable,
+        "partialYearMakeVehicles", partial,
         "ignoredMissingYearVehicles", ignored,
         "deferredVinVehicles", deferredVin,
         "blockingMissingVehicleData", blocking
@@ -2159,6 +2254,7 @@ AdvisorQuoteBuildAscPartialVehiclesArgList(vehicles) {
 
 AdvisorQuoteLogGatherVehiclePolicy(policy) {
     actionable := IsObject(policy) && policy.Has("actionableVehicles") ? policy["actionableVehicles"] : []
+    partial := IsObject(policy) && policy.Has("partialYearMakeVehicles") ? policy["partialYearMakeVehicles"] : []
     ignored := IsObject(policy) && policy.Has("ignoredMissingYearVehicles") ? policy["ignoredMissingYearVehicles"] : []
     deferred := IsObject(policy) && policy.Has("deferredVinVehicles") ? policy["deferredVinVehicles"] : []
     blocking := IsObject(policy) && policy.Has("blockingMissingVehicleData") ? policy["blockingMissingVehicleData"] : []
@@ -2166,10 +2262,12 @@ AdvisorQuoteLogGatherVehiclePolicy(policy) {
         "GATHER_VEHICLE_POLICY",
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionable.Length
+            . ", partialYearMakeVehicleCount=" partial.Length
             . ", ignoredMissingYearVehicleCount=" ignored.Length
             . ", deferredVinVehicleCount=" deferred.Length
             . ", blockingMissingVehicleDataCount=" blocking.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionable)
+            . ", partialYearMakeVehicles=" AdvisorQuoteVehicleListSummary(partial)
             . ", ignoredMissingYearVehicles=" AdvisorQuoteVehicleListSummary(ignored)
             . ", deferredVinVehicles=" AdvisorQuoteVehicleListSummary(deferred)
             . ", blockingMissingVehicleData=" AdvisorQuoteVehicleListSummary(blocking)
@@ -2504,6 +2602,14 @@ AdvisorQuoteGetGatherVehicleAddStatus(vehicle, index := "") {
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_add_status", args))
 }
 
+AdvisorQuoteGetGatherPartialVehicleConfirmedStatus(vehicle, index := "") {
+    args := AdvisorQuoteBuildVehicleJsArgs(vehicle, true)
+    args["partialYearMakeMode"] := "1"
+    if (Trim(String(index)) != "")
+        args["index"] := index
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_add_status", args))
+}
+
 AdvisorQuoteGetGatherVehicleEditStatus(vehicle := "") {
     args := IsObject(vehicle) ? AdvisorQuoteBuildVehicleJsArgs(vehicle) : Map()
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_vehicle_edit_status", args, 2, 120))
@@ -2562,6 +2668,39 @@ AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(status) {
         && AdvisorQuoteStatusValue(status, "yearMatched") = "1"
         && AdvisorQuoteStatusValue(status, "makeMatched") = "1"
         && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
+}
+
+AdvisorQuoteGatherVehiclePartialStatusPromoted(status) {
+    return AdvisorQuoteStatusValue(status, "result") = "ADDED"
+        && AdvisorQuoteStatusValue(status, "partialPromoted") = "1"
+        && AdvisorQuoteStatusValue(status, "confirmedVehicleMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "confirmedStatusMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "yearMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "makeMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "promotedVinEvidence") = "1"
+        && Trim(String(AdvisorQuoteStatusValue(status, "promotedModel"))) != ""
+}
+
+AdvisorQuoteBuildGatherPromotedPartialVehicle(vehicle, status) {
+    year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+    make := IsObject(vehicle) && vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+    promotedModel := Trim(String(AdvisorQuoteStatusValue(status, "promotedModel")))
+    raw := IsObject(vehicle) && vehicle.Has("raw") ? Trim(String(vehicle["raw"])) : ""
+    if (raw = "")
+        raw := Trim(year " " make)
+    return Map(
+        "year", year,
+        "make", make,
+        "model", promotedModel,
+        "trimHint", "",
+        "vin", "",
+        "vinSuffix", "",
+        "raw", raw,
+        "displayKey", AdvisorBuildVehicleDisplayKey(year, make, promotedModel),
+        "promotionSource", AdvisorQuoteStatusValue(status, "promotionSource"),
+        "promotedVehicleText", AdvisorQuoteStatusValue(status, "promotedVehicleText")
+    )
 }
 
 AdvisorQuoteGatherVehicleDuplicateAddRowOpen(status) {
@@ -2642,6 +2781,11 @@ AdvisorQuoteLogGatherVehicleAddStatus(status, eventType, vehicle := "") {
             . ", makeMatched=" AdvisorQuoteStatusValue(status, "makeMatched")
             . ", modelMatched=" AdvisorQuoteStatusValue(status, "modelMatched")
             . ", vinMatched=" AdvisorQuoteStatusValue(status, "vinMatched")
+            . ", vinEvidence=" AdvisorQuoteStatusValue(status, "vinEvidence")
+            . ", partialPromoted=" AdvisorQuoteStatusValue(status, "partialPromoted")
+            . ", promotedModel=" AdvisorQuoteStatusValue(status, "promotedModel")
+            . ", promotedVinEvidence=" AdvisorQuoteStatusValue(status, "promotedVinEvidence")
+            . ", promotionSource=" AdvisorQuoteStatusValue(status, "promotionSource")
             . ", rowOpen=" AdvisorQuoteStatusValue(status, "rowOpen")
             . ", rowGone=" AdvisorQuoteStatusValue(status, "rowGone")
             . ", rowComplete=" AdvisorQuoteStatusValue(status, "rowComplete")
@@ -2652,6 +2796,9 @@ AdvisorQuoteLogGatherVehicleAddStatus(status, eventType, vehicle := "") {
             . ", method=" AdvisorQuoteStatusValue(status, "method")
             . ", expectedModelKey=" AdvisorQuoteStatusValue(status, "expectedModelKey")
             . ", matchedText=" AdvisorQuoteStatusValue(status, "matchedText")
+            . ", promotedVehicleText=" AdvisorQuoteStatusValue(status, "promotedVehicleText")
+            . ", candidateCount=" AdvisorQuoteStatusValue(status, "candidateCount")
+            . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
             . ", candidateTexts=" AdvisorQuoteStatusValue(status, "candidateTexts")
             . ", alerts=" AdvisorQuoteStatusValue(status, "alerts")
     )

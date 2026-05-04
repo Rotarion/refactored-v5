@@ -194,11 +194,17 @@ Confirmed-card model matching now uses the same exact-normalized model keys for 
 
 If a retry starts after a previous failed attempt left an incomplete Add Car or Truck row open for a vehicle that is now proven already confirmed, `gather_vehicle_add_status` reports `duplicateAddRowOpenForConfirmedVehicle=1`. The workflow does not continue filling that duplicate row. Because there is no proven row-scoped cancel action for this live shape, it fails closed with `DUPLICATE_ADD_ROW_OPEN_FOR_CONFIRMED_VEHICLE` and captures a scan instead of adding a duplicate or removing a confirmed card.
 
+Partial year/make vehicles also get a confirmed-card preflight before any Add Car or Truck work. In `partialYearMakeMode=1`, `gather_vehicle_add_status` is read-only and inspects confirmed cards only. A partial vehicle is promoted only when exactly one confirmed same-year/same-make card exists, the card has visible model text, and the card has VIN or masked-VIN evidence. Example: a lead vehicle `2010 Nissan` can be promoted to `2010 Nissan CUBE` when Advisor already shows a single `2010 Nissan CUBE ... CONFIRMED` card with VIN evidence.
+
+The partial path does not select a model from a broad Add Car or Truck dropdown. If the Nissan model dropdown contains many options such as `370Z`, `ALTIMA`, `CUBE`, and `FRONTIER`, the workflow will not choose the first option. If no unique VIN-bearing confirmed card exists, the partial vehicle is deferred or fails safely depending on whether another vehicle is already satisfied.
+
+If a retry starts with an incomplete Add Car or Truck row open for a partial vehicle that is now satisfied by a promoted confirmed card, the workflow fails closed with `DUPLICATE_ADD_ROW_OPEN_FOR_PROMOTED_CONFIRMED_VEHICLE` unless a future patch proves a row-scoped safe cancel. It never clicks Add on that duplicate row and never removes the confirmed card.
+
 The older `vehicle_already_listed` check is no longer allowed to skip work by itself. If it reports listed but the confirmed-card preflight does not prove the vehicle is confirmed, the workflow logs that legacy evidence and continues with the normal potential-confirm/add path.
 
 After `confirm_potential_vehicle` clicks a matching potential card, the workflow no longer relies only on the narrow `vehicle_confirmed` wait condition. It polls `gather_vehicle_add_status` for the same exact vehicle and accepts success only when the confirmed-card predicate above becomes true. If a potential confirmation does not become a matching confirmed vehicle card, the workflow fails with a vehicle-confirm status timeout and captures diagnostics.
 
-After all actionable vehicles are processed, the workflow reconciles the page with `gather_confirmed_vehicles_status` using only actionable vehicles as expected. It logs satisfied/actionable/ignored/deferred counts plus missing and unexpected confirmed vehicles. Missing actionable confirmed vehicles fail with `MISSING_EXPECTED_CONFIRMED_VEHICLES`; unexpected confirmed vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
+After all actionable vehicles and partial confirmed-card promotions are processed, the workflow reconciles the page with `gather_confirmed_vehicles_status` using complete actionable vehicles plus promoted partial vehicles as expected. Unpromoted partial vehicles are not reported as missing expected vehicles. Missing expected confirmed vehicles fail with `MISSING_EXPECTED_CONFIRMED_VEHICLES`; unexpected confirmed vehicles still fail with `UNEXPECTED_CONFIRMED_VEHICLES`.
 
 ## Final Confirmed-Vehicle Reconciliation
 
@@ -235,7 +241,7 @@ The match is still strict:
 - normalized model exact match is required
 - VIN is preferred when available but is not required when the lead has no VIN
 - `Toyota Prius` does not match `Toyota Prius Prime`
-- partial vehicles such as `2021 Mazda` are not promoted or counted as confirmed by this patch
+- partial vehicles such as `2021 Mazda` are promoted only from a unique VIN-bearing confirmed card during 102 Gather Data; broad model dropdowns remain unsafe
 
 The catalog-aware labels apply to confirmed-card evidence (`gather_vehicle_add_status` preflight/status and `gather_confirmed_vehicles_status` final guard). Potential-card confirmation, Add Car or Truck row selection, model dropdown selection, and ASC/109 handling are unchanged.
 

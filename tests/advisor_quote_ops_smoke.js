@@ -1928,6 +1928,107 @@ function testVehicleContracts() {
   }, duplicateFixture.doc, duplicateFixture.href), ['result', 'duplicateAddRowOpenForConfirmedVehicle']);
   assert.strictEqual(duplicateFixtureStatus.result, 'ADDED');
   assert.strictEqual(duplicateFixtureStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  const partialNissanStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'promotedModel', 'confirmedVehicleMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'vinEvidence', 'method']);
+  assert.strictEqual(partialNissanStatus.result, 'ADDED');
+  assert.strictEqual(partialNissanStatus.partialPromoted, '1');
+  assert.strictEqual(partialNissanStatus.promotedModel, 'CUBE');
+  assert.strictEqual(partialNissanStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(partialNissanStatus.modelMatched, '1');
+  assert.strictEqual(partialNissanStatus.vinEvidence, '1');
+  assert.strictEqual(partialNissanStatus.method, 'partial-confirmed-card');
+  const partialNissanFixture = fixtureScenario('gather-partial-confirmed-nissan-cube');
+  const partialNissanFixtureStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, partialNissanFixture.doc, partialNissanFixture.href), ['result', 'partialPromoted', 'promotedModel']);
+  assert.strictEqual(partialNissanFixtureStatus.result, 'ADDED');
+  assert.strictEqual(partialNissanFixtureStatus.partialPromoted, '1');
+  assert.strictEqual(partialNissanFixtureStatus.promotedModel, 'CUBE');
+  const partialAmbiguousStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
+    '2010 Nissan ALTIMA FAKEALTI*******04 Edit Remove CONFIRMED'
+  ])), ['result', 'partialPromoted', 'candidateCount', 'failedFields']);
+  assert.strictEqual(partialAmbiguousStatus.result, 'AMBIGUOUS');
+  assert.strictEqual(partialAmbiguousStatus.partialPromoted, '0');
+  assert.strictEqual(partialAmbiguousStatus.failedFields, 'partialVehicleAmbiguous');
+  const partialNoVinStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Nissan CUBE Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'promotedModel', 'vinEvidence', 'failedFields']);
+  assert.strictEqual(partialNoVinStatus.result, 'MISSING');
+  assert.strictEqual(partialNoVinStatus.partialPromoted, '0');
+  assert.strictEqual(partialNoVinStatus.promotedModel, 'CUBE');
+  assert.strictEqual(partialNoVinStatus.vinEvidence, '0');
+  assert.strictEqual(partialNoVinStatus.failedFields, 'partialVehicleNoVin');
+  const partialWrongYearStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2011 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'candidateCount']);
+  assert.strictEqual(partialWrongYearStatus.result, 'MISSING');
+  assert.strictEqual(partialWrongYearStatus.partialPromoted, '0');
+  assert.strictEqual(partialWrongYearStatus.candidateCount, '0');
+  const partialWrongMakeStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2010 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
+  })), ['result', 'partialPromoted', 'candidateCount']);
+  assert.strictEqual(partialWrongMakeStatus.result, 'MISSING');
+  assert.strictEqual(partialWrongMakeStatus.partialPromoted, '0');
+  assert.strictEqual(partialWrongMakeStatus.candidateCount, '0');
+  const broadDropdownUnsafeFixture = fixtureScenario('gather-partial-nissan-broad-dropdown-unsafe');
+  const broadDropdownUnsafeStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, broadDropdownUnsafeFixture.doc, broadDropdownUnsafeFixture.href), ['result', 'partialPromoted', 'rowIncomplete', 'method']);
+  assert.strictEqual(broadDropdownUnsafeStatus.result, 'MISSING');
+  assert.strictEqual(broadDropdownUnsafeStatus.partialPromoted, '0');
+  assert.strictEqual(broadDropdownUnsafeStatus.rowIncomplete, '1');
+  assert.strictEqual(broadDropdownUnsafeFixture.doc.getElementById('ConsumerData.Assets.Vehicles[5].Model').value, '');
+  const partialDuplicateFixture = fixtureScenario('gather-partial-confirmed-nissan-cube-with-duplicate-add-row');
+  const partialDuplicateStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2010',
+    make: 'Nissan',
+    model: '',
+    allowedMakeLabels: 'NISSAN',
+    partialYearMakeMode: '1'
+  }, partialDuplicateFixture.doc, partialDuplicateFixture.href), ['result', 'partialPromoted', 'duplicateAddRowOpenForConfirmedVehicle']);
+  assert.strictEqual(partialDuplicateStatus.result, 'ADDED');
+  assert.strictEqual(partialDuplicateStatus.partialPromoted, '1');
+  assert.strictEqual(partialDuplicateStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
   const potentialVehicleStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', { year: '2019', make: 'Honda', model: 'Pilot' }, new FakeDocument([
     textNode('POTENTIAL VEHICLES'),
     new FakeElement('div', { className: 'vehicle-card', text: '2019 Honda PILOT Confirm Remove' })
