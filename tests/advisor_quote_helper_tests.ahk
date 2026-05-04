@@ -333,6 +333,58 @@ safeConfirmedStatus := Map(
 safeReason := ""
 AssertTrue(AdvisorQuoteGatherConfirmedVehiclesSafe(safeConfirmedStatus, Map(), &safeReason), "Ignored missing-year vehicles should not block final reconciliation when expected actionable vehicles match")
 
+startQuotingDb := GetAdvisorQuoteWorkflowDb()
+startQuotingDisabledWithScopedAdd := Map(
+    "hasStartQuotingText", "1",
+    "startQuotingSectionPresent", "1",
+    "autoProductPresent", "1",
+    "autoProductChecked", "1",
+    "autoProductSelected", "1",
+    "ratingStateValue", "FL",
+    "ratingStateText", "Florida",
+    "createQuoteButtonPresent", "1",
+    "createQuoteButtonEnabled", "0",
+    "addProductLinkPresent", "1",
+    "addProductPresent", "1"
+)
+startQuotingReason := ""
+AssertFalse(AdvisorQuoteGatherStartQuotingStatusValid(startQuotingDisabledWithScopedAdd, startQuotingDb, &startQuotingReason), "Disabled Create Quotes should not be fully ready before handoff")
+AssertEqual(startQuotingReason, "Create Quotes & Order Reports is still disabled on Gather Data.", "Disabled Create Quotes reason should remain explicit")
+AssertTrue(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, &startQuotingReason), "Scoped Start Quoting Add product should be eligible before disabled Create Quotes failure")
+AssertEqual(startQuotingReason, "START_QUOTING_NEEDS_SCOPED_ADD_PRODUCT", "Scoped handoff should distinguish needs-handoff from failure")
+AssertTrue(AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, true, &startQuotingReason), "Verified Product Tile Auto should allow scoped handoff")
+AssertFalse(AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingDisabledWithScopedAdd, startQuotingDb, false, &startQuotingReason), "Unverified Product Tile Auto should block scoped handoff")
+AssertEqual(startQuotingReason, "PRODUCT_OVERVIEW_AUTO_NOT_VERIFIED", "Blocked scoped handoff should preserve Product Tile Auto gate reason")
+
+startQuotingEnabled := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingEnabled["createQuoteButtonEnabled"] := "1"
+AssertTrue(AdvisorQuoteGatherStartQuotingStatusValid(startQuotingEnabled, startQuotingDb, &startQuotingReason), "Enabled Create Quotes should be ready without Add product handoff")
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingEnabled, startQuotingDb, &startQuotingReason), "Enabled Create Quotes should not run Add product handoff")
+
+startQuotingSidebarOnly := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingSidebarOnly["addProductLinkPresent"] := "0"
+startQuotingSidebarOnly["addProductPresent"] := "0"
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingSidebarOnly, startQuotingDb, &startQuotingReason), "Sidebar-only Add Product should not satisfy scoped handoff")
+
+startQuotingAutoUnchecked := startQuotingDisabledWithScopedAdd.Clone()
+startQuotingAutoUnchecked["autoProductChecked"] := "0"
+startQuotingAutoUnchecked["autoProductSelected"] := "0"
+AssertFalse(AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(startQuotingAutoUnchecked, startQuotingDb, &startQuotingReason), "Unchecked Start Quoting Auto should block Add product handoff")
+
+legacyCreateQuotesAliasStatus := Map(
+    "hasStartQuotingText", "1",
+    "startQuotingSectionPresent", "1",
+    "autoProductPresent", "1",
+    "autoProductChecked", "1",
+    "ratingStateValue", "FL",
+    "ratingStateText", "Florida",
+    "createQuotesPresent", "1",
+    "createQuotesEnabled", "1",
+    "addProductLinkPresent", "0"
+)
+AssertTrue(AdvisorQuoteGatherStartQuotingStatusValid(legacyCreateQuotesAliasStatus, startQuotingDb, &startQuotingReason), "Create Quotes alias fields should still be accepted")
+AssertTrue(AdvisorQuoteStartQuotingScopedAddProductPresent(Map("startQuotingAddProductPresent", "1")), "Future Start Quoting Add product alias should be accepted")
+
 headless := false
 for _, arg in A_Args {
     if (arg = "--headless" || arg = "headless") {

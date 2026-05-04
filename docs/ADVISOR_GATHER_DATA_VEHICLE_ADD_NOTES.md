@@ -141,6 +141,14 @@ Gather Start Quoting Auto is a separate commitment check from Product Tile Grid 
 
 The workflow does not treat RAPPORT arrival as proof of commitment. If Start Quoting Auto is missing or unchecked after a verified Product Overview save, it may recover once by clicking the top `SELECT PRODUCT` subnav back to Product Tile Grid, reselecting Auto if needed, saving again, and re-reading Start Quoting. Sidebar Add Product remains refused as a Product Tile recovery path.
 
+Disabled `Create Quotes & Order Reports` is not treated as final failure when the Start Quoting section is otherwise committed and the scoped Start Quoting Add product handoff is available. After vehicle reconciliation passes, AHK can click the existing `click_start_quoting_add_product` op, which targets the Start Quoting `quotesButton` / Add product control, then re-read `gather_start_quoting_status` until Create Quotes becomes enabled. Only then does it click Create Quotes.
+
+This handoff is intentionally separate from unsafe Add Product fallback:
+
+- Allowed: scoped Start Quoting `quotesButton`, only after Product Tile Auto was verified, Product Overview was saved, vehicles reconciled, Auto is present/selected in Start Quoting, and Rating State is valid.
+- Refused: sidebar/left-nav `id=addProduct`, direct navigation, or using Add Product to compensate for missing Product Tile Auto verification.
+- Failure: if scoped Add product is missing/disabled, or Create Quotes remains disabled after the scoped handoff.
+
 ## Potential Vehicle Confirmation Guard
 
 Live evidence showed `confirm_potential_vehicle` could receive a broad Cars and Trucks container containing both CONFIRMED VEHICLES and POTENTIAL VEHICLES. That is unsafe because the first `Confirm` button inside the broad container can belong to an unrelated public-record vehicle.
