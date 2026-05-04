@@ -3835,32 +3835,534 @@ copy(String((() => {
     });
   };
 
+  const detectAdvisorRuntimeState = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const selectors = getSelectorArgs(source);
+    const isCustomerSummaryOverview = isCustomerSummaryOverviewPage(source);
+    const isRapport = isGatherDataPage(source);
+    const isProductOverview = isProductOverviewPage(source);
+    const isSelectProductForm = isSelectProductFormPage(source);
+    const isIncidents = isIncidentsPage(source);
+    const isAsc = isAscProductPage(source);
+
+    if (isCustomerSummaryOverview) return 'CUSTOMER_SUMMARY_OVERVIEW';
+    if (isDuplicatePage(source)) return 'DUPLICATE';
+    if (isRapport) return 'RAPPORT';
+    if (isProductOverview) return 'PRODUCT_OVERVIEW';
+    if (isSelectProductForm) return 'SELECT_PRODUCT';
+    if (isIncidents) return 'INCIDENTS';
+    if (isAsc) return 'ASC_PRODUCT';
+    if (safe(selectors.searchCreateNewProspectId) && findByStableId(selectors.searchCreateNewProspectId)) return 'BEGIN_QUOTING_SEARCH';
+    if (safe(selectors.beginQuotingContinueId) && findByStableId(selectors.beginQuotingContinueId)) return 'BEGIN_QUOTING_FORM';
+    if (safe(selectors.advisorQuotingButtonId) && findByStableId(selectors.advisorQuotingButtonId)) return 'ADVISOR_HOME';
+    if (url.includes('advisorpro.allstate.com')) return 'ADVISOR_OTHER';
+    if (text.includes('allstate advisor pro')) return 'GATEWAY';
+    return 'NO_CONTEXT';
+  };
+
+  const advisorRunnerHost = () => {
+    if (typeof globalThis !== 'undefined') return globalThis;
+    if (typeof window !== 'undefined') return window;
+    return null;
+  };
+  const advisorRunnerNow = () => Date.now();
+  const advisorRunnerClampInt = (value, fallback, min, max) => {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(min, Math.min(max, parsed));
+  };
+  const advisorRunnerBool = (value) => {
+    const normalized = lower(value);
+    return value === true || normalized === '1' || normalized === 'true' || normalized === 'yes';
+  };
+  const advisorRunnerRouteFamily = (state = '') => {
+    const url = pageUrl();
+    const stateText = safe(state);
+    if (url.includes('/apps/intel/102/')) return 'INTEL_102';
+    if (url.includes('/apps/ASCPRODUCT/')) return 'ASCPRODUCT';
+    if (url.includes('/apps/customer-summary/')) return 'CUSTOMER_SUMMARY';
+    if (stateText === 'GATEWAY' || lower(bodyText()).includes('allstate advisor pro')) return 'GATEWAY';
+    if (['BEGIN_QUOTING_SEARCH', 'BEGIN_QUOTING_FORM', 'ADVISOR_HOME', 'ADVISOR_OTHER'].includes(stateText)) return 'ADVISOR_HOME';
+    return 'UNKNOWN';
+  };
+  const advisorRunnerModalPresent = () => {
+    const selectors = [
+      'dialog',
+      '[role="dialog"]',
+      '[aria-modal="true"]',
+      '.modal',
+      '.ReactModal__Content'
+    ];
+    return selectors.some((selector) => {
+      try {
+        return Array.from(document.querySelectorAll(selector)).some((node) => visible(node) && compact(getText(node), 80));
+      } catch {
+        return false;
+      }
+    });
+  };
+  const advisorRunnerReadPage = (source = {}) => {
+    const detectedState = detectAdvisorRuntimeState(source);
+    return {
+      url: compact(pageUrl(), 240),
+      routeFamily: advisorRunnerRouteFamily(detectedState),
+      detectedState,
+      modalPresent: advisorRunnerModalPresent() ? '1' : '0'
+    };
+  };
+  const advisorRunnerEventSummary = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'string') return compact(value, 220);
+    try { return compact(JSON.stringify(value), 220); } catch {}
+    return compact(String(value), 220);
+  };
+  const createAdvisorResidentRunner = (version, buildHash, maxEventCount) => {
+    const runnerId = `advisor-runner-${advisorRunnerNow()}-${Math.floor(Math.random() * 100000)}`;
+    const maxEvents = advisorRunnerClampInt(maxEventCount, 200, 20, 500);
+    const runner = {
+      version,
+      buildHash,
+      runnerId,
+      createdAt: new Date(advisorRunnerNow()).toISOString(),
+      urlAtBootstrap: pageUrl(),
+      running: false,
+      stopRequested: false,
+      stepCount: 0,
+      eventSeq: 0,
+      events: [],
+      maxEventCount: maxEvents,
+      lastAction: '',
+      lastError: '',
+      lastBlockedReason: '',
+      addEvent(type, message = '', data = {}) {
+        this.eventSeq += 1;
+        const event = {
+          seq: this.eventSeq,
+          ts: new Date(advisorRunnerNow()).toISOString(),
+          type: compact(type, 80),
+          message: compact(message, 160),
+          url: compact(pageUrl(), 240),
+          data: advisorRunnerEventSummary(data)
+        };
+        this.events.push(event);
+        while (this.events.length > this.maxEventCount)
+          this.events.shift();
+        return event;
+      },
+      readPage(source = {}) {
+        return advisorRunnerReadPage(source);
+      },
+      status(source = {}) {
+        const expectedBuildHash = safe(source.expectedBuildHash).trim();
+        if (expectedBuildHash && expectedBuildHash !== this.buildHash) {
+          const page = this.readPage(source);
+          return {
+            result: 'STALE_BUILD',
+            running: this.running ? '1' : '0',
+            stopRequested: this.stopRequested ? '1' : '0',
+            version: this.version,
+            buildHash: this.buildHash,
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastBlockedReason: this.lastBlockedReason,
+            eventSeq: String(this.eventSeq),
+            eventCount: String(this.events.length)
+          };
+        }
+        const expectedHost = safe(source.expectedHost).trim();
+        const page = this.readPage(source);
+        if (expectedHost && !page.url.includes(expectedHost)) {
+          return {
+            result: 'WRONG_CONTEXT',
+            running: this.running ? '1' : '0',
+            stopRequested: this.stopRequested ? '1' : '0',
+            version: this.version,
+            buildHash: this.buildHash,
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastBlockedReason: this.lastBlockedReason,
+            eventSeq: String(this.eventSeq),
+            eventCount: String(this.events.length)
+          };
+        }
+        return {
+          result: 'OK',
+          running: this.running ? '1' : '0',
+          stopRequested: this.stopRequested ? '1' : '0',
+          version: this.version,
+          buildHash: this.buildHash,
+          url: page.url,
+          routeFamily: page.routeFamily,
+          detectedState: page.detectedState,
+          lastBlockedReason: this.lastBlockedReason,
+          eventSeq: String(this.eventSeq),
+          eventCount: String(this.events.length)
+        };
+      },
+      stop(reason = '') {
+        this.stopRequested = true;
+        this.lastAction = 'stop';
+        this.addEvent('stop', reason || 'stop-requested');
+        return {
+          result: 'OK',
+          stopRequested: '1',
+          running: this.running ? '1' : '0',
+          reason: compact(reason || 'stop-requested', 160)
+        };
+      },
+      reset(clearEvents = false, reason = '') {
+        if (this.running) {
+          return {
+            result: 'BUSY',
+            eventCount: String(this.events.length),
+            stopRequested: this.stopRequested ? '1' : '0',
+            running: '1'
+          };
+        }
+        this.stopRequested = false;
+        this.lastAction = '';
+        this.lastError = '';
+        this.lastBlockedReason = '';
+        if (clearEvents) this.events = [];
+        this.addEvent('reset', reason || 'reset');
+        return {
+          result: 'OK',
+          eventCount: String(this.events.length),
+          stopRequested: '0',
+          running: '0'
+        };
+      },
+      getEvents(source = {}) {
+        const sinceSeq = advisorRunnerClampInt(source.sinceSeq, 0, 0, Number.MAX_SAFE_INTEGER);
+        const limit = advisorRunnerClampInt(source.limit, 50, 1, 100);
+        const selected = this.events.filter((event) => event.seq > sinceSeq).slice(0, limit);
+        let truncated = '0';
+        let eventsJson = JSON.stringify(selected);
+        const maxChars = advisorRunnerClampInt(source.maxChars, 6000, 1000, 12000);
+        if (eventsJson.length > maxChars) {
+          truncated = '1';
+          while (selected.length && JSON.stringify(selected).length > maxChars)
+            selected.pop();
+          eventsJson = JSON.stringify(selected);
+        }
+        return {
+          result: 'OK',
+          fromSeq: selected.length ? String(selected[0].seq) : '',
+          toSeq: selected.length ? String(selected[selected.length - 1].seq) : '',
+          eventCount: String(selected.length),
+          truncated,
+          eventsJson
+        };
+      },
+      runUntilBlocked(source = {}) {
+        if (!advisorRunnerBool(source.readOnly)) {
+          this.lastBlockedReason = 'mutating-request-refused';
+          this.addEvent('blocked', 'mutating-request-refused', { readOnly: source.readOnly });
+          const page = this.readPage(source);
+          return {
+            result: 'BLOCKED',
+            blockedReason: 'mutating-request-refused',
+            steps: '0',
+            elapsedMs: '0',
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastStatusOp: 'readPage',
+            manualRequired: '1',
+            mutatingRequestRefused: '1',
+            eventSeq: String(this.eventSeq)
+          };
+        }
+        const expectedBuildHash = safe(source.expectedBuildHash).trim();
+        if (expectedBuildHash && expectedBuildHash !== this.buildHash) {
+          const page = this.readPage(source);
+          this.lastBlockedReason = 'stale-build';
+          this.addEvent('blocked', 'stale-build', { expectedBuildHash });
+          return {
+            result: 'STALE_BUILD',
+            blockedReason: 'stale-build',
+            steps: '0',
+            elapsedMs: '0',
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastStatusOp: 'readPage',
+            manualRequired: '1',
+            eventSeq: String(this.eventSeq)
+          };
+        }
+        const maxSteps = advisorRunnerClampInt(source.maxSteps, 20, 1, 100);
+        const maxMs = source.maxMs === undefined ? 2000 : advisorRunnerClampInt(source.maxMs, 0, 0, 10000);
+        const started = advisorRunnerNow();
+        let steps = 0;
+        let page = this.readPage(source);
+        this.running = true;
+        this.lastAction = 'runUntilBlocked';
+        this.addEvent('run-start', 'runUntilBlocked', { maxSteps, maxMs });
+        try {
+          if (maxMs <= 0) {
+            this.lastBlockedReason = 'max-ms';
+            this.addEvent('blocked', 'max-ms');
+            return {
+              result: 'TIMEOUT',
+              blockedReason: 'max-ms',
+              steps: '0',
+              elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+              url: page.url,
+              routeFamily: page.routeFamily,
+              detectedState: page.detectedState,
+              lastStatusOp: 'readPage',
+              manualRequired: '0',
+              eventSeq: String(this.eventSeq)
+            };
+          }
+          while (steps < maxSteps) {
+            if (this.stopRequested) {
+              this.lastBlockedReason = 'stop-requested';
+              this.addEvent('blocked', 'stop-requested');
+              return {
+                result: 'STOPPED',
+                blockedReason: 'stop-requested',
+                steps: String(steps),
+                elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+                url: page.url,
+                routeFamily: page.routeFamily,
+                detectedState: page.detectedState,
+                lastStatusOp: 'readPage',
+                manualRequired: '1',
+                eventSeq: String(this.eventSeq)
+              };
+            }
+            if ((advisorRunnerNow() - started) >= maxMs) {
+              this.lastBlockedReason = 'max-ms';
+              this.addEvent('blocked', 'max-ms');
+              return {
+                result: 'TIMEOUT',
+                blockedReason: 'max-ms',
+                steps: String(steps),
+                elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+                url: page.url,
+                routeFamily: page.routeFamily,
+                detectedState: page.detectedState,
+                lastStatusOp: 'readPage',
+                manualRequired: '0',
+                eventSeq: String(this.eventSeq)
+              };
+            }
+            page = this.readPage(source);
+            steps += 1;
+            this.stepCount += 1;
+            this.addEvent('step', 'read-page', {
+              routeFamily: page.routeFamily,
+              detectedState: page.detectedState
+            });
+            if (page.routeFamily === 'UNKNOWN' || page.detectedState === 'NO_CONTEXT') {
+              this.lastBlockedReason = 'unknown-route';
+              this.addEvent('blocked', 'unknown-route', page);
+              return {
+                result: 'BLOCKED',
+                blockedReason: 'unknown-route',
+                steps: String(steps),
+                elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+                url: page.url,
+                routeFamily: page.routeFamily,
+                detectedState: page.detectedState,
+                lastStatusOp: 'readPage',
+                manualRequired: '1',
+                eventSeq: String(this.eventSeq)
+              };
+            }
+            if (page.modalPresent === '1' && !advisorRunnerBool(source.allowModal)) {
+              this.lastBlockedReason = 'unexpected-modal';
+              this.addEvent('blocked', 'unexpected-modal', page);
+              return {
+                result: 'BLOCKED',
+                blockedReason: 'unexpected-modal',
+                steps: String(steps),
+                elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+                url: page.url,
+                routeFamily: page.routeFamily,
+                detectedState: page.detectedState,
+                lastStatusOp: 'readPage',
+                manualRequired: '1',
+                eventSeq: String(this.eventSeq)
+              };
+            }
+          }
+          this.lastBlockedReason = 'max-steps';
+          this.addEvent('blocked', 'max-steps', { steps });
+          return {
+            result: 'MAX_STEPS',
+            blockedReason: 'max-steps',
+            steps: String(steps),
+            elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastStatusOp: 'readPage',
+            manualRequired: '0',
+            eventSeq: String(this.eventSeq)
+          };
+        } catch (err) {
+          this.lastError = safe(err && err.message || err);
+          this.lastBlockedReason = 'error';
+          this.addEvent('error', this.lastError);
+          page = this.readPage(source);
+          return {
+            result: 'ERROR',
+            blockedReason: 'error',
+            steps: String(steps),
+            elapsedMs: String(Math.max(0, advisorRunnerNow() - started)),
+            url: page.url,
+            routeFamily: page.routeFamily,
+            detectedState: page.detectedState,
+            lastStatusOp: 'readPage',
+            manualRequired: '1',
+            eventSeq: String(this.eventSeq)
+          };
+        } finally {
+          this.running = false;
+        }
+      }
+    };
+    runner.addEvent('bootstrap', 'runner-created', { version, buildHash });
+    return runner;
+  };
+  const advisorResidentRunnerCommand = (source = {}) => {
+    const host = advisorRunnerHost();
+    if (!host) {
+      return linesOut({
+        result: 'ERROR',
+        runnerId: '',
+        version: '',
+        buildHash: '',
+        url: compact(pageUrl(), 240),
+        state: 'NO_CONTEXT',
+        eventSeq: '',
+        message: 'no-global-host'
+      });
+    }
+    const command = safe(source.command || source.cmd).trim() || 'status';
+    try {
+      if (command === 'bootstrap') {
+        const version = safe(source.version || 'phase1').trim() || 'phase1';
+        const buildHash = safe(source.buildHash || 'dev').trim() || 'dev';
+        const existing = host.__advisorRunner || null;
+        const replaceStale = advisorRunnerBool(source.replaceStale);
+        if (existing && existing.version === version && existing.buildHash === buildHash) {
+          const page = advisorRunnerReadPage(source);
+          if (typeof existing.addEvent === 'function')
+            existing.addEvent('bootstrap', 'already-bootstrapped');
+          return linesOut({
+            result: 'ALREADY_BOOTSTRAPPED',
+            runnerId: existing.runnerId || '',
+            version: existing.version || '',
+            buildHash: existing.buildHash || '',
+            url: page.url,
+            state: page.detectedState,
+            eventSeq: String(existing.eventSeq || 0),
+            message: 'runner-present'
+          });
+        }
+        if (existing) {
+          if (existing.running) {
+            const page = advisorRunnerReadPage(source);
+            return linesOut({
+              result: 'BUSY',
+              runnerId: existing.runnerId || '',
+              version: existing.version || '',
+              buildHash: existing.buildHash || '',
+              url: page.url,
+              state: page.detectedState,
+              eventSeq: String(existing.eventSeq || 0),
+              message: 'stale-runner-running'
+            });
+          }
+          if (!replaceStale) {
+            const page = advisorRunnerReadPage(source);
+            return linesOut({
+              result: 'STALE',
+              runnerId: existing.runnerId || '',
+              version: existing.version || '',
+              buildHash: existing.buildHash || '',
+              url: page.url,
+              state: page.detectedState,
+              eventSeq: String(existing.eventSeq || 0),
+              message: 'replaceStale-required'
+            });
+          }
+        }
+        const runner = createAdvisorResidentRunner(version, buildHash, source.maxEventCount);
+        host.__advisorRunner = runner;
+        const page = runner.readPage(source);
+        return linesOut({
+          result: existing ? 'STALE_REPLACED' : 'OK',
+          runnerId: runner.runnerId,
+          version: runner.version,
+          buildHash: runner.buildHash,
+          url: page.url,
+          state: page.detectedState,
+          eventSeq: String(runner.eventSeq),
+          message: existing ? 'stale-runner-replaced' : 'runner-created'
+        });
+      }
+
+      const runner = host.__advisorRunner || null;
+      if (!runner) {
+        if (command === 'status') {
+          return linesOut({
+            result: 'MISSING',
+            running: '0',
+            stopRequested: '0',
+            version: '',
+            buildHash: '',
+            url: compact(pageUrl(), 240),
+            routeFamily: advisorRunnerRouteFamily(detectAdvisorRuntimeState(source)),
+            detectedState: detectAdvisorRuntimeState(source),
+            lastBlockedReason: '',
+            eventSeq: '',
+            eventCount: '0'
+          });
+        }
+        return linesOut({ result: 'MISSING', stopRequested: '0', running: '0', reason: safe(source.reason || '') });
+      }
+
+      if (command === 'status') return linesOut(runner.status(source));
+      if (command === 'stop') return linesOut(runner.stop(safe(source.reason || '')));
+      if (command === 'reset') return linesOut(runner.reset(advisorRunnerBool(source.clearEvents), safe(source.reason || '')));
+      if (command === 'getEvents') return linesOut(runner.getEvents(source));
+      if (command === 'runUntilBlocked') return linesOut(runner.runUntilBlocked(source));
+      return linesOut({
+        result: 'ERROR',
+        running: runner.running ? '1' : '0',
+        stopRequested: runner.stopRequested ? '1' : '0',
+        reason: `unknown-command:${compact(command, 80)}`
+      });
+    } catch (err) {
+      const page = advisorRunnerReadPage(source);
+      return linesOut({
+        result: 'ERROR',
+        runnerId: host.__advisorRunner && host.__advisorRunner.runnerId || '',
+        version: host.__advisorRunner && host.__advisorRunner.version || '',
+        buildHash: host.__advisorRunner && host.__advisorRunner.buildHash || '',
+        url: page.url,
+        state: page.detectedState,
+        eventSeq: host.__advisorRunner && String(host.__advisorRunner.eventSeq || 0) || '',
+        message: compact((err && err.message) || err, 240)
+      });
+    }
+  };
+
   switch (safe(op)) {
     case 'detect_state': {
-      const url = pageUrl();
-      const text = bodyText();
-      const selectors = getSelectorArgs(args);
-      const isCustomerSummaryOverview = isCustomerSummaryOverviewPage(args);
-      const isRapport = isGatherDataPage(args);
-      const isProductOverview = isProductOverviewPage(args);
-      const isSelectProductForm = isSelectProductFormPage(args);
-      const isIncidents = isIncidentsPage(args);
-      const isAsc = isAscProductPage(args);
-
-      if (isCustomerSummaryOverview) return 'CUSTOMER_SUMMARY_OVERVIEW';
-      if (isDuplicatePage(args)) return 'DUPLICATE';
-      if (isRapport) return 'RAPPORT';
-      if (isProductOverview) return 'PRODUCT_OVERVIEW';
-      if (isSelectProductForm) return 'SELECT_PRODUCT';
-      if (isIncidents) return 'INCIDENTS';
-      if (isAsc) return 'ASC_PRODUCT';
-      if (safe(selectors.searchCreateNewProspectId) && findByStableId(selectors.searchCreateNewProspectId)) return 'BEGIN_QUOTING_SEARCH';
-      if (safe(selectors.beginQuotingContinueId) && findByStableId(selectors.beginQuotingContinueId)) return 'BEGIN_QUOTING_FORM';
-      if (safe(selectors.advisorQuotingButtonId) && findByStableId(selectors.advisorQuotingButtonId)) return 'ADVISOR_HOME';
-      if (url.includes('advisorpro.allstate.com')) return 'ADVISOR_OTHER';
-      if (text.includes('allstate advisor pro')) return 'GATEWAY';
-      return 'NO_CONTEXT';
+      return detectAdvisorRuntimeState(args);
     }
+
+    case 'resident_runner_command':
+      return advisorResidentRunnerCommand(args);
 
     case 'click_product_overview_tile': {
       if (!isProductOverviewPage(args)) return 'NOT_OVERVIEW';

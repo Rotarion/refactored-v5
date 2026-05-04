@@ -10,6 +10,8 @@ global advisorQuoteProductTileAutoSelectedOnOverview := false
 global advisorQuoteProductOverviewSaved := false
 global advisorQuoteGatherAutoCommitted := false
 global advisorQuoteProductTileRecoveryAttempted := false
+global advisorQuoteResidentRunnerFeatureEnabled := false
+global advisorQuoteResidentRunnerReadOnlyOnly := true
 
 RunAdvisorQuoteWorkflowFromClipboard() {
     raw := Trim(A_Clipboard)
@@ -4573,6 +4575,97 @@ AdvisorQuoteIsIncidentsPage(db) {
 
 AdvisorQuoteRunOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
     return AdvisorQuoteRunJsOp(op, args, retries, retryDelayMs)
+}
+
+AdvisorQuoteResidentRunnerEnabled() {
+    global advisorQuoteResidentRunnerFeatureEnabled
+    return advisorQuoteResidentRunnerFeatureEnabled = true
+}
+
+AdvisorQuoteResidentRunnerVersion() {
+    return "phase1"
+}
+
+AdvisorQuoteResidentRunnerBuildHash() {
+    return "advisor-resident-runner-phase1"
+}
+
+AdvisorQuoteRunnerBuildCommandArgs(command, args := Map()) {
+    commandArgs := Map(
+        "command", command,
+        "version", AdvisorQuoteResidentRunnerVersion(),
+        "buildHash", AdvisorQuoteResidentRunnerBuildHash()
+    )
+    if IsObject(args) {
+        for key, value in args
+            commandArgs[String(key)] := value
+    }
+    if !commandArgs.Has("expectedBuildHash")
+        commandArgs["expectedBuildHash"] := AdvisorQuoteResidentRunnerBuildHash()
+    return commandArgs
+}
+
+AdvisorQuoteRunnerCommand(command, args := Map(), eventName := "") {
+    if (eventName = "")
+        eventName := "ADVISOR_RUNNER_" StrUpper(command)
+    if !AdvisorQuoteResidentRunnerEnabled() {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", reason=feature-disabled")
+        return Map("result", "DISABLED", "command", command)
+    }
+    if StopRequested() {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", reason=stop-requested")
+        return Map("result", "STOP_REQUESTED", "command", command)
+    }
+    raw := AdvisorQuoteRunOp("resident_runner_command", AdvisorQuoteRunnerBuildCommandArgs(command, args), 2, 120)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    if (status.Count = 0) {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", reason=empty-result")
+        return Map("result", "EMPTY", "command", command)
+    }
+    AdvisorQuoteAppendLog(
+        eventName,
+        AdvisorQuoteGetLastStep(),
+        "command=" command
+            . ", result=" AdvisorQuoteStatusValue(status, "result")
+            . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+            . ", detectedState=" AdvisorQuoteStatusValue(status, "detectedState")
+            . ", eventSeq=" AdvisorQuoteStatusValue(status, "eventSeq")
+    )
+    return status
+}
+
+AdvisorQuoteEnsureResidentRunner() {
+    status := AdvisorQuoteRunnerCommand("bootstrap", Map("replaceStale", "0"), "ADVISOR_RUNNER_BOOTSTRAP")
+    result := AdvisorQuoteStatusValue(status, "result")
+    return result = "OK" || result = "ALREADY_BOOTSTRAPPED"
+}
+
+AdvisorQuoteRunnerStatus() {
+    return AdvisorQuoteRunnerCommand("status", Map(), "ADVISOR_RUNNER_STATUS")
+}
+
+AdvisorQuoteRunnerStop(reason := "ahk-stop") {
+    return AdvisorQuoteRunnerCommand("stop", Map("reason", reason), "ADVISOR_RUNNER_STOP")
+}
+
+AdvisorQuoteRunnerReset(clearEvents := false) {
+    return AdvisorQuoteRunnerCommand("reset", Map("clearEvents", clearEvents ? "1" : "0"), "ADVISOR_RUNNER_RESET")
+}
+
+AdvisorQuoteRunnerGetEvents(sinceSeq := 0, limit := 50) {
+    return AdvisorQuoteRunnerCommand("getEvents", Map("sinceSeq", sinceSeq, "limit", limit), "ADVISOR_RUNNER_EVENTS")
+}
+
+AdvisorQuoteRunnerRunUntilBlocked(args := Map()) {
+    global advisorQuoteResidentRunnerReadOnlyOnly
+    runnerArgs := Map()
+    if IsObject(args) {
+        for key, value in args
+            runnerArgs[String(key)] := value
+    }
+    if (advisorQuoteResidentRunnerReadOnlyOnly = true)
+        runnerArgs["readOnly"] := "1"
+    return AdvisorQuoteRunnerCommand("runUntilBlocked", runnerArgs, "ADVISOR_RUNNER_RUN_UNTIL_BLOCKED")
 }
 
 AdvisorQuoteRunJsOp(op, args := Map(), retries := 1, retryDelayMs := 200) {

@@ -748,17 +748,12 @@ function createGatherDefaultsNodes(includeEmail = true, includeHomeType = true) 
   return nodes;
 }
 
-function runOperator(op, args, document, href = 'https://advisorpro.allstate.com/#/apps/intel/102/rapport') {
-  const sourcePath = path.join(__dirname, '..', 'assets', 'js', 'advisor_quote', 'ops_result.js');
-  const template = fs.readFileSync(sourcePath, 'utf8');
-  const script = template
-    .replace('@@OP@@', JSON.stringify(op))
-    .replace('@@ARGS@@', JSON.stringify(args || {}));
-  let copied = '';
+function createOperatorContext(document, href = 'https://advisorpro.allstate.com/#/apps/intel/102/rapport') {
+  const state = { copied: '' };
   const context = {
     console,
     copy: (value) => {
-      copied = String(value);
+      state.copied = String(value);
     },
     document,
     location: { href },
@@ -781,8 +776,23 @@ function runOperator(op, args, document, href = 'https://advisorpro.allstate.com
     Math
   };
   context.globalThis = context;
-  vm.runInNewContext(script, context, { timeout: 1000 });
-  return copied;
+  context.window = context;
+  return { context, state };
+}
+
+function runOperatorInContext(op, args, operatorContext) {
+  const sourcePath = path.join(__dirname, '..', 'assets', 'js', 'advisor_quote', 'ops_result.js');
+  const template = fs.readFileSync(sourcePath, 'utf8');
+  const script = template
+    .replace('@@OP@@', JSON.stringify(op))
+    .replace('@@ARGS@@', JSON.stringify(args || {}));
+  operatorContext.state.copied = '';
+  vm.runInNewContext(script, operatorContext.context, { timeout: 1000 });
+  return operatorContext.state.copied;
+}
+
+function runOperator(op, args, document, href = 'https://advisorpro.allstate.com/#/apps/intel/102/rapport') {
+  return runOperatorInContext(op, args, createOperatorContext(document, href));
 }
 
 function testClickHelperDoesNotDoubleSubmit() {
@@ -934,6 +944,139 @@ function testWrapperContracts() {
   assert.strictEqual(error.result, 'ERROR');
   assert.strictEqual(error.op, 'click_by_id');
   assert.match(error.message, /boom/);
+}
+
+function testResidentRunnerContracts() {
+  const missing = assertKeyBlock(runOperator('resident_runner_command', {
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  }, new FakeDocument()), [
+    'result', 'running', 'stopRequested', 'version', 'buildHash', 'url', 'routeFamily', 'detectedState', 'eventCount'
+  ]);
+  assert.strictEqual(missing.result, 'MISSING');
+
+  const safeButton = createButton('runner-safe-button', 'Do Not Click');
+  const runnerDoc = pageDoc('Gather Data Vehicles Start Quoting', [safeButton]);
+  const runnerContext = createOperatorContext(runnerDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/rapport');
+  const bootstrapArgs = baseArgs({
+    command: 'bootstrap',
+    version: 'test-v1',
+    buildHash: 'hash-a',
+    maxEventCount: '10'
+  });
+  const bootstrap = assertKeyBlock(runOperatorInContext('resident_runner_command', bootstrapArgs, runnerContext), [
+    'result', 'runnerId', 'version', 'buildHash', 'url', 'state', 'eventSeq', 'message'
+  ]);
+  assert.strictEqual(bootstrap.result, 'OK');
+  assert.strictEqual(bootstrap.version, 'test-v1');
+  assert.strictEqual(bootstrap.buildHash, 'hash-a');
+  assert.ok(runnerContext.context.__advisorRunner);
+
+  const secondBootstrap = assertKeyBlock(runOperatorInContext('resident_runner_command', bootstrapArgs, runnerContext), [
+    'result', 'runnerId', 'version', 'buildHash', 'url', 'state', 'eventSeq', 'message'
+  ]);
+  assert.strictEqual(secondBootstrap.result, 'ALREADY_BOOTSTRAPPED');
+  assert.strictEqual(secondBootstrap.runnerId, bootstrap.runnerId);
+
+  const status = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), [
+    'result', 'running', 'stopRequested', 'version', 'buildHash', 'url', 'routeFamily', 'detectedState', 'eventSeq', 'eventCount'
+  ]);
+  assert.strictEqual(status.result, 'OK');
+  assert.strictEqual(status.routeFamily, 'INTEL_102');
+  assert.strictEqual(status.detectedState, 'RAPPORT');
+
+  const stale = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-b'
+  }), runnerContext), ['result', 'buildHash', 'routeFamily', 'detectedState']);
+  assert.strictEqual(stale.result, 'STALE_BUILD');
+  assert.strictEqual(stale.buildHash, 'hash-a');
+
+  const stopped = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'stop',
+    reason: 'smoke-stop'
+  }), runnerContext), ['result', 'stopRequested', 'running', 'reason']);
+  assert.strictEqual(stopped.result, 'OK');
+  assert.strictEqual(stopped.stopRequested, '1');
+
+  const reset = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'reset',
+    clearEvents: '0',
+    reason: 'smoke-reset'
+  }), runnerContext), ['result', 'eventCount', 'stopRequested', 'running']);
+  assert.strictEqual(reset.result, 'OK');
+  assert.strictEqual(reset.stopRequested, '0');
+
+  const events = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'getEvents',
+    sinceSeq: '0',
+    limit: '5'
+  }), runnerContext), ['result', 'eventCount', 'truncated', 'eventsJson']);
+  assert.strictEqual(events.result, 'OK');
+  assert.strictEqual(events.truncated, '0');
+  assert.ok(Array.isArray(JSON.parse(events.eventsJson)));
+
+  const maxSteps = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '1',
+    maxSteps: '2',
+    maxMs: '10000'
+  }), runnerContext), [
+    'result', 'blockedReason', 'steps', 'elapsedMs', 'url', 'routeFamily', 'detectedState', 'lastStatusOp', 'manualRequired', 'eventSeq'
+  ]);
+  assert.strictEqual(maxSteps.result, 'MAX_STEPS');
+  assert.strictEqual(maxSteps.steps, '2');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  const timeout = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '1',
+    maxSteps: '5',
+    maxMs: '0'
+  }), runnerContext), ['result', 'blockedReason', 'steps']);
+  assert.strictEqual(timeout.result, 'TIMEOUT');
+  assert.strictEqual(timeout.steps, '0');
+
+  const refused = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '0',
+    maxSteps: '1'
+  }), runnerContext), ['result', 'blockedReason', 'mutatingRequestRefused', 'manualRequired']);
+  assert.strictEqual(refused.result, 'BLOCKED');
+  assert.strictEqual(refused.mutatingRequestRefused, '1');
+
+  runnerContext.context.document = pageDoc('Drivers and vehicles Add drivers Add vehicles', [
+    createButton('profile-summary-submitBtn', 'Save')
+  ]);
+  runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/';
+  const afterHashRoute = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), ['result', 'routeFamily', 'detectedState']);
+  assert.strictEqual(afterHashRoute.result, 'OK');
+  assert.strictEqual(afterHashRoute.routeFamily, 'ASCPRODUCT');
+  assert.strictEqual(afterHashRoute.detectedState, 'ASC_PRODUCT');
+
+  runnerContext.context.location.href = 'https://example.invalid/';
+  runnerContext.context.document = pageDoc('Unknown page');
+  const unknownRoute = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '1',
+    maxSteps: '5',
+    maxMs: '10000'
+  }), runnerContext), ['result', 'blockedReason', 'routeFamily', 'detectedState', 'manualRequired']);
+  assert.strictEqual(unknownRoute.result, 'BLOCKED');
+  assert.strictEqual(unknownRoute.blockedReason, 'unknown-route');
+  assert.strictEqual(unknownRoute.routeFamily, 'UNKNOWN');
+  assert.strictEqual(unknownRoute.manualRequired, '1');
+
+  const freshContextStatus = assertKeyBlock(runOperator('resident_runner_command', {
+    command: 'status'
+  }, new FakeDocument()), ['result', 'eventCount']);
+  assert.strictEqual(freshContextStatus.result, 'MISSING');
 }
 
 function testStateDetectionContract() {
@@ -3140,6 +3283,7 @@ function run() {
   testVehicleMatching();
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
+  testResidentRunnerContracts();
   testStateDetectionContract();
   testCustomerSummaryOverviewStatusContract();
   testCustomerSummaryStartHereClickContract();
