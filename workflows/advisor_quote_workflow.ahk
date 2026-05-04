@@ -1691,6 +1691,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
     startQuotingReason := ""
     startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
+    startQuotingCheckboxEnsureAttempted := false
     if !startQuotingReady {
         if (advisorQuoteProductOverviewAutoPending && !AdvisorQuoteGatherStartQuotingAutoSelected(startQuotingStatus)) {
             advisorQuoteGatherAutoCommitted := false
@@ -1702,6 +1703,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         }
 
         if (AdvisorQuoteStatusValue(startQuotingStatus, "hasStartQuotingText") = "1") {
+            startQuotingCheckboxEnsureAttempted := true
             checkboxStatus := AdvisorQuoteEnsureStartQuotingAutoCheckbox()
             AdvisorQuoteAppendLog("GATHER_START_QUOTING_AUTO_CHECKBOX", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildStartQuotingAutoCheckboxDetail(checkboxStatus))
 
@@ -1712,6 +1714,17 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
             startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
         }
+    }
+
+    if (!startQuotingReady && AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(startQuotingStatus, db, advisorQuoteProductOverviewAutoVerified, &startQuotingReason)) {
+        handoffPath := startQuotingCheckboxEnsureAttempted ? "checkbox-then-add-product" : "scoped-add-product"
+        handoffStatus := Map()
+        handoffReason := ""
+        if !AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, startQuotingStatus, handoffPath, &handoffStatus, &handoffReason, &failureReason, &failureScanPath)
+            return false
+        startQuotingStatus := handoffStatus
+        startQuotingReason := handoffReason
+        startQuotingReady := AdvisorQuoteGatherStartQuotingStatusValid(startQuotingStatus, db, &startQuotingReason)
     }
 
     if (!startQuotingReady && advisorQuoteProductOverviewAutoVerified && AdvisorQuoteGatherNeedsProductTileRecovery(startQuotingStatus)) {
@@ -1734,10 +1747,42 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         advisorQuoteProductOverviewAutoPending := false
         advisorQuoteGatherAutoCommitted := true
         AdvisorQuoteAppendLog("GATHER_START_QUOTING_READY", AdvisorQuoteGetLastStep(), "GatherAutoCommitted=1, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=create-quotes-enabled"
+                . ", startQuotingCreateQuotesEnabledBefore=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(startQuotingStatus) ? "1" : "0")
+                . ", startQuotingScopedAddProductPresent=" (AdvisorQuoteStartQuotingScopedAddProductPresent(startQuotingStatus) ? "1" : "0")
+                . ", startQuotingScopedAddProductClicked=0"
+        )
 
         clickResult := AdvisorQuoteClickCreateQuotesOrderReports(db)
         AdvisorQuoteAppendLog("GATHER_START_QUOTING_CREATE_QUOTES_CLICK", AdvisorQuoteGetLastStep(), "result=" clickResult)
         if (clickResult != "OK") {
+            if (clickResult = "DISABLED" && advisorQuoteProductOverviewAutoVerified) {
+                retryStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
+                AdvisorQuoteAppendLog(
+                    "GATHER_START_QUOTING_STATUS",
+                    AdvisorQuoteGetLastStep(),
+                    "phase=create-quotes-disabled-retry, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(retryStatus)
+                )
+                retryReason := ""
+                if AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(retryStatus, db, advisorQuoteProductOverviewAutoVerified, &retryReason) {
+                    if !AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, retryStatus, "scoped-add-product", &startQuotingStatus, &startQuotingReason, &failureReason, &failureScanPath)
+                        return false
+                    clickResult := AdvisorQuoteClickCreateQuotesOrderReports(db)
+                    AdvisorQuoteAppendLog("GATHER_START_QUOTING_CREATE_QUOTES_CLICK", AdvisorQuoteGetLastStep(), "phase=after-scoped-add-product, result=" clickResult)
+                    if (clickResult = "OK") {
+                        waitArgs := Map("ascProductContains", db["urls"]["ascProductContains"])
+                        if !AdvisorQuoteWaitForCondition("gather_start_quoting_transition", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs) {
+                            failureReason := "Create Quotes & Order Reports did not transition to Consumer Reports or a later quote state."
+                            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "create-quotes-transition-timeout")
+                            return false
+                        }
+                        return true
+                    }
+                }
+            }
             if (clickResult = "NO_BUTTON")
                 failureReason := "Create Quotes & Order Reports button was not found on Gather Data."
             else if (clickResult = "DISABLED")
@@ -1944,6 +1989,79 @@ AdvisorQuoteGatherStartQuotingAutoSelected(status) {
     )
 }
 
+AdvisorQuoteStartQuotingCreateQuotesPresent(status) {
+    return AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "createQuotesPresent") = "1"
+}
+
+AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
+    return AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") = "1"
+        || AdvisorQuoteStatusValue(status, "createQuotesEnabled") = "1"
+}
+
+AdvisorQuoteStartQuotingScopedAddProductPresent(status) {
+    return AdvisorQuoteStatusValue(status, "addProductLinkPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "addProductPresent") = "1"
+        || AdvisorQuoteStatusValue(status, "startQuotingAddProductPresent") = "1"
+}
+
+AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason := "") {
+    failureReason := ""
+    if !IsObject(status) || (status.Count = 0) {
+        failureReason := "Gather Data Start Quoting status could not be read back from the page."
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "hasStartQuotingText") != "1" || AdvisorQuoteStatusValue(status, "startQuotingSectionPresent") = "0") {
+        failureReason := "Start Quoting block is not visible on Gather Data."
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "autoProductPresent") != "1") {
+        failureReason := "Auto is not present in the Start Quoting block."
+        return false
+    }
+    if !AdvisorQuoteGatherStartQuotingAutoSelected(status) {
+        failureReason := "Auto is not selected in the Start Quoting block."
+        return false
+    }
+    if !AdvisorQuoteStatusOptionMatches(
+        AdvisorQuoteStatusValue(status, "ratingStateValue"),
+        AdvisorQuoteStatusValue(status, "ratingStateText"),
+        db["defaults"]["ratingState"],
+        db["defaults"]["ratingState"]
+    ) {
+        failureReason := "Start Quoting Rating State is not " db["defaults"]["ratingState"] "."
+        return false
+    }
+    if !AdvisorQuoteStartQuotingCreateQuotesPresent(status) {
+        failureReason := "Create Quotes & Order Reports is not present on Gather Data."
+        return false
+    }
+    return true
+}
+
+AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(status, db, &failureReason := "") {
+    if !AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason)
+        return false
+    if AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
+        failureReason := "Create Quotes & Order Reports is already enabled."
+        return false
+    }
+    if !AdvisorQuoteStartQuotingScopedAddProductPresent(status) {
+        failureReason := "Scoped Start Quoting Add product link is not present."
+        return false
+    }
+    failureReason := "START_QUOTING_NEEDS_SCOPED_ADD_PRODUCT"
+    return true
+}
+
+AdvisorQuoteCanRunScopedStartQuotingAddProductHandoff(status, db, productOverviewAutoVerified, &failureReason := "") {
+    if !productOverviewAutoVerified {
+        failureReason := "PRODUCT_OVERVIEW_AUTO_NOT_VERIFIED"
+        return false
+    }
+    return AdvisorQuoteGatherStartQuotingReadyForScopedAddProductHandoff(status, db, &failureReason)
+}
+
 AdvisorQuoteGatherNeedsProductTileRecovery(status) {
     if !IsObject(status) || (status.Count = 0)
         return true
@@ -1967,43 +2085,15 @@ AdvisorQuoteStartQuotingFailureCode(status, failureReason := "") {
         return "START_QUOTING_AUTO_NOT_CHECKED: " failureReason
     if (AdvisorQuoteStatusValue(status, "ratingStatePresent") != "1")
         return "START_QUOTING_RATING_STATE_INVALID: " failureReason
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") != "1" || AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") != "1")
+    if !AdvisorQuoteStartQuotingCreateQuotesPresent(status) || !AdvisorQuoteStartQuotingCreateQuotesEnabled(status)
         return "START_QUOTING_CREATE_QUOTES_DISABLED: " failureReason
     return "START_QUOTING_RATING_STATE_INVALID: " failureReason
 }
 
 AdvisorQuoteGatherStartQuotingStatusValid(status, db, &failureReason := "") {
-    failureReason := ""
-    if !IsObject(status) || (status.Count = 0) {
-        failureReason := "Gather Data Start Quoting status could not be read back from the page."
+    if !AdvisorQuoteGatherStartQuotingCoreReady(status, db, &failureReason)
         return false
-    }
-    if (AdvisorQuoteStatusValue(status, "hasStartQuotingText") != "1") {
-        failureReason := "Start Quoting block is not visible on Gather Data."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "autoProductPresent") != "1") {
-        failureReason := "Auto is not present in the Start Quoting block."
-        return false
-    }
-    if !AdvisorQuoteGatherStartQuotingAutoSelected(status) {
-        failureReason := "Auto is not selected in the Start Quoting block."
-        return false
-    }
-    if !AdvisorQuoteStatusOptionMatches(
-        AdvisorQuoteStatusValue(status, "ratingStateValue"),
-        AdvisorQuoteStatusValue(status, "ratingStateText"),
-        db["defaults"]["ratingState"],
-        db["defaults"]["ratingState"]
-    ) {
-        failureReason := "Start Quoting Rating State is not " db["defaults"]["ratingState"] "."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonPresent") != "1") {
-        failureReason := "Create Quotes & Order Reports is not present on Gather Data."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "createQuoteButtonEnabled") != "1") {
+    if !AdvisorQuoteStartQuotingCreateQuotesEnabled(status) {
         failureReason := "Create Quotes & Order Reports is still disabled on Gather Data."
         return false
     }
@@ -3126,6 +3216,99 @@ AdvisorQuoteBuildStartQuotingAutoCheckboxDetail(status) {
 
 AdvisorQuoteClickCreateQuotesOrderReports(db) {
     return AdvisorQuoteRunOp("click_create_quotes_order_reports", Map("selectors", db["selectors"]), 1, 100)
+}
+
+AdvisorQuoteClickStartQuotingScopedAddProduct(db) {
+    return AdvisorQuoteRunOp("click_start_quoting_add_product", Map("selectors", db["selectors"]), 1, 100)
+}
+
+AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, beforeStatus, handoffPath, &afterStatus, &afterReason := "", &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    afterStatus := beforeStatus
+    afterReason := ""
+
+    clickResult := AdvisorQuoteClickStartQuotingScopedAddProduct(db)
+    AdvisorQuoteAppendLog(
+        "GATHER_START_QUOTING_SCOPED_ADD_PRODUCT_HANDOFF",
+        AdvisorQuoteGetLastStep(),
+        "startQuotingHandoffPath=" handoffPath
+            . ", startQuotingCreateQuotesEnabledBefore=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(beforeStatus) ? "1" : "0")
+            . ", startQuotingScopedAddProductPresent=" (AdvisorQuoteStartQuotingScopedAddProductPresent(beforeStatus) ? "1" : "0")
+            . ", startQuotingScopedAddProductClicked=" (clickResult = "OK" ? "1" : "0")
+            . ", startQuotingScopedAddProductResult=" clickResult
+            . ", startQuotingScopedAddProductHandoff=1"
+            . ", statusBefore=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(beforeStatus)
+    )
+    if (clickResult != "OK") {
+        if (clickResult = "NO_BUTTON")
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_NOT_FOUND: scoped Start Quoting Add product link was not found."
+        else if (clickResult = "DISABLED")
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_DISABLED: scoped Start Quoting Add product link is disabled."
+        else
+            failureReason := "START_QUOTING_SCOPED_ADD_PRODUCT_CLICK_FAILED: scoped Start Quoting Add product link could not be clicked."
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "start-quoting-scoped-add-product-click-failed")
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF_FAILED",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=failed, startQuotingScopedAddProductResult=" clickResult . ", failureReason=" failureReason
+        )
+        return false
+    }
+
+    if !AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &afterStatus, &afterReason) {
+        failureReason := "START_QUOTING_CREATE_QUOTES_DISABLED_AFTER_SCOPED_ADD_PRODUCT: " afterReason
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "start-quoting-create-quotes-still-disabled")
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_HANDOFF_FAILED",
+            AdvisorQuoteGetLastStep(),
+            "startQuotingHandoffPath=failed"
+                . ", startQuotingScopedAddProductClicked=1"
+                . ", startQuotingScopedAddProductResult=OK"
+                . ", startQuotingCreateQuotesEnabledAfter=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(afterStatus) ? "1" : "0")
+                . ", failureReason=" failureReason
+                . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
+                . ", scan=" failureScanPath
+        )
+        return false
+    }
+
+    AdvisorQuoteAppendLog(
+        "GATHER_START_QUOTING_HANDOFF_READY",
+        AdvisorQuoteGetLastStep(),
+        "startQuotingHandoffPath=" handoffPath
+            . ", startQuotingScopedAddProductClicked=1"
+            . ", startQuotingScopedAddProductResult=OK"
+            . ", startQuotingCreateQuotesEnabledAfter=1"
+            . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
+    )
+    return true
+}
+
+AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &statusOut, &reasonOut := "") {
+    start := A_TickCount
+    timeoutMs := db["timeouts"]["transitionMs"]
+    pollMs := db["timeouts"]["pollMs"]
+    statusOut := Map()
+    reasonOut := ""
+    while ((A_TickCount - start) < timeoutMs) {
+        if StopRequested() {
+            reasonOut := "Stopped manually."
+            return false
+        }
+        statusOut := AdvisorQuoteGetGatherStartQuotingStatus(db)
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_STATUS",
+            AdvisorQuoteGetLastStep(),
+            "phase=after-scoped-add-product, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(statusOut)
+        )
+        if AdvisorQuoteGatherStartQuotingStatusValid(statusOut, db, &reasonOut)
+            return true
+        Sleep(pollMs)
+    }
+    if (reasonOut = "")
+        reasonOut := "Create Quotes & Order Reports did not become enabled after scoped Start Quoting Add product."
+    return false
 }
 
 AdvisorQuoteClickProductOverviewSubnavFromRapport(db) {
