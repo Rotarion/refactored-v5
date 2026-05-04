@@ -224,7 +224,7 @@ AdvisorQuoteCallStateHandler(stateName, profile, db, attempt := 1, entryScanPath
         case "SELECT_PRODUCT":
             return AdvisorQuoteStateSelectProduct(db, attempt, entryScanPath)
         case "CONSUMER_REPORTS":
-            return AdvisorQuoteStateConsumerReports(db, attempt, entryScanPath)
+            return AdvisorQuoteStateConsumerReports(profile, db, attempt, entryScanPath)
         case "DRIVERS_VEHICLES":
             return AdvisorQuoteStateDriversVehicles(profile, db, attempt, entryScanPath)
         case "INCIDENTS":
@@ -570,15 +570,27 @@ AdvisorQuoteStateSelectProduct(db, attempt := 1, entryScanPath := "") {
     return AdvisorQuoteResultOkValue("SELECT_PRODUCT", "SELECT_PRODUCT", "Select Product completed.", entryScanPath, AdvisorQuoteDetectState(db))
 }
 
-AdvisorQuoteStateConsumerReports(db, attempt := 1, entryScanPath := "") {
+AdvisorQuoteStateConsumerReports(profile, db, attempt := 1, entryScanPath := "") {
     AdvisorQuoteSetStep("CONSUMER_REPORTS", "Accepting consumer reports consent.")
     state := AdvisorQuoteDetectState(db)
-    if AdvisorQuoteIsStateInList(state, ["INCIDENTS"]) || AdvisorQuoteIsDriversVehiclesState(db)
-        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer reports stage already satisfied.", entryScanPath, state)
+    failureReason := ""
+    failureScan := ""
+    routeResult := AdvisorQuoteTryRouteConsumerReportsAscProduct(profile, db, state, entryScanPath, &failureReason, &failureScan)
+    if (routeResult = "OK")
+        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "CONSUMER_REPORTS_ROUTED_TO_DRIVERS_VEHICLES", entryScanPath, AdvisorQuoteDetectState(db))
+    if (routeResult = "ALREADY_SATISFIED")
+        return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer reports stage already satisfied.", entryScanPath, AdvisorQuoteDetectState(db))
+    if (routeResult = "FAILED") {
+        if (failureScan = "")
+            failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "consumer-reports-asc-route-failed")
+        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", failureReason, true, failureScan, AdvisorQuoteDetectState(db))
+    }
 
-    if !AdvisorQuoteHandleConsumerReports(db) {
+    if !AdvisorQuoteHandleConsumerReports(db, &failureReason) {
         failScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "consumer-reports-failed")
-        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer Reports consent did not complete.", true, failScan, AdvisorQuoteDetectState(db))
+        if (failureReason = "")
+            failureReason := "Consumer Reports consent did not complete."
+        return AdvisorQuoteResultFail("CONSUMER_REPORTS", "CONSUMER_REPORTS", failureReason, true, failScan, AdvisorQuoteDetectState(db))
     }
     return AdvisorQuoteResultOkValue("CONSUMER_REPORTS", "CONSUMER_REPORTS", "Consumer Reports completed.", entryScanPath, AdvisorQuoteDetectState(db))
 }
@@ -713,7 +725,92 @@ AdvisorQuoteBuildProspectInvalidReason(status) {
 }
 
 AdvisorQuoteIsDriversVehiclesState(db) {
-    return AdvisorQuoteWaitForCondition("drivers_or_incidents", 500, 150, Map()) && !AdvisorQuoteIsIncidentsPage(db)
+    return AdvisorQuoteWaitForCondition("drivers_or_incidents", 500, 150, AdvisorQuoteAscWaitArgs(db)) && !AdvisorQuoteIsIncidentsPage(db)
+}
+
+AdvisorQuoteAscWaitArgs(db, extraArgs := Map()) {
+    args := Map("ascProductContains", db["urls"]["ascProductContains"])
+    if IsObject(extraArgs) {
+        for key, value in extraArgs
+            args[String(key)] := value
+    }
+    return args
+}
+
+AdvisorQuoteAscProductRouteIdText(routeId) {
+    routeId := Trim(String(routeId))
+    return (routeId = "") ? "" : "ASCPRODUCT/" routeId
+}
+
+AdvisorQuoteIsConsumerReportsConsentPage(db) {
+    args := AdvisorQuoteAscWaitArgs(db, Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"]))
+    return AdvisorQuoteWaitForCondition("consumer_reports_ready", 500, 150, args)
+}
+
+AdvisorQuoteIsQuoteLandingPage(db) {
+    return AdvisorQuoteWaitForCondition("quote_landing", 500, 150, AdvisorQuoteAscWaitArgs(db))
+}
+
+AdvisorQuoteTryRouteConsumerReportsAscProduct(profile, db, observedState, entryScanPath, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    routeId := AdvisorQuoteStatusValue(participantStatus, "ascProductRouteId")
+    ascDetected := (observedState = "ASC_PRODUCT") || (routeId != "") || AdvisorQuoteIsOnAscProductPage(db)
+    AdvisorQuoteAppendLog(
+        "CONSUMER_REPORTS_ROUTE_CHECK",
+        AdvisorQuoteGetLastStep(),
+        "consumerReportsObservedState=" observedState
+            . ", consumerReportsAscProductDetected=" (ascDetected ? "1" : "0")
+            . ", consumerReportsAscProductRouteId=" routeId
+    )
+    if !ascDetected
+        return "CONTINUE"
+
+    currentUrlText := AdvisorQuoteAscProductRouteIdText(routeId)
+    driversVehiclesDetected := AdvisorQuoteIsDriversVehiclesState(db)
+    incidentsDetected := AdvisorQuoteIsIncidentsPage(db)
+    quoteLandingDetected := AdvisorQuoteIsQuoteLandingPage(db)
+    consumerReportsReady := (!driversVehiclesDetected && !incidentsDetected && !quoteLandingDetected) ? AdvisorQuoteIsConsumerReportsConsentPage(db) : false
+    AdvisorQuoteAppendLog(
+        "CONSUMER_REPORTS_ASC_PRODUCT_SUBSTATE",
+        AdvisorQuoteGetLastStep(),
+        "consumerReportsObservedState=" observedState
+            . ", consumerReportsCurrentUrl=" currentUrlText
+            . ", consumerReportsAscProductDetected=1"
+            . ", consumerReportsAscProductRouteId=" routeId
+            . ", consumerReportsDriversVehiclesEvidence=" (driversVehiclesDetected ? "1" : "0")
+            . ", incidentsEvidence=" (incidentsDetected ? "1" : "0")
+            . ", quoteLandingEvidence=" (quoteLandingDetected ? "1" : "0")
+            . ", consumerReportsReadyEvidence=" (consumerReportsReady ? "1" : "0")
+            . ", participantStatusResult=" AdvisorQuoteStatusValue(participantStatus, "result")
+            . ", participantEvidence=" AdvisorQuoteStatusValue(participantStatus, "evidence")
+    )
+
+    if driversVehiclesDetected {
+        AdvisorQuoteAppendLog(
+            "CONSUMER_REPORTS_ROUTED_TO_DRIVERS_VEHICLES",
+            AdvisorQuoteGetLastStep(),
+            "consumerReportsRoutedToDriversVehicles=1"
+                . ", ascDriversVehiclesHandlerInvoked=1"
+                . ", consumerReportsReadyWaitSkippedReason=already-on-asc-drivers-vehicles"
+        )
+        if AdvisorQuoteHandleDriversVehicles(profile, db)
+            return "OK"
+        failureReason := "ASC_DRIVERS_VEHICLES_HANDLER_FAILED"
+        failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-drivers-vehicles-handler-failed")
+        return "FAILED"
+    }
+
+    if incidentsDetected || quoteLandingDetected
+        return "ALREADY_SATISFIED"
+
+    if consumerReportsReady
+        return "CONTINUE"
+
+    failureReason := "ASC_PRODUCT_SUBSTATE_UNKNOWN"
+    failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-product-substate-unknown")
+    return "FAILED"
 }
 
 AdvisorQuoteProfileLooksUsable(profile) {
@@ -3832,26 +3929,37 @@ AdvisorQuoteHandleProductOverview(db) {
     return ""
 }
 
-AdvisorQuoteHandleConsumerReports(db) {
-    waitArgs := Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"])
-    if !AdvisorQuoteWaitForCondition("consumer_reports_ready", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs)
+AdvisorQuoteHandleConsumerReports(db, &failureReason := "") {
+    failureReason := ""
+    waitArgs := AdvisorQuoteAscWaitArgs(db, Map("consumerReportsConsentYesId", db["selectors"]["consumerReportsConsentYesId"]))
+    if !AdvisorQuoteWaitForCondition("consumer_reports_ready", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs) {
+        failureReason := "CONSUMER_REPORTS_READY_TIMEOUT"
         return false
+    }
 
     if !AdvisorQuoteClickById(db["selectors"]["consumerReportsConsentYesId"], db["timeouts"]["actionMs"])
-        if !AdvisorQuoteClickByText("yes", "button,a", db["timeouts"]["actionMs"])
+        if !AdvisorQuoteClickByText("yes", "button,a", db["timeouts"]["actionMs"]) {
+            failureReason := "CONSUMER_REPORTS_CONSENT_CLICK_FAILED"
             return false
+        }
 
-    return AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db)) {
+        failureReason := "CONSUMER_REPORTS_TO_DRIVERS_OR_INCIDENTS_TIMEOUT"
+        return false
+    }
+    return true
 }
 
 AdvisorQuoteHandleDriversVehicles(profile, db) {
     AdvisorQuoteSetStep("DRIVERS_VEHICLES", "Waiting for Drivers and vehicles stage.")
-    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    AdvisorQuoteAppendLog("ASC_DRIVERS_VEHICLES_HANDLER_INVOKED", AdvisorQuoteGetLastStep(), "ascDriversVehiclesHandlerInvoked=1")
+    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
         return false
 
     if AdvisorQuoteIsIncidentsPage(db)
         return true
 
+    AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1")
     participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
     AdvisorQuoteLogAscParticipantDetailStatus(participantStatus, "ASC_PARTICIPANT_DETAIL_STATUS")
     if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND") {
@@ -3866,16 +3974,18 @@ AdvisorQuoteHandleDriversVehicles(profile, db) {
         return false
 
     selectedSpouseName := AdvisorQuoteStatusValue(maritalStatus, "selectedSpouseText")
+    AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascDriverReconcileCalled=1")
     if !AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName)
         return false
 
+    AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascVehicleReconcileCalled=1")
     if !AdvisorQuoteReconcileAscVehicles(profile, db)
         return false
 
     if !AdvisorQuoteAscSaveAndContinueIfReady(profile, db)
         return false
 
-    return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
 }
 
 AdvisorQuoteGetAscParticipantDetailStatus() {
@@ -4417,7 +4527,7 @@ AdvisorQuoteHandleIncidentsIfPresent(db) {
     if (result != "OK")
         return false
 
-    return AdvisorQuoteWaitForCondition("incidents_done", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], Map())
+    return AdvisorQuoteWaitForCondition("incidents_done", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
 }
 
 AdvisorQuoteWaitForQuoteLanding(db) {
@@ -4457,7 +4567,7 @@ AdvisorQuoteIsOnAscProductPage(db) {
 }
 
 AdvisorQuoteIsIncidentsPage(db) {
-    args := Map("incidentsHeading", db["texts"]["incidentsHeading"])
+    args := AdvisorQuoteAscWaitArgs(db, Map("incidentsHeading", db["texts"]["incidentsHeading"]))
     return AdvisorQuoteWaitForCondition("is_incidents", 500, 150, args)
 }
 

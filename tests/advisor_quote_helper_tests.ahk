@@ -205,6 +205,14 @@ AssertTrue(AdvisorVehicleCatalogModelMatches("CR-V", "CRV"), "CR-V variants shou
 AssertTrue(AdvisorVehicleCatalogModelMatches("HR V", "HR-V"), "HR-V variants should normalize")
 AssertFalse(AdvisorVehicleCatalogModelMatches("CR-V", "HR-V"), "CR-V must not match HR-V")
 
+ascRouteDb := Map("urls", Map("ascProductContains", "/ASCPRODUCT/"))
+ascWaitArgs := AdvisorQuoteAscWaitArgs(ascRouteDb)
+AssertEqual(ascWaitArgs["ascProductContains"], "/ASCPRODUCT/", "ASC wait args should include ASCPRODUCT route family")
+ascWaitArgsWithConsent := AdvisorQuoteAscWaitArgs(ascRouteDb, Map("consumerReportsConsentYesId", "orderReportsConsent-yes-btn"))
+AssertEqual(ascWaitArgsWithConsent["ascProductContains"], "/ASCPRODUCT/", "ASC wait args with extras should preserve route family")
+AssertEqual(ascWaitArgsWithConsent["consumerReportsConsentYesId"], "orderReportsConsent-yes-btn", "ASC wait args should carry consent selector extras")
+AssertEqual(AdvisorQuoteAscProductRouteIdText("109"), "ASCPRODUCT/109", "ASC route id log text should avoid fixed route assumptions")
+
 ascVehiclePolicy := AdvisorQuoteClassifyAscVehicles(Map("vehicles", [
     TestVehicle("2019", "HONDA", "CRV"),
     TestVehicle("2013", "HYUNDAI", "SONATA"),

@@ -64,6 +64,17 @@ Save and Continue is clicked only after:
 
 If the button remains disabled, the workflow logs unresolved driver/vehicle counts and fails with `ASC109_SAVE_DISABLED_AFTER_RECONCILIATION`.
 
+## Consumer Reports Route Forwarding
+
+`/apps/ASCPRODUCT/<dynamicId>/` is treated as a route family, not as a completed state. When the workflow is in `CONSUMER_REPORTS`, it now checks ASCPRODUCT route evidence before waiting for the simple Consumer Reports consent page.
+
+- If the browser is already on ASCPRODUCT Drivers and Vehicles, the workflow skips the `consumer_reports_ready` wait and invokes the existing Drivers/Vehicles reconciliation handler.
+- If the simple Consumer Reports consent page is present, the existing consent yes-button flow is still used.
+- Incidents and quote landing substates are accepted only with their existing page evidence.
+- Unknown ASCPRODUCT substates fail with diagnostics instead of being treated as success.
+
+This is a routing/wait-argument patch only. It does not add broad yes/no radio defaults, spouse selection rules, or new driver/vehicle reconciliation behavior.
+
 ## Parser Fix
 
 The AHK v2 RegExMatch capture-count crash path was kept on the safe `m.Count` pattern. Split model forms now canonicalize for strict matching:
