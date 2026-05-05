@@ -205,6 +205,58 @@ AssertTrue(AdvisorVehicleCatalogModelMatches("CR-V", "CRV"), "CR-V variants shou
 AssertTrue(AdvisorVehicleCatalogModelMatches("HR V", "HR-V"), "HR-V variants should normalize")
 AssertFalse(AdvisorVehicleCatalogModelMatches("CR-V", "HR-V"), "CR-V must not match HR-V")
 
+vehicleDb := AdvisorVehicleDbLoad()
+AssertTrue(vehicleDb["loaded"], "Vehicle DB runtime index should load")
+AssertEqual(vehicleDb["meta"]["yearMin"], "2000", "Vehicle DB should report first covered year")
+AssertEqual(vehicleDb["meta"]["yearMax"], "2026", "Vehicle DB should report last covered year")
+
+dbCrv := AdvisorVehicleDbResolveLeadVehicle("2019", "Honda", "CR-V")
+AssertEqual(dbCrv["result"], "RESOLVED", "Vehicle DB should resolve Honda CR-V")
+AssertListContains(dbCrv["advisorMakeLabels"], "HONDA", "Honda CR-V DB labels should include HONDA")
+AssertListContains(dbCrv["modelAliases"], "CR-V", "Honda CR-V DB aliases should include CR-V")
+AssertListContains(dbCrv["modelAliases"], "CRV", "Honda CR-V DB aliases should include CRV")
+
+dbF150 := AdvisorVehicleDbResolveLeadVehicle("2024", "Ford", "F-150")
+AssertEqual(dbF150["result"], "RESOLVED", "Vehicle DB should resolve Ford F-150")
+AssertListContains(dbF150["advisorMakeLabels"], "FORD TRUCKS", "Ford F-150 DB labels should include FORD TRUCKS")
+AssertListContains(dbF150["normalizedModelKeys"], "F150", "Ford F-150 DB keys should include F150")
+
+dbF250 := AdvisorVehicleDbResolveLeadVehicle("2024", "Ford", "F250")
+AssertEqual(dbF250["result"], "RESOLVED", "Vehicle DB should resolve Ford F-250")
+AssertListContains(dbF250["normalizedModelKeys"], "F250", "Ford F-250 DB keys should include F250")
+AssertListNotContains(dbF250["normalizedModelKeys"], "F150", "Ford F-250 DB keys should not include F150")
+
+dbPrius := AdvisorVehicleDbResolveLeadVehicle("2024", "Toyota", "Prius")
+AssertEqual(dbPrius["result"], "RESOLVED", "Vehicle DB should resolve Toyota Prius")
+AssertListNotContains(dbPrius["normalizedModelKeys"], "PRIUSPRIME", "Toyota Prius DB keys should not include Prius Prime")
+dbPriusPrime := AdvisorVehicleDbResolveLeadVehicle("2024", "Toyota", "Prius Prime")
+AssertEqual(dbPriusPrime["result"], "RESOLVED", "Vehicle DB should resolve Toyota Prius Prime through DB submodel evidence")
+AssertListContains(dbPriusPrime["normalizedModelKeys"], "PRIUSPRIME", "Toyota Prius Prime DB keys should include PRIUSPRIME")
+
+dbHighlander := AdvisorVehicleDbResolveLeadVehicle("2024", "Toyota", "Highlander")
+AssertEqual(dbHighlander["result"], "RESOLVED", "Vehicle DB should resolve Toyota Highlander")
+AssertListContains(dbHighlander["advisorMakeLabels"], "TOY. TRUCKS", "Toyota Highlander DB labels should include TOY. TRUCKS")
+
+dbWrangler := AdvisorVehicleDbResolveLeadVehicle("2024", "Jeep", "WRANGLER UNLIMITE")
+AssertEqual(dbWrangler["result"], "RESOLVED", "Vehicle DB should resolve truncated Wrangler Unlimited")
+AssertListContains(dbWrangler["normalizedModelKeys"], "WRANGLERUNLIMITE", "Wrangler Unlimited DB keys should include truncated Advisor text")
+
+dbCube := AdvisorVehicleDbResolveLeadVehicle("2010", "Nissan", "Cube")
+AssertEqual(dbCube["result"], "RESOLVED", "Vehicle DB should resolve Nissan Cube")
+dbMustang := AdvisorVehicleDbResolveLeadVehicle("2024", "Ford", "Mustang")
+AssertEqual(dbMustang["result"], "RESOLVED", "Vehicle DB should resolve Ford Mustang")
+dbRam1500 := AdvisorVehicleDbResolveLeadVehicle("2024", "Ram", "1500")
+AssertEqual(dbRam1500["result"], "RESOLVED", "Vehicle DB should resolve Ram 1500 truck")
+dbK5 := AdvisorVehicleDbResolveLeadVehicle("2024", "Kia", "K5")
+AssertEqual(dbK5["result"], "RESOLVED", "Vehicle DB should resolve Kia K5")
+
+dbFuso := AdvisorVehicleDbResolveLeadVehicle("2024", "Mitsubishi Fuso", "FE")
+AssertEqual(dbFuso["result"], "UNKNOWN", "Vehicle DB should safely return UNKNOWN for unsupported Mitsubishi Fuso coverage")
+dbMiss := AdvisorVehicleDbResolveLeadVehicle("2024", "MadeUp", "Nope")
+AssertEqual(dbMiss["result"], "UNKNOWN", "Vehicle DB miss should return UNKNOWN safely")
+dbAmbiguous := AdvisorVehicleDbResolveLeadVehicle("2024", "Ford", "MUST")
+AssertEqual(dbAmbiguous["result"], "AMBIGUOUS", "Broad DB vehicle input should return AMBIGUOUS safely")
+
 ascRouteDb := Map("urls", Map("ascProductContains", "/ASCPRODUCT/"))
 ascWaitArgs := AdvisorQuoteAscWaitArgs(ascRouteDb)
 AssertEqual(ascWaitArgs["ascProductContains"], "/ASCPRODUCT/", "ASC wait args should include ASCPRODUCT route family")
@@ -443,4 +495,25 @@ LabelListContains(labels, wanted) {
             haystack .= AdvisorVehicleNormalizeText(label) "|"
     }
     return InStr(haystack, needle) > 0
+}
+
+AssertListContains(list, wanted, message) {
+    if !VehicleTestListContains(list, wanted)
+        throw Error(message)
+}
+
+AssertListNotContains(list, wanted, message) {
+    if VehicleTestListContains(list, wanted)
+        throw Error(message)
+}
+
+VehicleTestListContains(list, wanted) {
+    needle := AdvisorVehicleNormalizeText(wanted)
+    if !IsObject(list)
+        list := StrSplit(String(list), "|")
+    for _, item in list {
+        if (AdvisorVehicleNormalizeText(item) = needle)
+            return true
+    }
+    return false
 }

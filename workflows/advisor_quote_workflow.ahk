@@ -1535,6 +1535,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     vehicleSatisfiedCount := 0
     satisfiedVehicles := []
     promotedPartialVehicles := []
+    deferredRapportVehicles := []
     deferredPartialVehicles := []
     staleDuplicateRowSeen := false
     staleDuplicateRowDetails := ""
@@ -1555,6 +1556,28 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 . ", model=" vehicle["model"]
                 . ", trimHint=" vehicle["trimHint"]
         )
+
+        resolvedVehicle := AdvisorVehicleDbResolveLeadVehicle(vehicle["year"], vehicle["make"], vehicle["model"], vehicle.Has("vin") ? vehicle["vin"] : "")
+        AdvisorQuoteAppendLog("VEHICLE_DB_RESOLVER", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle))
+        resolveResult := AdvisorQuoteVehicleDbResolveResult(resolvedVehicle)
+        if (resolveResult = "AMBIGUOUS") {
+            deferredRapportVehicles.Push(vehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
+            )
+            continue
+        }
+        if (resolveResult != "RESOLVED") {
+            deferredRapportVehicles.Push(vehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
+            )
+            continue
+        }
 
         preflightStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle)
         alreadyConfirmed := AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(preflightStatus)
@@ -1622,23 +1645,22 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         }
         if (confirmOutcome = "FAILED")
             return false
-
-        AdvisorQuoteSetStep("GATHER_DATA_VEHICLE_ADD", "Adding vehicle: " vehicle["displayKey"])
-        if !AdvisorQuoteAddVehicleInGatherData(vehicle, db) {
-            editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &failureReason, &failureScanPath, "after-add-failed")
-            if (editOutcome = "CONFIRMED") {
-                vehicleSatisfiedCount += 1
-                satisfiedVehicles.Push(vehicle)
-                continue
-            }
-            if (failureReason = "")
-                failureReason := "Could not add vehicle " vehicle["displayKey"] " on Gather Data."
-            if (failureScanPath = "")
-                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-add-failed")
-            return false
+        if (confirmOutcome = "AMBIGUOUS") {
+            deferredRapportVehicles.Push(vehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", source=potential-card"
+            )
+            continue
         }
-        vehicleSatisfiedCount += 1
-        satisfiedVehicles.Push(vehicle)
+
+        deferredRapportVehicles.Push(vehicle)
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", source=potential-card, noAddRowOpened=1, noDropdownConstruction=1"
+        )
     }
 
     for _, partialVehicle in partialYearMakeVehicles {
@@ -1684,9 +1706,16 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
         result := AdvisorQuoteStatusValue(partialStatus, "result")
         if (result = "AMBIGUOUS") {
-            failureReason := "PARTIAL_VEHICLE_AMBIGUOUS: " partialVehicle["displayKey"] " matched multiple confirmed year/make cards; no model was selected."
-            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "partial-vehicle-ambiguous")
-            return false
+            deferredPartialVehicles.Push(partialVehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "partialVehicle=" partialVehicle["displayKey"]
+                    . ", result=" result
+                    . ", candidateCount=" AdvisorQuoteStatusValue(partialStatus, "candidateCount")
+                    . ", candidateTexts=" AdvisorQuoteStatusValue(partialStatus, "candidateTexts")
+            )
+            continue
         }
 
         deferredPartialVehicles.Push(partialVehicle)
@@ -1702,12 +1731,12 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     }
 
     if (vehicleSatisfiedCount = 0) {
-        failureReason := "NO_SAFE_GATHER_VEHICLE_SATISFIED: no complete vehicle or unique VIN-bearing confirmed partial vehicle could be satisfied."
-        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-gather-vehicle-satisfied")
+        failureReason := "NO_SAFE_RAPPORT_VEHICLE_MATCH: no lead vehicle matched exactly one existing Advisor confirmed/potential vehicle card. deferredVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles) " deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-rapport-vehicle-match")
         return false
     }
 
-    expectedVehiclesForGuardList := AdvisorQuoteBuildGatherFinalExpectedVehicles(actionableVehicles, promotedPartialVehicles)
+    expectedVehiclesForGuardList := AdvisorQuoteBuildGatherFinalExpectedVehicles(satisfiedVehicles, [])
     expectedVehicleArgsForFinalGuard := AdvisorQuoteBuildExpectedVehiclesArgList(expectedVehiclesForGuardList)
     expectedVehicleCountForFinalGuard := expectedVehicleArgsForFinalGuard.Length
     promotedPartialExpectedCount := AdvisorQuoteCountExpectedArgsMatchingVehicles(expectedVehicleArgsForFinalGuard, promotedPartialVehicles)
@@ -1733,10 +1762,12 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         AdvisorQuoteGetLastStep(),
         "actionableVehicleCount=" actionableVehicles.Length
             . ", actionableVehicles=" AdvisorQuoteVehicleListSummary(actionableVehicles)
-            . ", completeExpectedCount=" actionableVehicles.Length
+            . ", completeExpectedCount=" expectedVehiclesForGuardList.Length
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
             . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredRapportVehicleCount=" deferredRapportVehicles.Length
+            . ", deferredRapportVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
@@ -1758,10 +1789,12 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         AdvisorQuoteGetLastStep(),
         "vehicleSatisfiedCount=" vehicleSatisfiedCount
             . ", actionableVehicleCount=" actionableVehicles.Length
-            . ", completeExpectedCount=" actionableVehicles.Length
+            . ", completeExpectedCount=" expectedVehiclesForGuardList.Length
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
             . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", deferredRapportVehicleCount=" deferredRapportVehicles.Length
+            . ", deferredRapportVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
@@ -2322,10 +2355,39 @@ AdvisorQuoteBuildVehicleJsArgs(vehicle, includeCatalogMakeLabels := false) {
     if (IsObject(vehicle) && vehicle.Has("vinSuffix"))
         args["vinSuffix"] := vehicle["vinSuffix"]
     if (includeCatalogMakeLabels) {
+        resolved := AdvisorVehicleDbResolveLeadVehicle(vehicle["year"], vehicle["make"], vehicle["model"], vehicle.Has("vin") ? vehicle["vin"] : "")
+        dbArgs := AdvisorVehicleDbBuildJsVehicleArgs(resolved)
+        for key, value in dbArgs
+            args[key] := value
         args["allowedMakeLabels"] := AdvisorVehicleAllowedMakeLabelsText(vehicle["make"], vehicle["model"], vehicle["year"])
+        if (resolved.Has("advisorMakeLabels") && resolved["advisorMakeLabels"].Length > 0)
+            args["allowedMakeLabels"] := JoinArray(resolved["advisorMakeLabels"], "|")
         args["strictModelMatch"] := "1"
     }
     return args
+}
+
+AdvisorQuoteVehicleDbResolveResult(resolvedVehicle) {
+    if (IsObject(resolvedVehicle) && resolvedVehicle.Has("result"))
+        return Trim(String(resolvedVehicle["result"]))
+    return "UNKNOWN"
+}
+
+AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle := "") {
+    if !IsObject(resolvedVehicle)
+        return "dbResult=UNKNOWN, dbReason=no-resolution"
+    return "dbResult=" AdvisorQuoteStatusValue(resolvedVehicle, "result")
+        . ", dbReason=" AdvisorQuoteStatusValue(resolvedVehicle, "reason")
+        . ", confidence=" AdvisorQuoteStatusValue(resolvedVehicle, "confidence")
+        . ", year=" AdvisorQuoteStatusValue(resolvedVehicle, "year")
+        . ", inputMake=" AdvisorQuoteStatusValue(resolvedVehicle, "inputMake")
+        . ", inputModel=" AdvisorQuoteStatusValue(resolvedVehicle, "inputModel")
+        . ", canonicalMake=" AdvisorQuoteStatusValue(resolvedVehicle, "canonicalMake")
+        . ", canonicalModel=" AdvisorQuoteStatusValue(resolvedVehicle, "canonicalModel")
+        . ", advisorMakeLabels=" (resolvedVehicle.Has("advisorMakeLabels") ? JoinArray(resolvedVehicle["advisorMakeLabels"], "|") : "")
+        . ", modelAliases=" (resolvedVehicle.Has("modelAliases") ? JoinArray(resolvedVehicle["modelAliases"], "|") : "")
+        . ", normalizedModelKeys=" (resolvedVehicle.Has("normalizedModelKeys") ? JoinArray(resolvedVehicle["normalizedModelKeys"], "|") : "")
+        . ", possibleMatches=" (resolvedVehicle.Has("possibleMatches") ? JoinArray(resolvedVehicle["possibleMatches"], " || ") : "")
 }
 
 AdvisorQuoteVehicleHasVinEvidence(vehicle) {
@@ -2567,6 +2629,19 @@ AdvisorQuoteBuildExpectedVehiclesArgList(vehicles) {
             "allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(make, model, year),
             "strictModelMatch", "1"
         )
+        resolved := AdvisorVehicleDbResolveLeadVehicle(year, make, model, vin)
+        if IsObject(resolved) {
+            if (resolved.Has("advisorMakeLabels") && resolved["advisorMakeLabels"].Length > 0)
+                item["allowedMakeLabels"] := JoinArray(resolved["advisorMakeLabels"], "|")
+            if (resolved.Has("modelAliases") && resolved["modelAliases"].Length > 0)
+                item["modelAliases"] := JoinArray(resolved["modelAliases"], "|")
+            if (resolved.Has("normalizedModelKeys") && resolved["normalizedModelKeys"].Length > 0)
+                item["normalizedModelKeys"] := JoinArray(resolved["normalizedModelKeys"], "|")
+            item["dbResult"] := AdvisorQuoteStatusValue(resolved, "result")
+            item["dbReason"] := AdvisorQuoteStatusValue(resolved, "reason")
+            item["canonicalMake"] := AdvisorQuoteStatusValue(resolved, "canonicalMake")
+            item["canonicalModel"] := AdvisorQuoteStatusValue(resolved, "canonicalModel")
+        }
         if IsObject(vehicle) {
             for _, metaKey in ["promotedFromPartial", "promotionSource", "promotedVehicleText", "originalLeadText", "promotedVinEvidence"] {
                 if vehicle.Has(metaKey)
@@ -2772,14 +2847,14 @@ AdvisorQuoteGatherConfirmedVehiclesSafe(status, profile, &failureReason := "") {
 }
 
 AdvisorQuoteVehicleAlreadyListed(vehicle) {
-    args := AdvisorQuoteBuildVehicleJsArgs(vehicle)
+    args := AdvisorQuoteBuildVehicleJsArgs(vehicle, true)
     return AdvisorQuoteRunOp("vehicle_already_listed", args) = "1"
 }
 
 AdvisorQuoteConfirmPotentialVehicle(vehicle, db, &failureReason := "", &failureScanPath := "") {
     failureReason := ""
     failureScanPath := ""
-    args := AdvisorQuoteBuildVehicleJsArgs(vehicle)
+    args := AdvisorQuoteBuildVehicleJsArgs(vehicle, true)
     status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("confirm_potential_vehicle", args))
     result := AdvisorQuoteStatusValue(status, "result")
     cardText := AdvisorQuoteStatusValue(status, "cardText")
@@ -2855,9 +2930,7 @@ AdvisorQuoteConfirmPotentialVehicle(vehicle, db, &failureReason := "", &failureS
                     . ", rejectedReason=" rejectedReason
                     . ", cards=" AdvisorQuoteStatusValue(status, "cards")
             )
-            failureReason := "Potential vehicle match is ambiguous for " vehicle["displayKey"] "."
-            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-potential-ambiguous")
-            return "FAILED"
+            return "AMBIGUOUS"
         case "CLICK_FAILED":
             failureReason := "Could not confirm matching potential vehicle for " vehicle["displayKey"] "."
             failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-confirm-click-failed")
@@ -3025,35 +3098,55 @@ AdvisorQuoteHandleVehicleEditModal(vehicle) {
 AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &failureReason := "", &failureScanPath := "", context := "") {
     failureReason := ""
     failureScanPath := ""
-    status := AdvisorQuoteGetGatherVehicleEditStatus(vehicle)
-    AdvisorQuoteLogGatherVehicleEditStatus(status, "VEHICLE_EDIT_STATUS", vehicle, context)
-    statusResult := AdvisorQuoteStatusValue(status, "result")
-    if (statusResult = "" || statusResult = "NO_MODAL")
-        return "NO_MODAL"
+    Loop 2 {
+        attemptContext := context "-attempt-" A_Index
+        status := AdvisorQuoteGetGatherVehicleEditStatus(vehicle)
+        AdvisorQuoteLogGatherVehicleEditStatus(status, "VEHICLE_EDIT_STATUS", vehicle, attemptContext)
+        statusResult := AdvisorQuoteStatusValue(status, "result")
+        if (statusResult = "" || statusResult = "NO_MODAL") {
+            if (A_Index = 1)
+                return "NO_MODAL"
+            return "CONFIRMED"
+        }
 
-    resultStatus := AdvisorQuoteHandleVehicleEditModal(vehicle)
-    AdvisorQuoteLogGatherVehicleEditStatus(resultStatus, "VEHICLE_EDIT_RESULT", vehicle, context)
-    result := AdvisorQuoteStatusValue(resultStatus, "result")
-    switch result {
-        case "UPDATED":
-            postUpdateStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db)
-            AdvisorQuoteLogGatherVehicleAddStatus(postUpdateStatus, "VEHICLE_EDIT_POST_UPDATE_STATUS", vehicle)
-            if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postUpdateStatus)
-                return "CONFIRMED"
-            failureReason := "VEHICLE_EDIT_UPDATE_NOT_CONFIRMED: Update clicked but matching confirmed vehicle card did not appear for " vehicle["displayKey"] "."
-            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-update-not-confirmed")
-            return "FAILED"
-        case "NO_ACTION_NEEDED", "NO_MODAL":
-            return "NO_ACTION"
-        case "NO_SUBMODEL_OPTIONS":
-            failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Sub-Model is required but no valid Sub-Model options were available for " vehicle["displayKey"] "."
-            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-no-submodel-options")
-            return "FAILED"
-        default:
-            failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Could not complete Edit Vehicle Sub-Model for " vehicle["displayKey"] "."
-            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-submodel-failed")
-            return "FAILED"
+        resultStatus := AdvisorQuoteHandleVehicleEditModal(vehicle)
+        AdvisorQuoteLogGatherVehicleEditStatus(resultStatus, "VEHICLE_EDIT_RESULT", vehicle, attemptContext)
+        result := AdvisorQuoteStatusValue(resultStatus, "result")
+        switch result {
+            case "UPDATED":
+                postUpdateStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db)
+                AdvisorQuoteLogGatherVehicleAddStatus(postUpdateStatus, "VEHICLE_EDIT_POST_UPDATE_STATUS", vehicle)
+                if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postUpdateStatus)
+                    return "CONFIRMED"
+                afterEditStatus := AdvisorQuoteGetGatherVehicleEditStatus(vehicle)
+                AdvisorQuoteLogGatherVehicleEditStatus(afterEditStatus, "VEHICLE_EDIT_AFTER_UPDATE_STATUS", vehicle, attemptContext)
+                if (AdvisorQuoteStatusValue(afterEditStatus, "result") = "NO_MODAL")
+                    return "CONFIRMED"
+                if (A_Index < 2)
+                    continue
+                failureReason := "VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT: Update clicked but the Edit Vehicle panel stayed open and no matching confirmed vehicle card appeared for " vehicle["displayKey"] "."
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-update-did-not-commit")
+                return "FAILED"
+            case "NO_ACTION_NEEDED", "NO_MODAL":
+                if (statusResult = "UPDATE_REQUIRED_READY") {
+                    failureReason := "VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT: Edit Vehicle panel is complete and Update is enabled but no Update click occurred for " vehicle["displayKey"] "."
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-update-ready-no-click")
+                    return "FAILED"
+                }
+                return "NO_ACTION"
+            case "NO_SUBMODEL_OPTIONS":
+                failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Sub-Model is required but no valid Sub-Model options were available for " vehicle["displayKey"] "."
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-no-submodel-options")
+                return "FAILED"
+            default:
+                failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Could not complete Edit Vehicle Sub-Model for " vehicle["displayKey"] "."
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-submodel-failed")
+                return "FAILED"
+        }
     }
+    failureReason := "VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT: Edit Vehicle update loop exceeded the two-attempt guard for " vehicle["displayKey"] "."
+    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-update-loop-guard")
+    return "FAILED"
 }
 
 AdvisorQuoteGatherVehicleAddStatusComplete(status) {

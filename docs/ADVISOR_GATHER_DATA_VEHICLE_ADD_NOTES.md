@@ -106,16 +106,16 @@ The workflow now checks for this edit panel before retrying generic confirm/add 
 
 The write op `handle_vehicle_edit_modal` completes only this open edit panel:
 
-- if Sub-Model is already valid, it returns `NO_ACTION_NEEDED`
+- if all required Edit Vehicle fields are already populated and `Update` is enabled, it clicks `Update` and returns `UPDATED`
 - if VIN evidence matches an option pattern such as `2T1BURHE*K`, it selects the first compatible option and logs `subModelSelectionMethod=vin-pattern`
 - if trim, drivetrain, or body evidence uniquely matches one option, it logs `subModelSelectionMethod=trim-match`
 - otherwise it selects the first valid non-placeholder Sub-Model option and logs `subModelSelectionMethod=first-valid`
 - placeholder/disabled options such as `Select One` are ignored
 - Update is clicked only after the selected Sub-Model value verifies and the Update button is present/enabled
 
-This first-valid fallback is intentional for Advisor-required Sub-Model prompts when multiple submodels are possible and the lead/VIN evidence does not safely distinguish them. The patch still does not embed a vehicle database and does not select a different year.
+This first-valid fallback is intentional only for an already-open Advisor Edit Vehicle panel when Advisor requires Sub-Model completion and the lead/VIN evidence does not safely distinguish options. RAPPORT unmatched vehicles are no longer constructed from Add Car or Truck dropdowns.
 
-After Update, AHK polls `gather_vehicle_add_status` for the exact vehicle and accepts success only when matching confirmed-card evidence appears. If the edit panel cannot be completed or the vehicle does not become confirmed after Update, the workflow fails with `VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED` or `VEHICLE_EDIT_UPDATE_NOT_CONFIRMED`.
+After Update, AHK polls `gather_vehicle_add_status` for the exact vehicle and accepts success when matching confirmed-card evidence appears or the scoped Edit Vehicle panel closes. If the panel stays open and no matching confirmed vehicle appears after the two-attempt loop guard, the workflow fails with `VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT`. A complete enabled panel must not return `NO_ACTION_NEEDED`.
 
 ## Short JS Ops
 
@@ -163,6 +163,24 @@ Potential vehicle confirmation is now limited to a single card/row:
 - lead vehicles missing year are logged/skipped and are not auto-confirmed
 
 The operator adds confirmation diagnostics: `candidateScope`, `confirmButtonCount`, `vehicleTitleCount`, `matchedCardText`, `rejectedReason`, and `confirmClicked`.
+
+## DB-Backed RAPPORT Card Matching
+
+The live RAPPORT vehicle loop now resolves each actionable lead vehicle through the canonical vehicle DB runtime index before touching Advisor vehicle controls. The source DB lives at `data/vehicle_db_compact.json`; AHK loads the derived `data/vehicle_db_runtime_index.tsv` once per process through `domain/advisor_vehicle_catalog.ahk`.
+
+For each complete lead vehicle, RAPPORT now:
+
+- requires exact lead year when a year exists
+- uses DB-derived Advisor make labels such as `TOY. TRUCKS`, `FORD TRUCKS`, and `RAM TRUCKS`
+- uses DB-derived normalized model aliases/keys for strict card matching
+- accepts a confirmed vehicle only when exactly one confirmed card matches year, make family, and model
+- confirms a potential/public-record vehicle only when exactly one scoped card matches the DB-backed evidence
+- defers unmatched vehicles with `VEHICLE_DEFERRED_NO_DB_CARD_MATCH`
+- defers ambiguous DB/card evidence with `VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH`
+
+RAPPORT no longer opens Add Car or Truck, calls `prepare_vehicle_row`, or selects broad Manufacturer/Model/Sub-Model dropdowns for unmatched lead vehicles. Skipped/deferred vehicles are logged but are not included in the final expected confirmed-vehicle list. If no vehicle is safely satisfied and Advisor still requires at least one car or truck, AHK fails with `NO_SAFE_RAPPORT_VEHICLE_MATCH`.
+
+The old small make/model alias rules remain only as fallback when the DB cannot resolve a vehicle. They do not broaden fuzzy matching, and existing non-overmatch guards remain: Prius/Prius Prime, Transit/Transit Connect, F150/F250, Silverado 1500/Silverado 2500, and CR-V/HR-V stay distinct.
 
 ## Unexpected Confirmed Vehicle Guard
 

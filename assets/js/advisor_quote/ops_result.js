@@ -1183,8 +1183,16 @@ copy(String((() => {
     const model = normalizeVehicleText(expectedModel);
     const key = normalizeVehicleModelKey(expectedModel);
     if (!model || !key) return false;
+    return vehicleStrictModelKeyMatches(haystack, key, model);
+  };
+  const vehicleStrictModelKeyMatches = (haystack, key, model = '') => {
+    key = safe(key).replace(/[^A-Z0-9]/g, '');
+    model = normalizeVehicleText(model);
+    if (!key) return false;
     const haystackKey = normalizeVehicleModelKey(haystack);
     if (key === 'PRIUS' && /(^|[^A-Z0-9])PRIUS\s+PRIME([^A-Z0-9]|$)/.test(haystack)) return false;
+    if (key === 'PRIUSPRIME')
+      return /(^|[^A-Z0-9])PRIUS\s+PRIME([^A-Z0-9]|$)/.test(haystack);
     if (key === 'TRANSIT' && /(^|[^A-Z0-9])TRANSIT\s+(CONN|CONNECT)([^A-Z0-9]|$)/.test(haystack)) return false;
     if (key === 'EXPRESS' && /(^|[^A-Z0-9])CITY\s+EXPRESS([^A-Z0-9]|$)/.test(haystack)) return false;
     if (/^SILVERADO(1500|2500|3500)$/.test(key)) {
@@ -1195,11 +1203,30 @@ copy(String((() => {
       return haystackKey.includes('GRANDCARAVAN');
     const compactRegex = vehicleCompactModelRegex(key);
     if (compactRegex) return compactRegex.test(haystack);
-    return vehicleTokenRegex(model).test(haystack);
+    if (model) return vehicleTokenRegex(model).test(haystack);
+    return haystackKey.includes(key);
+  };
+  const vehicleModelMatches = (haystack, match) => {
+    const keys = (match.normalizedModelKeys || []).map((value) => safe(value).replace(/[^A-Z0-9]/g, '')).filter(Boolean);
+    const aliases = (match.modelAliases || []).map(normalizeVehicleText).filter(Boolean);
+    if (match.strictModelMatch) {
+      for (const key of keys) {
+        const alias = aliases.find((value) => normalizeVehicleModelKey(value) === key) || '';
+        if (vehicleStrictModelKeyMatches(haystack, key, alias)) return true;
+      }
+      if (match.model && vehicleStrictModelMatches(haystack, match.model)) return true;
+      return aliases.some((alias) => vehicleStrictModelMatches(haystack, alias));
+    }
+    if (match.model && haystack.includes(match.model)) return true;
+    return aliases.some((alias) => haystack.includes(alias));
   };
   const getVehicleMatchArgs = (source = {}) => {
     const vin = normalizeVehicleVin(source.vin);
     const vinSuffix = normalizeVehicleVin(source.vinSuffix || (vin ? vin.slice(-6) : ''));
+    const modelAliases = parseVehicleListArg(source.modelAliases).map(normalizeVehicleText).filter(Boolean);
+    const normalizedModelKeys = parseVehicleListArg(source.normalizedModelKeys)
+      .map((value) => normalizeVehicleModelKey(value) || safe(value).toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .filter(Boolean);
     return {
       year: safe(source.year).trim(),
       make: normalizeVehicleText(source.make),
@@ -1208,6 +1235,8 @@ copy(String((() => {
       vin,
       vinSuffix,
       allowedMakeLabels: parseVehicleListArg(source.allowedMakeLabels || source.makeAliases || source.advisorMakeLabels),
+      modelAliases,
+      normalizedModelKeys,
       strictModelMatch: safe(source.strictModelMatch) === '1' || source.strictModelMatch === true
     };
   };
@@ -1216,7 +1245,7 @@ copy(String((() => {
     const haystack = normalizeVehicleText(cardText);
     const yearMatch = !!match.year && new RegExp(`(^|\\s)${match.year}(\\s|$)`).test(haystack);
     const makeMatch = vehicleMakeMatches(haystack, match);
-    const modelMatch = !!match.model && (match.strictModelMatch ? vehicleStrictModelMatches(haystack, match.model) : haystack.includes(match.model));
+    const modelMatch = vehicleModelMatches(haystack, match);
     const trimMatch = !!match.trim && haystack.includes(match.trim);
     const vinMatch = !!match.vin && haystack.includes(match.vin);
     const vinSuffixMatch = !vinMatch && !!match.vinSuffix && haystack.includes(match.vinSuffix);
@@ -3080,7 +3109,7 @@ copy(String((() => {
     const rowModel = vehicleFieldTextValue(row.model);
     if (rowModel && !/select one/i.test(rowModel) && match.model) {
       const modelMatches = match.strictModelMatch
-        ? vehicleStrictModelMatches(normalizeVehicleText(rowModel), match.model)
+        ? vehicleModelMatches(normalizeVehicleText(rowModel), match)
         : normalizeVehicleText(rowModel).includes(match.model);
       if (!modelMatches) return false;
     }
@@ -3879,29 +3908,41 @@ copy(String((() => {
     const selectedValid = !!(selectedOption && validVehicleOption(selectedOption) && safe(subModel && subModel.value).trim());
     const modalEvidence = !!subModel || !!updateButton || bodyNorm.includes('EDIT VEHICLE');
     const requiredEvidence = bodyNorm.includes('SUB-MODEL') || bodyNorm.includes('SUB MODEL') || !!subModel;
+    const yearState = readVehicleEditField(year);
+    const vinState = readVehicleEditField(vin);
+    const manufacturerState = readVehicleEditField(manufacturer);
+    const modelState = readVehicleEditField(model);
+    const yearComplete = !!(yearState.value || yearState.text);
+    const manufacturerComplete = !!(manufacturerState.value || manufacturerState.text);
+    const modelComplete = !!(modelState.value || modelState.text);
+    const subModelComplete = !subModel || selectedValid || !!(subModelState.value && !/^select one$/i.test(subModelState.text));
+    const requiredComplete = modalEvidence && yearComplete && manufacturerComplete && modelComplete && subModelComplete;
+    const updateReady = requiredComplete && !!updateButton && !isDisabledLike(updateButton);
     const evidence = [
       bodyNorm.includes('EDIT VEHICLE') ? 'editVehicleText' : '',
       subModel ? 'subModelSelect' : '',
       updateButton ? 'updateButton' : '',
-      requiredEvidence ? 'subModelRequiredText' : ''
+      requiredEvidence ? 'subModelRequiredText' : '',
+      requiredComplete ? 'requiredFieldsComplete' : ''
     ].filter(Boolean).join(',');
     const missing = [];
     if (!modalEvidence) missing.push('editVehicleModal');
     if (modalEvidence && !subModel) missing.push('subModel');
     if (modalEvidence && !updateButton) missing.push('updateButton');
     let result = 'NO_MODAL';
-    if (modalEvidence && !subModel) result = 'NO_SUBMODEL';
+    if (updateReady) result = 'UPDATE_REQUIRED_READY';
+    else if (modalEvidence && !subModel) result = 'NO_SUBMODEL';
     else if (modalEvidence && selectedValid) result = 'SUBMODEL_SELECTED';
     else if (modalEvidence && subModel && validOptions.length > 0) result = 'SUBMODEL_REQUIRED';
     else if (modalEvidence && subModel) result = 'READY';
     return {
       result,
-      vehicleText: compact([readVehicleEditField(year).text, readVehicleEditField(manufacturer).text, readVehicleEditField(model).text, readVehicleEditField(vin).text].filter(Boolean).join(' '), 180),
+      vehicleText: compact([yearState.text, manufacturerState.text, modelState.text, vinState.text].filter(Boolean).join(' '), 180),
       vehicleTypeValue: readVehicleEditField(vehicleType).value,
-      yearValue: readVehicleEditField(year).value || readVehicleEditField(year).text,
-      vinValue: readVehicleEditField(vin).value || readVehicleEditField(vin).text,
-      manufacturerValue: readVehicleEditField(manufacturer).value || readVehicleEditField(manufacturer).text,
-      modelValue: readVehicleEditField(model).value || readVehicleEditField(model).text,
+      yearValue: yearState.value || yearState.text,
+      vinValue: vinState.value || vinState.text,
+      manufacturerValue: manufacturerState.value || manufacturerState.text,
+      modelValue: modelState.value || modelState.text,
       subModelPresent: subModel ? '1' : '0',
       subModelValue: subModelState.value,
       subModelText: subModelState.text,
@@ -3909,6 +3950,7 @@ copy(String((() => {
       subModelOptions: vehicleEditOptionSummary(subModel),
       updateButtonPresent: updateButton ? '1' : '0',
       updateButtonEnabled: updateButton && !isDisabledLike(updateButton) ? '1' : '0',
+      requiredComplete: requiredComplete ? '1' : '0',
       alerts: collectVisibleAlerts().join(' || '),
       evidence,
       missing
@@ -3978,8 +4020,50 @@ copy(String((() => {
         evidence: status.evidence
       });
     }
+    if (status.result === 'UPDATE_REQUIRED_READY') {
+      const updateButton = findVehicleEditUpdateButton();
+      const clicked = updateButton && !isDisabledLike(updateButton) && clickCenterEl(updateButton);
+      return lineResult({
+        result: clicked ? 'UPDATED' : 'FAILED',
+        method: clicked ? 'complete-panel-update-clicked' : 'complete-panel-update-click-failed',
+        yearValue: status.yearValue,
+        vinValue: status.vinValue,
+        manufacturerValue: status.manufacturerValue,
+        modelValue: status.modelValue,
+        subModelSelectedValue: status.subModelValue,
+        subModelSelectedText: status.subModelText,
+        subModelSelectionMethod: 'already-complete',
+        subModelOptionCount: status.subModelOptionCount,
+        updateButtonPresent: status.updateButtonPresent,
+        updateButtonEnabled: status.updateButtonEnabled,
+        updateClicked: clicked ? '1' : '0',
+        failedFields: clicked ? '' : ['updateButton'],
+        evidence: status.evidence
+      });
+    }
     const subModel = vehicleEditField('SubModel');
     if (!subModel || !visible(subModel)) {
+      const updateButton = findVehicleEditUpdateButton();
+      if (status.result === 'UPDATE_REQUIRED_READY' && updateButton && !isDisabledLike(updateButton)) {
+        const clicked = clickCenterEl(updateButton);
+        return lineResult({
+          result: clicked ? 'UPDATED' : 'FAILED',
+          method: clicked ? 'complete-panel-update-clicked' : 'complete-panel-update-click-failed',
+          yearValue: status.yearValue,
+          vinValue: status.vinValue,
+          manufacturerValue: status.manufacturerValue,
+          modelValue: status.modelValue,
+          subModelSelectedValue: status.subModelValue,
+          subModelSelectedText: status.subModelText,
+          subModelSelectionMethod: 'already-complete',
+          subModelOptionCount: status.subModelOptionCount,
+          updateButtonPresent: status.updateButtonPresent,
+          updateButtonEnabled: status.updateButtonEnabled,
+          updateClicked: clicked ? '1' : '0',
+          failedFields: clicked ? '' : ['updateButton'],
+          evidence: status.evidence
+        });
+      }
       return lineResult({
         result: 'NO_ACTION_NEEDED',
         method: 'submodel-not-present',
@@ -4000,6 +4084,27 @@ copy(String((() => {
     }
     const selectedOption = Array.from(subModel.options || []).find((opt) => opt.selected) || null;
     if (selectedOption && validVehicleOption(selectedOption) && safe(subModel.value).trim()) {
+      const updateButton = findVehicleEditUpdateButton();
+      if (status.result === 'UPDATE_REQUIRED_READY' && updateButton && !isDisabledLike(updateButton)) {
+        const clicked = clickCenterEl(updateButton);
+        return linesOut({
+          result: clicked ? 'UPDATED' : 'FAILED',
+          method: clicked ? 'complete-panel-update-clicked' : 'complete-panel-update-click-failed',
+          yearValue: status.yearValue,
+          vinValue: status.vinValue,
+          manufacturerValue: status.manufacturerValue,
+          modelValue: status.modelValue,
+          subModelSelectedValue: safe(subModel.value),
+          subModelSelectedText: vehicleOptionText(selectedOption),
+          subModelSelectionMethod: 'already-selected',
+          subModelOptionCount: status.subModelOptionCount,
+          updateButtonPresent: status.updateButtonPresent,
+          updateButtonEnabled: status.updateButtonEnabled,
+          updateClicked: clicked ? '1' : '0',
+          failedFields: clicked ? '' : ['updateButton'],
+          evidence: status.evidence
+        });
+      }
       return linesOut({
         result: 'NO_ACTION_NEEDED',
         method: 'submodel-already-selected',

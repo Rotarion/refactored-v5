@@ -2119,6 +2119,11 @@ function startQuotingScopedAddProductDoc() {
 
 function createVehicleEditModalDoc({
   vin = '',
+  year = '2019',
+  manufacturer = 'TOYOTA',
+  model = 'COROLLA',
+  fieldsDisabled = false,
+  subModelDisabled = false,
   selectedValue = '',
   updateDisabled = false,
   options = [
@@ -2128,17 +2133,17 @@ function createVehicleEditModalDoc({
     { value: 'SE', text: 'SE |SEDAN|GAS|FWD|04Cyl|4Dr' }
   ]
 } = {}) {
-  const subModel = createSelect('CommonComponent.Vehicle[0].SubModel', options);
+  const subModel = createSelect('CommonComponent.Vehicle[0].SubModel', options, { disabled: subModelDisabled });
   if (selectedValue)
     subModel.value = selectedValue;
   const updateButton = createButton('submitButtonVehicleComponent_0', 'Update', { disabled: updateDisabled });
   const nodes = [
     textNode('Gather Data Cars and Trucks Edit Vehicle Sub-Model is required'),
     createSelect('CommonComponent.Vehicle[0].VehTypeCd', [{ value: '10', text: 'Car/Truck', selected: true }]),
-    createInput('CommonComponent.Vehicle[0].ModelYear', '2019'),
-    createInput('CommonComponent.Vehicle[0].VIN', vin),
-    createSelect('CommonComponent.Vehicle[0].Manufacturer', [{ value: 'TOYOTA', text: 'TOYOTA', selected: true }]),
-    createSelect('CommonComponent.Vehicle[0].Model', [{ value: 'COROLLA', text: 'COROLLA', selected: true }]),
+    createInput('CommonComponent.Vehicle[0].ModelYear', year, { disabled: fieldsDisabled }),
+    createInput('CommonComponent.Vehicle[0].VIN', vin, { disabled: fieldsDisabled }),
+    createSelect('CommonComponent.Vehicle[0].Manufacturer', [{ value: manufacturer, text: manufacturer, selected: true }], { disabled: fieldsDisabled }),
+    createSelect('CommonComponent.Vehicle[0].Model', [{ value: model, text: model, selected: true }], { disabled: fieldsDisabled }),
     subModel,
     updateButton
   ];
@@ -2357,6 +2362,46 @@ function testVehicleContracts() {
   })), ['result', 'vehicleMatched', 'confirmedVehicleMatched', 'modelMatched']);
   assert.notStrictEqual(crvDoesNotMatchHrvStatus.result, 'ADDED');
   assert.strictEqual(crvDoesNotMatchHrvStatus.confirmedVehicleMatched, '0');
+  const priusDbNonOvermatchStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Toyota',
+    model: 'Prius',
+    allowedMakeLabels: 'TOYOTA',
+    modelAliases: 'PRIUS',
+    normalizedModelKeys: 'PRIUS',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2024 Toyota Prius Prime JTDACACU0R3000001 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.notStrictEqual(priusDbNonOvermatchStatus.result, 'ADDED');
+  assert.strictEqual(priusDbNonOvermatchStatus.confirmedVehicleMatched, '0');
+  const priusPrimeDbStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Toyota',
+    model: 'Prius Prime',
+    allowedMakeLabels: 'TOYOTA',
+    modelAliases: 'PRIUS PRIME',
+    normalizedModelKeys: 'PRIUSPRIME',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2024 Toyota Prius Prime JTDACACU0R3000001 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.strictEqual(priusPrimeDbStatus.result, 'ADDED');
+  assert.strictEqual(priusPrimeDbStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(priusPrimeDbStatus.modelMatched, '1');
+  const f150DoesNotMatchF250Status = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Ford',
+    model: 'F-150',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    modelAliases: 'F150|F-150|F150 2WD|F150 4WD',
+    normalizedModelKeys: 'F150|F1502WD|F1504WD',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2024 Ford Trucks F250 4WD FAKEF250*******03 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.notStrictEqual(f150DoesNotMatchF250Status.result, 'ADDED');
+  assert.strictEqual(f150DoesNotMatchF250Status.confirmedVehicleMatched, '0');
   const fordF250Status = assertKeyBlock(runOperator('gather_vehicle_add_status', {
     year: '2021',
     make: 'Ford',
@@ -2368,6 +2413,49 @@ function testVehicleContracts() {
   })), ['result', 'modelMatched']);
   assert.strictEqual(fordF250Status.result, 'ADDED');
   assert.strictEqual(fordF250Status.modelMatched, '1');
+  const wranglerTruncatedStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Jeep',
+    model: 'Wrangler Unlimited',
+    allowedMakeLabels: 'JEEP',
+    modelAliases: 'WRANGLER UNLIMITED|WRANGLER UNLIMITE',
+    normalizedModelKeys: 'WRANGLERUNLIMITED|WRANGLERUNLIMITE',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2024 Jeep WRANGLER UNLIMITE 1C4PJXFG0R0000001 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'modelMatched']);
+  assert.strictEqual(wranglerTruncatedStatus.result, 'ADDED');
+  assert.strictEqual(wranglerTruncatedStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(wranglerTruncatedStatus.modelMatched, '1');
+  const f150PotentialConfirm = createVehicleCard('POTENTIAL VEHICLES 2024 Ford Trucks F150 4WD Confirm Remove', 'confirm-f150');
+  const f150PotentialStatus = assertKeyBlock(runOperator('confirm_potential_vehicle', {
+    year: '2024',
+    make: 'Ford',
+    model: 'F-150',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    modelAliases: 'F150|F-150|F150 2WD|F150 4WD',
+    normalizedModelKeys: 'F150|F1502WD|F1504WD',
+    strictModelMatch: '1'
+  }, new FakeDocument([f150PotentialConfirm])), ['result', 'candidateScope', 'confirmClicked']);
+  assert.strictEqual(f150PotentialStatus.result, 'CONFIRMED');
+  assert.strictEqual(f150PotentialStatus.candidateScope, 'single-card');
+  assert.strictEqual(f150PotentialStatus.confirmClicked, '1');
+  assert.strictEqual(f150PotentialConfirm.querySelector('button').clickCalls, 1);
+  const f150PotentialAmbiguousStatus = assertKeyBlock(runOperator('confirm_potential_vehicle', {
+    year: '2024',
+    make: 'Ford',
+    model: 'F-150',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    modelAliases: 'F150|F-150|F150 2WD|F150 4WD',
+    normalizedModelKeys: 'F150|F1502WD|F1504WD',
+    strictModelMatch: '1'
+  }, new FakeDocument([
+    createVehicleCard('POTENTIAL VEHICLES 2024 Ford Trucks F150 2WD Confirm Remove', 'confirm-f150-2wd'),
+    createVehicleCard('POTENTIAL VEHICLES 2024 Ford Trucks F150 4WD Confirm Remove', 'confirm-f150-4wd')
+  ])), ['result', 'rejectedReason', 'confirmClicked']);
+  assert.strictEqual(f150PotentialAmbiguousStatus.result, 'AMBIGUOUS');
+  assert.strictEqual(f150PotentialAmbiguousStatus.rejectedReason, 'ambiguous-candidates');
+  assert.strictEqual(f150PotentialAmbiguousStatus.confirmClicked, '0');
   const duplicateAddRowDoc = confirmedVehicleCardDoc({
     text: '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
   });
@@ -2743,6 +2831,39 @@ function testVehicleContracts() {
   assert.strictEqual(editStatus.result, 'SUBMODEL_REQUIRED');
   assert.strictEqual(editStatus.subModelPresent, '1');
   assert.strictEqual(editStatus.updateButtonPresent, '1');
+
+  const completeMustangEdit = createVehicleEditModalDoc({
+    vin: '1FA6P8CF1R5414205',
+    year: '2024',
+    manufacturer: 'FORD',
+    model: 'MUSTANG',
+    fieldsDisabled: true,
+    subModelDisabled: true,
+    selectedValue: 'DARK',
+    options: [
+      { value: '', text: 'Select One' },
+      { value: 'DARK', text: 'DARK HORSE |COUPE|GAS|RWD|08Cyl|2Dr|1FA6P8CF*R', selected: true, disabled: true }
+    ]
+  });
+  const completeMustangStatus = assertKeyBlock(runOperator('gather_vehicle_edit_status', {}, completeMustangEdit.doc), [
+    'result', 'yearValue', 'vinValue', 'manufacturerValue', 'modelValue', 'subModelText', 'requiredComplete', 'updateButtonEnabled'
+  ]);
+  assert.strictEqual(completeMustangStatus.result, 'UPDATE_REQUIRED_READY');
+  assert.strictEqual(completeMustangStatus.yearValue, '2024');
+  assert.strictEqual(completeMustangStatus.manufacturerValue, 'FORD');
+  assert.strictEqual(completeMustangStatus.modelValue, 'MUSTANG');
+  assert.strictEqual(completeMustangStatus.requiredComplete, '1');
+  assert.strictEqual(completeMustangStatus.updateButtonEnabled, '1');
+  const completeMustangUpdate = assertKeyBlock(runOperator('handle_vehicle_edit_modal', {
+    year: '2024',
+    make: 'Ford',
+    model: 'Mustang',
+    vin: '1FA6P8CF1R5414205'
+  }, completeMustangEdit.doc), ['result', 'method', 'subModelSelectedText', 'updateClicked']);
+  assert.strictEqual(completeMustangUpdate.result, 'UPDATED');
+  assert.strictEqual(completeMustangUpdate.method, 'complete-panel-update-clicked');
+  assert.strictEqual(completeMustangUpdate.updateClicked, '1');
+  assert.strictEqual(completeMustangEdit.updateButton.clickCalls, 1);
 
   const firstValidEdit = createVehicleEditModalDoc();
   const firstValid = assertKeyBlock(runOperator('handle_vehicle_edit_modal', {
