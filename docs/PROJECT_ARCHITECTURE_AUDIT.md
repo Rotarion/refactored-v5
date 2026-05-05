@@ -156,6 +156,7 @@ Current top-level Advisor operator groups:
 - State and wait reads: `detect_state`, `wait_condition`, `scan_current_page`
 - Prospect and duplicate handling: `focus_prospect_first_input`, `prospect_form_status`, `address_verification_status`, `handle_address_verification`, `handle_duplicate_prospect`
 - Customer Summary/Product Overview: `customer_summary_overview_status`, `click_customer_summary_start_here`, `product_overview_tile_status`, `click_product_overview_tile`, `ensure_product_overview_tile_selected`, `click_product_overview_subnav_from_rapport`
+- Read-only page snapshots: `advisor_active_modal_status`, `gather_rapport_snapshot`, `asc_drivers_vehicles_snapshot`
 - Rapport defaults and vehicle handling: `fill_gather_defaults`, `gather_defaults_status`, `vehicle_already_listed`, `confirm_potential_vehicle`, `prepare_vehicle_row`, `gather_vehicle_row_status`, `set_vehicle_year_and_wait_manufacturer`, `select_vehicle_dropdown_option`, `gather_vehicle_add_status`, `gather_vehicle_edit_status`, `handle_vehicle_edit_modal`, `gather_confirmed_vehicles_status`, `gather_stale_add_vehicle_row_status`, `cancel_stale_add_vehicle_row`
 - Start Quoting and Select Product: `gather_start_quoting_status`, `ensure_start_quoting_auto_checkbox`, `ensure_auto_start_quoting_state`, `click_create_quotes_order_reports`, `click_start_quoting_add_product`, `set_select_product_defaults`, `select_product_status`
 - ASC Product: `consumer_reports_ready`, `asc_participant_detail_status`, `asc_resolve_participant_marital_and_spouse`, `asc_driver_rows_status`, `asc_reconcile_driver_rows`, `asc_vehicle_rows_status`, `asc_reconcile_vehicle_rows`, `fill_participant_modal`, `select_remove_reason`, `fill_vehicle_modal`, `handle_incidents`
@@ -164,6 +165,9 @@ Current top-level Advisor operator groups:
 
 Workflow impact:
 
+- Snapshot ops are read-only route-specific status readers. They collect route family, active modal/panel, save gate, row/card counts, blocker codes, capped evidence, and missing fields without clicking, typing, saving, confirming, removing, creating quotes, or navigating.
+- AHK wrappers `AdvisorQuoteGetActiveModalStatus()`, `AdvisorQuoteGetGatherRapportSnapshot()`, and `AdvisorQuoteGetAscDriversVehiclesSnapshot()` parse the snapshot key/value blocks and write trace events. The current production workflow is not routed through snapshots except when a caller explicitly invokes the diagnostic wrapper.
+- Future page-level action handlers should check active modal/panel state before acting on the underlying page so open panels such as Gather Edit Vehicle, ASC inline participant details, and ASC Remove Driver are visible before a lower-level handler chooses an action.
 - Most high-risk browser mutations return key/value diagnostics so AHK can decide whether to continue, retry, or fail with an actionable scan path.
 - Several waits succeed from absence, especially modal-closed waits; callers must pair them with route/state evidence when risk is high.
 - Argument names are part of the contract and should not be casually renamed: `wantedText`, `fieldName`, `index`, `incidentContinueId`, `ageFirstLicensed`, and `propertyOwnership` are used by AHK callers and smoke fixtures.
@@ -226,6 +230,7 @@ Workflow impact: business-logic or workflow patches should not proceed until the
 ## Validation Surface
 
 - JS operator smoke: `node .\tests\advisor_quote_ops_smoke.js`
+- Snapshot smoke coverage checks active modal detection, Rapport snapshots, ASC Drivers/Vehicles snapshots, and fixture click counters proving these ops do not mutate the DOM.
 - AHK helper tests: `tests/advisor_quote_helper_tests.ahk`
 - Toolchain validation: `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AhkToolchain.ps1`
 

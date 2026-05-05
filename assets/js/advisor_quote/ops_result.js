@@ -3956,6 +3956,593 @@ copy(String((() => {
       missing
     };
   };
+  const advisorSnapshotRouteFamily = (source = {}) => {
+    const url = pageUrl();
+    if (url.includes('/apps/intel/102/rapport')) return 'INTEL_102_RAPPORT';
+    if (url.includes('/apps/intel/102/overview')) return 'INTEL_102_OVERVIEW';
+    if (url.includes('/apps/intel/102/selectProduct')) return 'INTEL_102_SELECT_PRODUCT';
+    if (url.includes('/apps/ASCPRODUCT/')) return 'ASCPRODUCT';
+    if (url.includes('/apps/customer-summary/')) return 'CUSTOMER_SUMMARY';
+    if (isDuplicatePage(source)) return 'DUPLICATE';
+    if (url.includes('advisorpro.allstate.com')) return 'ADVISOR';
+    if (bodyText().includes('allstate advisor pro')) return 'GATEWAY';
+    return 'UNKNOWN';
+  };
+  const snapshotBool = (value) => value ? '1' : '0';
+  const firstVisibleHeadingText = (root) => {
+    const base = root || document;
+    const heading = Array.from(base.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading],legend'))
+      .filter(visible)
+      .map((node) => compact(getText(node), 120))
+      .find(Boolean);
+    if (heading) return heading;
+    return compact(getText(root), 120);
+  };
+  const findVisibleDialogRoot = () => {
+    const selectors = [
+      'dialog',
+      '[role="dialog"]',
+      '[aria-modal="true"]',
+      '.modal',
+      '.ReactModal__Content',
+      '.c-modal'
+    ];
+    for (const selector of selectors) {
+      const found = Array.from(document.querySelectorAll(selector))
+        .filter(visible)
+        .find((node) => compact(getText(node), 160));
+      if (found) return found;
+    }
+    return null;
+  };
+  const findModalButton = (root, id, wantedText = '') => {
+    const base = root || document;
+    const exact = id ? document.getElementById(id) : null;
+    if (exact && visible(exact) && (!root || root.contains(exact))) return exact;
+    const wanted = wantedText || id;
+    return Array.from(base.querySelectorAll('button,input[type=button],input[type=submit],a,[role=button]'))
+      .filter(visible)
+      .find((node) => {
+        const text = getText(node) || safe(node.value) || safe(node.getAttribute('aria-label')) || safe(node.id);
+        return wanted && answerTextMatches(text, wanted);
+      }) || null;
+  };
+  const readCheckedRadioState = (root, namePattern) => {
+    const base = root || document;
+    const regex = namePattern && typeof namePattern.test === 'function' ? namePattern : new RegExp(safe(namePattern), 'i');
+    const inputs = Array.from(base.querySelectorAll('input'));
+    if (base !== document)
+      inputs.push(...Array.from(document.querySelectorAll('input')).filter((input) => !inputs.includes(input)));
+    const checked = inputs
+      .filter((radio) => safe(radio.type).toLowerCase() === 'radio')
+      .filter((radio) => regex.test(`${safe(radio.name)} ${safe(radio.id)} ${safe(radio.value)}`))
+      .find((radio) => radio.checked) || null;
+    if (!checked) return { selected: '0', code: '', text: '' };
+    return {
+      selected: '1',
+      code: compact(safe(checked.value || checked.id), 80),
+      text: compact(readInputLabel(checked) || safe(checked.id), 120)
+    };
+  };
+  const advisorInlineParticipantPanelPresent = () => {
+    const text = bodyText();
+    const saveButton = document.getElementById('PARTICIPANT_SAVE-btn');
+    const hasParticipantFields = !!(
+      document.getElementById('ageFirstLicensed_ageFirstLicensed')
+      || document.getElementById('emailAddress.emailAddress')
+      || document.querySelector('input[id*="militaryInd"],input[name*="militaryInd"],input[id*="violationInd"],input[name*="violationInd"]')
+    );
+    return !!(saveButton && visible(saveButton) && hasParticipantFields
+      && (text.includes("let's get some more details") || text.includes('lets get some more details') || text.includes('participant')));
+  };
+  const advisorRemoveDriverModalRoot = () => {
+    const saveButton = document.getElementById('REMOVE_PARTICIPANT_SAVE-btn');
+    const dialog = saveButton ? (saveButton.closest('[role="dialog"],[aria-modal="true"],.modal,.ReactModal__Content,.c-modal') || saveButton.parentElement) : findVisibleDialogRoot();
+    const root = dialog || document;
+    const text = normLower(getText(root) || bodyText());
+    const hasQuestion = text.includes('why do you want to remove') || text.includes('remove driver');
+    const hasReason = !!root.querySelector('input[name*="nonDriver"],input[id*="nonDriver"]');
+    return (saveButton && visible(saveButton) && (hasQuestion || hasReason)) ? root : null;
+  };
+  const advisorAscVehicleModalRoot = () => {
+    const saveButton = document.getElementById('ADD_ASSET_SAVE-btn');
+    const root = saveButton ? (saveButton.closest('[role="dialog"],[aria-modal="true"],.modal,.ReactModal__Content,.c-modal') || saveButton.parentElement) : null;
+    const text = normLower(getText(root) || bodyText());
+    return (saveButton && visible(saveButton) && (text.includes('garaging') || text.includes('vehicle') || text.includes('ownership'))) ? (root || document) : null;
+  };
+  const readAdvisorActiveModalStatusFields = (source = {}) => {
+    try {
+      const routeFamily = advisorSnapshotRouteFamily(source);
+      const editStatus = readVehicleEditStatusFields();
+      const editVehiclePresent = editStatus.result !== 'NO_MODAL';
+      const staleStatus = staleAddVehicleRowStatus({ allExpectedVehiclesSatisfied: '1' });
+      const staleAddRowPresent = !['', 'NONE', 'ERROR'].includes(safe(staleStatus.result));
+      const inlineParticipantPanelPresent = advisorInlineParticipantPanelPresent();
+      const removeDriverRoot = advisorRemoveDriverModalRoot();
+      const vehicleModalRoot = advisorAscVehicleModalRoot();
+      const addressStatus = addressVerificationStatusFields();
+      const addressPresent = addressStatus.result === 'FOUND';
+      const duplicatePresent = isDuplicatePage(source);
+      const incidentsPresent = isIncidentsPage(source);
+      const unknownRoot = findVisibleDialogRoot();
+      let activeModalType = 'NONE';
+      let activePanelType = 'NONE';
+      let modalTitle = '';
+      let modalSaveButtonId = '';
+      let modalSaveButton = null;
+      let modalCancelButton = null;
+      let evidence = [];
+      let missing = [];
+      let nextRecommendedReadOnlyStatus = '';
+
+      if (addressPresent) {
+        activeModalType = 'ADDRESS_VERIFICATION';
+        modalTitle = 'Address Verification';
+        modalSaveButton = findAddressVerificationContinueButton();
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        evidence.push('address-verification');
+        nextRecommendedReadOnlyStatus = 'address_verification_status';
+      } else if (duplicatePresent) {
+        activeModalType = 'DUPLICATE_PROSPECT';
+        modalTitle = 'This Prospect May Already Exist';
+        evidence.push('duplicate-prospect');
+        nextRecommendedReadOnlyStatus = 'detect_state';
+      } else if (editVehiclePresent) {
+        activeModalType = 'GATHER_EDIT_VEHICLE';
+        activePanelType = 'GATHER_EDIT_VEHICLE';
+        modalTitle = 'Edit Vehicle';
+        modalSaveButton = findVehicleEditUpdateButton();
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        modalCancelButton = findModalButton(null, '', 'Cancel');
+        evidence.push(editStatus.evidence || 'edit-vehicle');
+        nextRecommendedReadOnlyStatus = 'gather_vehicle_edit_status';
+      } else if (staleAddRowPresent) {
+        activeModalType = 'GATHER_STALE_ADD_VEHICLE_ROW';
+        activePanelType = 'GATHER_STALE_ADD_VEHICLE_ROW';
+        modalTitle = compact(staleStatus.rowTitle || 'Add Car or Truck', 120);
+        modalCancelButton = findModalButton(null, '', 'Cancel');
+        evidence.push(staleStatus.evidence || 'stale-add-row');
+        nextRecommendedReadOnlyStatus = 'gather_stale_add_vehicle_row_status';
+      } else if (removeDriverRoot) {
+        activeModalType = 'ASC_REMOVE_DRIVER_MODAL';
+        modalTitle = firstVisibleHeadingText(removeDriverRoot) || 'Remove Driver';
+        modalSaveButton = document.getElementById('REMOVE_PARTICIPANT_SAVE-btn');
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        modalCancelButton = findModalButton(removeDriverRoot, 'PARTICIPANT_CANCEL-btn', 'Cancel');
+        evidence.push('remove-driver-modal');
+        nextRecommendedReadOnlyStatus = 'advisor_active_modal_status';
+      } else if (inlineParticipantPanelPresent) {
+        activeModalType = 'ASC_INLINE_PARTICIPANT_PANEL';
+        activePanelType = 'ASC_INLINE_PARTICIPANT_PANEL';
+        modalTitle = "Let's get some more details";
+        modalSaveButton = document.getElementById('PARTICIPANT_SAVE-btn');
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        modalCancelButton = findModalButton(null, 'PARTICIPANT_CANCEL-btn', 'Cancel');
+        evidence.push('inline-participant-panel');
+        nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
+      } else if (vehicleModalRoot) {
+        activeModalType = 'ASC_VEHICLE_MODAL';
+        modalTitle = firstVisibleHeadingText(vehicleModalRoot) || 'Vehicle Modal';
+        modalSaveButton = document.getElementById('ADD_ASSET_SAVE-btn');
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        modalCancelButton = findModalButton(vehicleModalRoot, 'ASSET_CANCEL-btn', 'Cancel');
+        evidence.push('asc-vehicle-modal');
+        nextRecommendedReadOnlyStatus = 'modal_exists';
+      } else if (incidentsPresent) {
+        activeModalType = 'INCIDENTS';
+        modalTitle = 'Incidents';
+        modalSaveButton = document.getElementById('CONTINUE_OFFER-btn');
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        evidence.push('incidents');
+        nextRecommendedReadOnlyStatus = 'wait_condition:is_incidents';
+      } else if (unknownRoot) {
+        activeModalType = 'UNKNOWN_MODAL';
+        modalTitle = firstVisibleHeadingText(unknownRoot);
+        modalSaveButton = findModalButton(unknownRoot, '', 'Save') || findModalButton(unknownRoot, '', 'Continue') || findModalButton(unknownRoot, '', 'Update');
+        modalSaveButtonId = safe(modalSaveButton && modalSaveButton.id);
+        modalCancelButton = findModalButton(unknownRoot, '', 'Cancel');
+        evidence.push('unknown-modal');
+        nextRecommendedReadOnlyStatus = 'scan_current_page';
+      }
+
+      if (activeModalType === 'NONE') missing.push('activeModal');
+      return {
+        result: 'OK',
+        routeFamily,
+        url: compact(pageUrl(), 240),
+        activeModalType,
+        activePanelType,
+        saveGate: modalSaveButton ? (isDisabledLike(modalSaveButton) ? 'MODAL_SAVE_DISABLED' : 'MODAL_SAVE_ENABLED') : '',
+        modalTitle: compact(modalTitle, 120),
+        modalSaveButtonId,
+        modalSaveButtonPresent: snapshotBool(modalSaveButton),
+        modalSaveButtonEnabled: snapshotBool(modalSaveButton && !isDisabledLike(modalSaveButton)),
+        modalCancelButtonPresent: snapshotBool(modalCancelButton),
+        editVehiclePresent: snapshotBool(editVehiclePresent),
+        inlineParticipantPanelPresent: snapshotBool(inlineParticipantPanelPresent),
+        removeDriverModalPresent: snapshotBool(removeDriverRoot),
+        blockerCode: activeModalType === 'NONE' ? '' : `${activeModalType}_OPEN`,
+        nextRecommendedReadOnlyStatus,
+        evidence: compact(evidence.filter(Boolean).join('|'), 240),
+        missing: compact(missing.join('|'), 240)
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        routeFamily: advisorSnapshotRouteFamily(source),
+        url: compact(pageUrl(), 240),
+        activeModalType: '',
+        activePanelType: '',
+        saveGate: '',
+        modalTitle: '',
+        modalSaveButtonId: '',
+        modalSaveButtonPresent: '0',
+        modalSaveButtonEnabled: '0',
+        modalCancelButtonPresent: '0',
+        editVehiclePresent: '0',
+        inlineParticipantPanelPresent: '0',
+        removeDriverModalPresent: '0',
+        blockerCode: 'SNAPSHOT_ERROR',
+        nextRecommendedReadOnlyStatus: 'scan_current_page',
+        evidence: '',
+        missing: compact(err && err.message, 200)
+      };
+    }
+  };
+  const vehicleSnapshotCards = (mode) => {
+    if (mode === 'confirmed') {
+      return confirmedVehicleCandidates()
+        .map((candidate) => compact(candidate.cardText, 110))
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+    const nodes = Array.from(document.querySelectorAll('div,section,article,li,tr,fieldset'))
+      .filter(visible);
+    const cards = [];
+    const seen = new Set();
+    for (const node of nodes.sort((a, b) => getText(a).length - getText(b).length)) {
+      const text = getText(node);
+      const lowered = normLower(text);
+      const hasCandidateChild = Array.from(node.querySelectorAll('div,article,li,tr,fieldset'))
+        .some((child) => {
+          if (!visible(child)) return false;
+          const childText = getText(child);
+          if (!childText || childText.length >= text.length) return false;
+          const childLowered = normLower(childText);
+          const childHasConfirm = Array.from(child.querySelectorAll('button,a,[role=button]'))
+            .some((button) => visible(button) && answerTextMatches(getText(button), 'Confirm'));
+          if (!/\b(?:19|20)\d{2}\b/.test(childText)) return false;
+          if (childLowered.includes('confirmed vehicles') || childLowered.includes('confirmed')) return false;
+          if (!childLowered.includes('potential') && !childHasConfirm) return false;
+          return vehicleTitleCount(childText) <= 1;
+        });
+      if (hasCandidateChild) continue;
+      const hasConfirm = Array.from(node.querySelectorAll('button,a,[role=button]'))
+        .some((button) => visible(button) && answerTextMatches(getText(button), 'Confirm'));
+      if (!/\b(?:19|20)\d{2}\b/.test(text)) continue;
+      if (lowered.includes('confirmed vehicles') || lowered.includes('confirmed')) continue;
+      if (!lowered.includes('potential') && !hasConfirm) continue;
+      if (vehicleTitleCount(text) > 1) continue;
+      const item = compact(text, 110);
+      const key = normLower(item);
+      if (!item || seen.has(key)) continue;
+      seen.add(key);
+      cards.push(item);
+    }
+    return cards.slice(0, 8);
+  };
+  const readGatherPeoplePropertySnapshot = () => {
+    const ageInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Driver.AgeFirstLicensed')) || null;
+    const emailInput = Array.from(document.querySelectorAll('input[id]')).find((el) => safe(el.id).endsWith('.Communications.EmailAddr')) || null;
+    const ownershipSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceOwnedRentedCd.SrcCd')) || null;
+    const homeTypeSelect = Array.from(document.querySelectorAll('select[id]')).find((el) => safe(el.id).endsWith('.ResidenceTypeCd.SrcCd')) || null;
+    const ownership = readSelectState(ownershipSelect);
+    const homeType = readSelectState(homeTypeSelect);
+    return {
+      peopleStatus: compact(`ageFirstLicensed=${safe(ageInput && ageInput.value).trim()}|emailPresent=${emailInput ? 1 : 0}|emailValuePresent=${safe(emailInput && emailInput.value).trim() ? 1 : 0}`, 180),
+      propertyStatus: compact(`ownership=${ownership.value || ownership.text}|homeType=${homeType.value || homeType.text}`, 180)
+    };
+  };
+  const readGatherVehicleWarningText = () => {
+    const alerts = collectVisibleAlerts().join(' || ');
+    if (/confirm or add at least 1 car or truck|auto originally asked/i.test(alerts))
+      return compact(alerts, 180);
+    const rawBody = safe(document.body && (document.body.innerText || document.body.textContent));
+    const line = rawBody.split(/\r?\n|(?<=\.)\s+/)
+      .find((part) => /confirm or add at least 1 car or truck|auto originally asked/i.test(part));
+    return compact(line || '', 180);
+  };
+  const readGatherRapportSnapshotFields = (source = {}) => {
+    try {
+      const routeOk = pageUrl().includes('/apps/intel/102/rapport') || isGatherDataPage(source);
+      if (!routeOk) {
+        return {
+          result: 'NOT_RAPPORT',
+          routeFamily: advisorSnapshotRouteFamily(source),
+          url: compact(pageUrl(), 240),
+          activeModalType: readAdvisorActiveModalStatusFields(source).activeModalType,
+          activePanelType: '',
+          saveGate: '',
+          vehicleWarningPresent: '0',
+          vehicleWarningText: '',
+          confirmedVehicleCount: '0',
+          potentialVehicleCount: '0',
+          confirmedVehicles: '',
+          potentialVehicles: '',
+          editVehiclePanelPresent: '0',
+          editVehicleStatus: '',
+          editVehicleYear: '',
+          editVehicleMake: '',
+          editVehicleModel: '',
+          editVehicleSubModel: '',
+          editVehicleUpdatePresent: '0',
+          editVehicleUpdateEnabled: '0',
+          editVehicleRequiredComplete: '0',
+          staleAddRowPresent: '0',
+          startQuotingSectionPresent: '0',
+          createQuotesEnabled: '0',
+          peopleStatus: '',
+          propertyStatus: '',
+          blockerCode: 'NOT_RAPPORT',
+          nextRecommendedReadOnlyStatus: 'detect_state',
+          evidence: '',
+          missing: 'rapport-route'
+        };
+      }
+      const active = readAdvisorActiveModalStatusFields(source);
+      const confirmedCards = vehicleSnapshotCards('confirmed');
+      const potentialCards = vehicleSnapshotCards('potential');
+      const editStatus = readVehicleEditStatusFields();
+      const editPresent = editStatus.result !== 'NO_MODAL';
+      const staleStatus = staleAddVehicleRowStatus({ allExpectedVehiclesSatisfied: '1' });
+      const stalePresent = !['', 'NONE', 'ERROR'].includes(safe(staleStatus.result));
+      const startStatus = buildStartQuotingStatus(source);
+      const warningText = readGatherVehicleWarningText();
+      const peopleProperty = readGatherPeoplePropertySnapshot();
+      let blockerCode = '';
+      let nextRecommendedReadOnlyStatus = '';
+      if (editStatus.result === 'UPDATE_REQUIRED_READY') {
+        blockerCode = 'GATHER_EDIT_VEHICLE_UPDATE_REQUIRED';
+        nextRecommendedReadOnlyStatus = 'gather_vehicle_edit_status';
+      } else if (editPresent) {
+        blockerCode = 'GATHER_EDIT_VEHICLE_OPEN';
+        nextRecommendedReadOnlyStatus = 'gather_vehicle_edit_status';
+      } else if (stalePresent) {
+        blockerCode = 'GATHER_STALE_ADD_VEHICLE_ROW_OPEN';
+        nextRecommendedReadOnlyStatus = 'gather_stale_add_vehicle_row_status';
+      } else if (warningText) {
+        blockerCode = 'GATHER_VEHICLE_WARNING_PRESENT';
+        nextRecommendedReadOnlyStatus = 'gather_confirmed_vehicles_status';
+      } else if (startStatus.startQuotingSectionPresent === '1' && startStatus.createQuotesEnabled !== '1') {
+        blockerCode = 'GATHER_CREATE_QUOTES_DISABLED';
+        nextRecommendedReadOnlyStatus = 'gather_start_quoting_status';
+      }
+      const evidence = [
+        'route:rapport',
+        confirmedCards.length ? `confirmed:${confirmedCards.length}` : '',
+        potentialCards.length ? `potential:${potentialCards.length}` : '',
+        editPresent ? `edit:${editStatus.result}` : '',
+        stalePresent ? `stale:${staleStatus.result}` : '',
+        startStatus.startQuotingSectionPresent === '1' ? 'start-quoting' : '',
+        warningText ? 'vehicle-warning' : ''
+      ].filter(Boolean).join('|');
+      return {
+        result: 'OK',
+        routeFamily: 'INTEL_102_RAPPORT',
+        url: compact(pageUrl(), 240),
+        activeModalType: active.activeModalType,
+        activePanelType: active.activePanelType,
+        saveGate: startStatus.createQuotesEnabled === '1' ? 'CREATE_QUOTES_ENABLED' : (startStatus.createQuotesPresent === '1' ? 'CREATE_QUOTES_DISABLED' : ''),
+        vehicleWarningPresent: snapshotBool(warningText),
+        vehicleWarningText: warningText,
+        confirmedVehicleCount: String(confirmedCards.length),
+        potentialVehicleCount: String(potentialCards.length),
+        confirmedVehicles: compact(confirmedCards.join(' || '), 360),
+        potentialVehicles: compact(potentialCards.join(' || '), 360),
+        editVehiclePanelPresent: snapshotBool(editPresent),
+        editVehicleStatus: editPresent ? editStatus.result : '',
+        editVehicleYear: editStatus.yearValue || '',
+        editVehicleMake: editStatus.manufacturerValue || '',
+        editVehicleModel: editStatus.modelValue || '',
+        editVehicleSubModel: editStatus.subModelText || editStatus.subModelValue || '',
+        editVehicleUpdatePresent: editStatus.updateButtonPresent || '0',
+        editVehicleUpdateEnabled: editStatus.updateButtonEnabled || '0',
+        editVehicleRequiredComplete: editStatus.requiredComplete || '0',
+        staleAddRowPresent: snapshotBool(stalePresent),
+        startQuotingSectionPresent: startStatus.startQuotingSectionPresent || '0',
+        createQuotesEnabled: startStatus.createQuotesEnabled || '0',
+        peopleStatus: peopleProperty.peopleStatus,
+        propertyStatus: peopleProperty.propertyStatus,
+        blockerCode,
+        nextRecommendedReadOnlyStatus,
+        evidence: compact(evidence, 240),
+        missing: compact([startStatus.missing, editPresent ? editStatus.missing : ''].filter(Boolean).join('|'), 240)
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        routeFamily: advisorSnapshotRouteFamily(source),
+        url: compact(pageUrl(), 240),
+        activeModalType: '',
+        activePanelType: '',
+        saveGate: '',
+        vehicleWarningPresent: '0',
+        vehicleWarningText: '',
+        confirmedVehicleCount: '0',
+        potentialVehicleCount: '0',
+        confirmedVehicles: '',
+        potentialVehicles: '',
+        editVehiclePanelPresent: '0',
+        editVehicleStatus: '',
+        editVehicleYear: '',
+        editVehicleMake: '',
+        editVehicleModel: '',
+        editVehicleSubModel: '',
+        editVehicleUpdatePresent: '0',
+        editVehicleUpdateEnabled: '0',
+        editVehicleRequiredComplete: '0',
+        staleAddRowPresent: '0',
+        startQuotingSectionPresent: '0',
+        createQuotesEnabled: '0',
+        peopleStatus: '',
+        propertyStatus: '',
+        blockerCode: 'SNAPSHOT_ERROR',
+        nextRecommendedReadOnlyStatus: 'scan_current_page',
+        evidence: '',
+        missing: compact(err && err.message, 200)
+      };
+    }
+  };
+  const readAscRemoveDriverFields = () => {
+    const root = advisorRemoveDriverModalRoot();
+    const reason = root ? readCheckedRadioState(root, /nonDriver/i) : { selected: '0', code: '', text: '' };
+    return {
+      root,
+      targetName: root ? compact(firstVisibleHeadingText(root).replace(/^Remove Driver\s*/i, ''), 120) : '',
+      reasonSelected: reason.selected,
+      reasonCode: reason.code,
+      reasonText: reason.text
+    };
+  };
+  const readAscDriversVehiclesSnapshotFields = (source = {}) => {
+    try {
+      const routeId = ascProductRouteId();
+      const onDriversVehicles = !!routeId && (isDriversAndVehiclesPage(source) || bodyText().includes('drivers and vehicles'));
+      if (!onDriversVehicles) {
+        return {
+          result: 'NOT_ASC_DRIVERS_VEHICLES',
+          routeFamily: advisorSnapshotRouteFamily(source),
+          ascProductRouteId: routeId,
+          url: compact(pageUrl(), 240),
+          activeModalType: readAdvisorActiveModalStatusFields(source).activeModalType,
+          activePanelType: '',
+          saveGate: '',
+          driverCount: '0',
+          unresolvedDriverCount: '0',
+          addedDriverCount: '0',
+          removedDriverCount: '0',
+          driverSummaries: '',
+          vehicleCount: '0',
+          unresolvedVehicleCount: '0',
+          addedVehicleCount: '0',
+          removedVehicleCount: '0',
+          vehicleSummaries: '',
+          inlineParticipantPanelPresent: '0',
+          removeDriverModalPresent: '0',
+          removeDriverTargetName: '',
+          removeDriverReasonSelected: '0',
+          removeDriverReasonCode: '',
+          mainSavePresent: '0',
+          mainSaveEnabled: '0',
+          blockerCode: 'NOT_ASC_DRIVERS_VEHICLES',
+          nextRecommendedReadOnlyStatus: 'detect_state',
+          evidence: '',
+          missing: 'asc-drivers-vehicles-route'
+        };
+      }
+      const active = readAdvisorActiveModalStatusFields(source);
+      const driverStatus = ascDriverRowsStatus(source);
+      const vehicleStatus = ascVehicleRowsStatus(source);
+      const saveButton = findAscSaveButton();
+      const removeFields = readAscRemoveDriverFields();
+      const inlinePresent = advisorInlineParticipantPanelPresent();
+      let activeModalType = active.activeModalType;
+      let activePanelType = active.activePanelType;
+      let blockerCode = '';
+      let nextRecommendedReadOnlyStatus = '';
+      if (removeFields.root) {
+        activeModalType = 'ASC_REMOVE_DRIVER_MODAL';
+        blockerCode = 'ASC_REMOVE_DRIVER_MODAL_OPEN';
+        nextRecommendedReadOnlyStatus = 'advisor_active_modal_status';
+      } else if (inlinePresent) {
+        activePanelType = 'ASC_INLINE_PARTICIPANT_PANEL';
+        activeModalType = activeModalType === 'NONE' ? 'ASC_INLINE_PARTICIPANT_PANEL' : activeModalType;
+        blockerCode = 'ASC_INLINE_PARTICIPANT_PANEL_OPEN';
+        nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
+      } else if (activeModalType === 'ASC_VEHICLE_MODAL') {
+        blockerCode = 'ASC_VEHICLE_MODAL_OPEN';
+        nextRecommendedReadOnlyStatus = 'modal_exists';
+      } else if (Number(driverStatus.unresolvedDriverCount || 0) > 0) {
+        blockerCode = 'ASC_UNRESOLVED_DRIVERS';
+        nextRecommendedReadOnlyStatus = 'asc_driver_rows_status';
+      } else if (Number(vehicleStatus.unresolvedVehicleCount || 0) > 0) {
+        blockerCode = 'ASC_UNRESOLVED_VEHICLES';
+        nextRecommendedReadOnlyStatus = 'asc_vehicle_rows_status';
+      } else if (saveButton && isDisabledLike(saveButton)) {
+        blockerCode = 'ASC_MAIN_SAVE_DISABLED';
+        nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
+      }
+      const evidence = [
+        'route:ascproduct',
+        'text:drivers-and-vehicles',
+        driverStatus.evidence,
+        vehicleStatus.evidence,
+        saveButton ? 'main-save' : '',
+        active.evidence
+      ].filter(Boolean).join('|');
+      return {
+        result: 'OK',
+        routeFamily: 'ASCPRODUCT',
+        ascProductRouteId: routeId,
+        url: compact(pageUrl(), 240),
+        activeModalType,
+        activePanelType,
+        saveGate: saveButton ? (isDisabledLike(saveButton) ? 'MAIN_SAVE_DISABLED' : 'MAIN_SAVE_ENABLED') : 'MAIN_SAVE_MISSING',
+        driverCount: driverStatus.driverCount || '0',
+        unresolvedDriverCount: driverStatus.unresolvedDriverCount || '0',
+        addedDriverCount: driverStatus.addedDriverCount || '0',
+        removedDriverCount: driverStatus.removedDriverCount || '0',
+        driverSummaries: driverStatus.driverSummaries || '',
+        vehicleCount: vehicleStatus.vehicleCount || '0',
+        unresolvedVehicleCount: vehicleStatus.unresolvedVehicleCount || '0',
+        addedVehicleCount: vehicleStatus.addedVehicleCount || '0',
+        removedVehicleCount: vehicleStatus.removedVehicleCount || '0',
+        vehicleSummaries: vehicleStatus.vehicleSummaries || '',
+        inlineParticipantPanelPresent: snapshotBool(inlinePresent),
+        removeDriverModalPresent: snapshotBool(removeFields.root),
+        removeDriverTargetName: removeFields.targetName,
+        removeDriverReasonSelected: removeFields.reasonSelected,
+        removeDriverReasonCode: removeFields.reasonCode,
+        mainSavePresent: snapshotBool(saveButton),
+        mainSaveEnabled: snapshotBool(saveButton && !isDisabledLike(saveButton)),
+        blockerCode,
+        nextRecommendedReadOnlyStatus,
+        evidence: compact(evidence, 240),
+        missing: compact([driverStatus.missing, vehicleStatus.missing, active.missing].filter(Boolean).join('|'), 240)
+      };
+    } catch (err) {
+      return {
+        result: 'ERROR',
+        routeFamily: advisorSnapshotRouteFamily(source),
+        ascProductRouteId: ascProductRouteId(),
+        url: compact(pageUrl(), 240),
+        activeModalType: '',
+        activePanelType: '',
+        saveGate: '',
+        driverCount: '0',
+        unresolvedDriverCount: '0',
+        addedDriverCount: '0',
+        removedDriverCount: '0',
+        driverSummaries: '',
+        vehicleCount: '0',
+        unresolvedVehicleCount: '0',
+        addedVehicleCount: '0',
+        removedVehicleCount: '0',
+        vehicleSummaries: '',
+        inlineParticipantPanelPresent: '0',
+        removeDriverModalPresent: '0',
+        removeDriverTargetName: '',
+        removeDriverReasonSelected: '0',
+        removeDriverReasonCode: '',
+        mainSavePresent: '0',
+        mainSaveEnabled: '0',
+        blockerCode: 'SNAPSHOT_ERROR',
+        nextRecommendedReadOnlyStatus: 'scan_current_page',
+        evidence: '',
+        missing: compact(err && err.message, 200)
+      };
+    }
+  };
   const escapeRegexText = (value) => safe(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const vinPatternCompatible = (vinValue, optionText) => {
     const vin = normalizeVehicleVin(vinValue);
@@ -5722,6 +6309,18 @@ copy(String((() => {
 
     case 'gather_vehicle_edit_status': {
       return linesOut(readVehicleEditStatusFields());
+    }
+
+    case 'advisor_active_modal_status': {
+      return linesOut(readAdvisorActiveModalStatusFields(args));
+    }
+
+    case 'gather_rapport_snapshot': {
+      return linesOut(readGatherRapportSnapshotFields(args));
+    }
+
+    case 'asc_drivers_vehicles_snapshot': {
+      return linesOut(readAscDriversVehiclesSnapshotFields(args));
     }
 
     case 'handle_vehicle_edit_modal': {

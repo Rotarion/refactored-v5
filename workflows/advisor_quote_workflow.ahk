@@ -1156,6 +1156,104 @@ AdvisorQuoteStatusInteger(status, key) {
     return RegExMatch(value, "^-?\d+$") ? Integer(value) : 0
 }
 
+AdvisorQuoteSnapshotArgs() {
+    db := GetAdvisorQuoteWorkflowDb()
+    return Map(
+        "urls", db["urls"],
+        "texts", db["texts"],
+        "selectors", db["selectors"]
+    )
+}
+
+AdvisorQuoteGetActiveModalStatus() {
+    status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("advisor_active_modal_status", AdvisorQuoteSnapshotArgs(), 2, 120))
+    AdvisorQuoteAppendLog("ADVISOR_ACTIVE_MODAL_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildActiveModalStatusDetail(status))
+    return status
+}
+
+AdvisorQuoteBuildActiveModalStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+        . ", activeModalType=" AdvisorQuoteStatusValue(status, "activeModalType")
+        . ", activePanelType=" AdvisorQuoteStatusValue(status, "activePanelType")
+        . ", saveGate=" AdvisorQuoteStatusValue(status, "saveGate")
+        . ", modalTitle=" AdvisorQuoteStatusValue(status, "modalTitle")
+        . ", modalSaveButtonId=" AdvisorQuoteStatusValue(status, "modalSaveButtonId")
+        . ", modalSaveButtonPresent=" AdvisorQuoteStatusValue(status, "modalSaveButtonPresent")
+        . ", modalSaveButtonEnabled=" AdvisorQuoteStatusValue(status, "modalSaveButtonEnabled")
+        . ", modalCancelButtonPresent=" AdvisorQuoteStatusValue(status, "modalCancelButtonPresent")
+        . ", editVehiclePresent=" AdvisorQuoteStatusValue(status, "editVehiclePresent")
+        . ", inlineParticipantPanelPresent=" AdvisorQuoteStatusValue(status, "inlineParticipantPanelPresent")
+        . ", removeDriverModalPresent=" AdvisorQuoteStatusValue(status, "removeDriverModalPresent")
+        . ", blockerCode=" AdvisorQuoteStatusValue(status, "blockerCode")
+        . ", nextRecommendedReadOnlyStatus=" AdvisorQuoteStatusValue(status, "nextRecommendedReadOnlyStatus")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteGetGatherRapportSnapshot() {
+    status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("gather_rapport_snapshot", AdvisorQuoteSnapshotArgs(), 2, 120))
+    AdvisorQuoteAppendLog("GATHER_RAPPORT_SNAPSHOT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherRapportSnapshotDetail(status))
+    return status
+}
+
+AdvisorQuoteBuildGatherRapportSnapshotDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+        . ", activeModalType=" AdvisorQuoteStatusValue(status, "activeModalType")
+        . ", activePanelType=" AdvisorQuoteStatusValue(status, "activePanelType")
+        . ", saveGate=" AdvisorQuoteStatusValue(status, "saveGate")
+        . ", vehicleWarningPresent=" AdvisorQuoteStatusValue(status, "vehicleWarningPresent")
+        . ", confirmedVehicleCount=" AdvisorQuoteStatusValue(status, "confirmedVehicleCount")
+        . ", potentialVehicleCount=" AdvisorQuoteStatusValue(status, "potentialVehicleCount")
+        . ", editVehiclePanelPresent=" AdvisorQuoteStatusValue(status, "editVehiclePanelPresent")
+        . ", editVehicleStatus=" AdvisorQuoteStatusValue(status, "editVehicleStatus")
+        . ", editVehicleUpdatePresent=" AdvisorQuoteStatusValue(status, "editVehicleUpdatePresent")
+        . ", editVehicleUpdateEnabled=" AdvisorQuoteStatusValue(status, "editVehicleUpdateEnabled")
+        . ", editVehicleRequiredComplete=" AdvisorQuoteStatusValue(status, "editVehicleRequiredComplete")
+        . ", staleAddRowPresent=" AdvisorQuoteStatusValue(status, "staleAddRowPresent")
+        . ", startQuotingSectionPresent=" AdvisorQuoteStatusValue(status, "startQuotingSectionPresent")
+        . ", createQuotesEnabled=" AdvisorQuoteStatusValue(status, "createQuotesEnabled")
+        . ", blockerCode=" AdvisorQuoteStatusValue(status, "blockerCode")
+        . ", nextRecommendedReadOnlyStatus=" AdvisorQuoteStatusValue(status, "nextRecommendedReadOnlyStatus")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteGetAscDriversVehiclesSnapshot() {
+    status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_drivers_vehicles_snapshot", AdvisorQuoteSnapshotArgs(), 2, 120))
+    AdvisorQuoteAppendLog("ASC_DRIVERS_VEHICLES_SNAPSHOT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status))
+    return status
+}
+
+AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+        . ", ascProductRouteId=" AdvisorQuoteStatusValue(status, "ascProductRouteId")
+        . ", activeModalType=" AdvisorQuoteStatusValue(status, "activeModalType")
+        . ", activePanelType=" AdvisorQuoteStatusValue(status, "activePanelType")
+        . ", saveGate=" AdvisorQuoteStatusValue(status, "saveGate")
+        . ", driverCount=" AdvisorQuoteStatusValue(status, "driverCount")
+        . ", unresolvedDriverCount=" AdvisorQuoteStatusValue(status, "unresolvedDriverCount")
+        . ", addedDriverCount=" AdvisorQuoteStatusValue(status, "addedDriverCount")
+        . ", removedDriverCount=" AdvisorQuoteStatusValue(status, "removedDriverCount")
+        . ", vehicleCount=" AdvisorQuoteStatusValue(status, "vehicleCount")
+        . ", unresolvedVehicleCount=" AdvisorQuoteStatusValue(status, "unresolvedVehicleCount")
+        . ", addedVehicleCount=" AdvisorQuoteStatusValue(status, "addedVehicleCount")
+        . ", removedVehicleCount=" AdvisorQuoteStatusValue(status, "removedVehicleCount")
+        . ", inlineParticipantPanelPresent=" AdvisorQuoteStatusValue(status, "inlineParticipantPanelPresent")
+        . ", removeDriverModalPresent=" AdvisorQuoteStatusValue(status, "removeDriverModalPresent")
+        . ", removeDriverTargetName=" AdvisorQuoteStatusValue(status, "removeDriverTargetName")
+        . ", removeDriverReasonSelected=" AdvisorQuoteStatusValue(status, "removeDriverReasonSelected")
+        . ", removeDriverReasonCode=" AdvisorQuoteStatusValue(status, "removeDriverReasonCode")
+        . ", mainSavePresent=" AdvisorQuoteStatusValue(status, "mainSavePresent")
+        . ", mainSaveEnabled=" AdvisorQuoteStatusValue(status, "mainSaveEnabled")
+        . ", blockerCode=" AdvisorQuoteStatusValue(status, "blockerCode")
+        . ", nextRecommendedReadOnlyStatus=" AdvisorQuoteStatusValue(status, "nextRecommendedReadOnlyStatus")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
 AdvisorQuotePostProspectSubmitStates() {
     return ["DUPLICATE", "CUSTOMER_SUMMARY_OVERVIEW", "PRODUCT_OVERVIEW", "RAPPORT", "SELECT_PRODUCT", "ASC_PRODUCT", "INCIDENTS"]
 }

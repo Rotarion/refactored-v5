@@ -795,6 +795,31 @@ function runOperator(op, args, document, href = 'https://advisorpro.allstate.com
   return runOperatorInContext(op, args, createOperatorContext(document, href));
 }
 
+function walkElements(root, visit) {
+  if (!root) return;
+  visit(root);
+  for (const child of root.children || [])
+    walkElements(child, visit);
+}
+
+function totalClickCalls(document) {
+  let total = 0;
+  walkElements(document.body, (node) => {
+    total += node.clickCalls || 0;
+  });
+  return total;
+}
+
+function runReadOnlySnapshot(op, args, scenarioOrDocument, href = '') {
+  const doc = scenarioOrDocument.doc || scenarioOrDocument;
+  const targetHref = scenarioOrDocument.href || href || 'https://advisorpro.allstate.com/#/apps/intel/102/rapport';
+  const before = totalClickCalls(doc);
+  const raw = runOperator(op, args, doc, targetHref);
+  const after = totalClickCalls(doc);
+  assert.strictEqual(after, before, `${op} must be read-only and not click`);
+  return raw;
+}
+
 function tinyRunnerCommandScript(args) {
   return `copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorRunner; if (!r || typeof r.handleTinyCommand !== 'function') return 'result=MISSING\\nreason=no-runner'; return r.handleTinyCommand(${JSON.stringify(args || {})}); } catch (e) { return 'result=ERROR\\nmessage=' + String(e && e.message || e); } })()))`;
 }
@@ -3563,6 +3588,151 @@ function testDriverAndModalContracts() {
   assert.strictEqual(assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, createVehicleModalDoc()), ['result']).result, 'OK');
 }
 
+function testAdvisorActiveModalSnapshotContracts() {
+  const requiredKeys = [
+    'result', 'routeFamily', 'url', 'activeModalType', 'activePanelType', 'saveGate',
+    'modalTitle', 'modalSaveButtonId', 'modalSaveButtonPresent', 'modalSaveButtonEnabled',
+    'modalCancelButtonPresent', 'editVehiclePresent', 'inlineParticipantPanelPresent',
+    'removeDriverModalPresent', 'blockerCode', 'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
+  ];
+  const args = baseArgs();
+
+  const none = assertKeyBlock(runReadOnlySnapshot('advisor_active_modal_status', args, pageDoc('Gather Data Start Quoting')), requiredKeys);
+  assert.strictEqual(none.result, 'OK');
+  assert.strictEqual(none.activeModalType, 'NONE');
+  assert.strictEqual(none.editVehiclePresent, '0');
+
+  const edit = assertKeyBlock(runReadOnlySnapshot('advisor_active_modal_status', args, fixtureScenario('snapshot-gather-edit-complete')), requiredKeys);
+  assert.strictEqual(edit.result, 'OK');
+  assert.strictEqual(edit.activeModalType, 'GATHER_EDIT_VEHICLE');
+  assert.strictEqual(edit.activePanelType, 'GATHER_EDIT_VEHICLE');
+  assert.strictEqual(edit.modalSaveButtonId, 'submitButtonVehicleComponent_0');
+  assert.strictEqual(edit.modalSaveButtonPresent, '1');
+  assert.strictEqual(edit.modalSaveButtonEnabled, '1');
+  assert.strictEqual(edit.editVehiclePresent, '1');
+
+  const inline = assertKeyBlock(runReadOnlySnapshot('advisor_active_modal_status', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
+  assert.strictEqual(inline.activeModalType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(inline.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(inline.inlineParticipantPanelPresent, '1');
+  assert.strictEqual(inline.modalSaveButtonPresent, '1');
+
+  const remove = assertKeyBlock(runReadOnlySnapshot('advisor_active_modal_status', args, fixtureScenario('snapshot-asc-remove-driver')), requiredKeys);
+  assert.strictEqual(remove.activeModalType, 'ASC_REMOVE_DRIVER_MODAL');
+  assert.strictEqual(remove.removeDriverModalPresent, '1');
+  assert.strictEqual(remove.modalSaveButtonId, 'REMOVE_PARTICIPANT_SAVE-btn');
+  assert.strictEqual(remove.modalCancelButtonPresent, '1');
+
+  const unknown = assertKeyBlock(runReadOnlySnapshot('advisor_active_modal_status', args, fixtureScenario('snapshot-active-unknown-modal')), requiredKeys);
+  assert.strictEqual(unknown.activeModalType, 'UNKNOWN_MODAL');
+  assert.strictEqual(unknown.modalSaveButtonPresent, '1');
+  assert.strictEqual(unknown.modalCancelButtonPresent, '1');
+}
+
+function testGatherRapportSnapshotContracts() {
+  const requiredKeys = [
+    'result', 'routeFamily', 'url', 'activeModalType', 'activePanelType', 'saveGate',
+    'vehicleWarningPresent', 'vehicleWarningText', 'confirmedVehicleCount', 'potentialVehicleCount',
+    'confirmedVehicles', 'potentialVehicles', 'editVehiclePanelPresent', 'editVehicleStatus',
+    'editVehicleYear', 'editVehicleMake', 'editVehicleModel', 'editVehicleSubModel',
+    'editVehicleUpdatePresent', 'editVehicleUpdateEnabled', 'editVehicleRequiredComplete',
+    'staleAddRowPresent', 'startQuotingSectionPresent', 'createQuotesEnabled', 'blockerCode',
+    'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
+  ];
+  const args = baseArgs();
+
+  const warning = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-warning-potential')), requiredKeys);
+  assert.strictEqual(warning.result, 'OK');
+  assert.strictEqual(warning.routeFamily, 'INTEL_102_RAPPORT');
+  assert.strictEqual(warning.vehicleWarningPresent, '1');
+  assert.ok(warning.vehicleWarningText.includes('Please Confirm'));
+  assert.strictEqual(warning.potentialVehicleCount, '1');
+  assert.strictEqual(warning.createQuotesEnabled, '0');
+
+  const edit = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-edit-complete')), requiredKeys);
+  assert.strictEqual(edit.result, 'OK');
+  assert.strictEqual(edit.activeModalType, 'GATHER_EDIT_VEHICLE');
+  assert.strictEqual(edit.editVehicleStatus, 'UPDATE_REQUIRED_READY');
+  assert.strictEqual(edit.editVehiclePanelPresent, '1');
+  assert.strictEqual(edit.editVehicleUpdateEnabled, '1');
+  assert.strictEqual(edit.editVehicleRequiredComplete, '1');
+  assert.strictEqual(edit.blockerCode, 'GATHER_EDIT_VEHICLE_UPDATE_REQUIRED');
+
+  const confirmed = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-confirmed-cards')), requiredKeys);
+  assert.strictEqual(confirmed.result, 'OK');
+  assert.strictEqual(confirmed.confirmedVehicleCount, '1');
+  assert.ok(confirmed.confirmedVehicles.includes('MUSTANG'));
+
+  const nonRapport = assertKeyBlock(runReadOnlySnapshot(
+    'gather_rapport_snapshot',
+    args,
+    productOverviewDoc(),
+    'https://advisorpro.allstate.com/#/apps/intel/102/overview'
+  ), requiredKeys);
+  assert.strictEqual(nonRapport.result, 'NOT_RAPPORT');
+}
+
+function testAscDriversVehiclesSnapshotContracts() {
+  const requiredKeys = [
+    'result', 'routeFamily', 'ascProductRouteId', 'url', 'activeModalType', 'activePanelType',
+    'saveGate', 'driverCount', 'unresolvedDriverCount', 'addedDriverCount', 'removedDriverCount',
+    'driverSummaries', 'vehicleCount', 'unresolvedVehicleCount', 'addedVehicleCount',
+    'removedVehicleCount', 'vehicleSummaries', 'inlineParticipantPanelPresent',
+    'removeDriverModalPresent', 'removeDriverTargetName', 'removeDriverReasonSelected',
+    'removeDriverReasonCode', 'mainSavePresent', 'mainSaveEnabled', 'blockerCode',
+    'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
+  ];
+  const args = baseArgs();
+  const ascHref = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/';
+
+  const unresolved = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-unresolved')), requiredKeys);
+  assert.strictEqual(unresolved.result, 'OK');
+  assert.strictEqual(unresolved.routeFamily, 'ASCPRODUCT');
+  assert.strictEqual(unresolved.ascProductRouteId, '112');
+  assert.strictEqual(unresolved.unresolvedDriverCount, '1');
+  assert.strictEqual(unresolved.unresolvedVehicleCount, '1');
+  assert.strictEqual(unresolved.mainSaveEnabled, '0');
+  assert.strictEqual(unresolved.blockerCode, 'ASC_UNRESOLVED_DRIVERS');
+
+  const inline = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
+  assert.strictEqual(inline.result, 'OK');
+  assert.strictEqual(inline.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(inline.inlineParticipantPanelPresent, '1');
+  assert.strictEqual(inline.blockerCode, 'ASC_INLINE_PARTICIPANT_PANEL_OPEN');
+
+  const remove = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-remove-driver')), requiredKeys);
+  assert.strictEqual(remove.result, 'OK');
+  assert.strictEqual(remove.activeModalType, 'ASC_REMOVE_DRIVER_MODAL');
+  assert.strictEqual(remove.removeDriverModalPresent, '1');
+  assert.strictEqual(remove.removeDriverReasonSelected, '1');
+  assert.strictEqual(remove.removeDriverReasonCode, '0006');
+  assert.strictEqual(remove.blockerCode, 'ASC_REMOVE_DRIVER_MODAL_OPEN');
+
+  const saveEnabled = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, ascDriversVehiclesDoc({
+    drivers: [ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true })],
+    vehicles: [ascVehicleRow({ text: '2024 Ford Mustang VIN: FAKEVIN*******01', slug: 'ford-mustang', added: true })],
+    saveDisabled: false
+  }), ascHref), requiredKeys);
+  assert.strictEqual(saveEnabled.mainSaveEnabled, '1');
+  assert.strictEqual(saveEnabled.saveGate, 'MAIN_SAVE_ENABLED');
+
+  const saveDisabled = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, ascDriversVehiclesDoc({
+    drivers: [ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true })],
+    vehicles: [ascVehicleRow({ text: '2024 Ford Mustang VIN: FAKEVIN*******01', slug: 'ford-mustang', added: true })],
+    saveDisabled: true
+  }), ascHref), requiredKeys);
+  assert.strictEqual(saveDisabled.mainSaveEnabled, '0');
+  assert.strictEqual(saveDisabled.saveGate, 'MAIN_SAVE_DISABLED');
+
+  const nonAsc = assertKeyBlock(runReadOnlySnapshot(
+    'asc_drivers_vehicles_snapshot',
+    args,
+    gatherDataDoc(),
+    'https://advisorpro.allstate.com/#/apps/intel/102/rapport'
+  ), requiredKeys);
+  assert.strictEqual(nonAsc.result, 'NOT_ASC_DRIVERS_VEHICLES');
+}
+
 function testHighRiskStrengthenedContracts() {
   const selectedNoContinue = assertKeyBlock(runOperator('handle_duplicate_prospect', duplicateArgs(), duplicateDoc([
     duplicateRow('John Smith 123 Main St Miami FL 33101', 'strong-no-continue')
@@ -3700,6 +3870,9 @@ function run() {
   testDuplicateMovedAddressContracts();
   testAscReconciliationContracts();
   testDriverAndModalContracts();
+  testAdvisorActiveModalSnapshotContracts();
+  testGatherRapportSnapshotContracts();
+  testAscDriversVehiclesSnapshotContracts();
   testHighRiskStrengthenedContracts();
   process.stdout.write('advisor_quote_ops_smoke: PASS\n');
 }

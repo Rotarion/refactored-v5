@@ -18,4 +18,8 @@ The detailed current operator overview is consolidated in `docs/PROJECT_ARCHITEC
 
 - Top-level ops and stable argument names are summarized in `docs/PROJECT_ARCHITECTURE_AUDIT.md`.
 - DB-backed Rapport vehicle matching behavior is documented in `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
+- Read-only snapshot ops are `advisor_active_modal_status`, `gather_rapport_snapshot`, and `asc_drivers_vehicles_snapshot`.
+- Snapshot ops return compact key/value blocks for route, active modal/panel, save gates, card/row counts, blocker codes, evidence, and missing data. They must not click, type, save, confirm vehicles, remove drivers, create quotes, or navigate.
+- AHK wrappers are `AdvisorQuoteGetActiveModalStatus()`, `AdvisorQuoteGetGatherRapportSnapshot()`, and `AdvisorQuoteGetAscDriversVehiclesSnapshot()`. They parse the key/value blocks and log compact trace entries without changing production workflow decisions.
+- Future page-level action handlers should prefer checking active modal/panel state before acting on the underlying page.
 - Generated operator changes require `build_operator.js --check`, regeneration, another `--check`, and the Advisor JS smoke test.

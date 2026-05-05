@@ -1161,6 +1161,106 @@
       { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
     ]
   },
+  "snapshot-active-unknown-modal": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data",
+    "nodes": [
+      { "tag": "div", "role": "dialog", "text": "Unexpected Advisor modal", "children": [
+        { "tag": "h2", "text": "Unexpected Advisor modal" },
+        { "tag": "button", "id": "unknown-save", "text": "Continue" },
+        { "tag": "button", "id": "unknown-cancel", "text": "Cancel" }
+      ] }
+    ]
+  },
+  "snapshot-gather-warning-potential": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks POTENTIAL VEHICLES Auto originally asked for. Please Confirm or Add at least 1 car or truck. Start Quoting Auto Create Quotes & Order Reports",
+    "nodes": [
+      { "tag": "div", "className": "c-alert", "text": "Please Confirm or Add at least 1 car or truck." },
+      { "tag": "section", "text": "POTENTIAL VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card potential-vehicle", "text": "2024 Ford MUSTANG 1FA6P8THXR5000001 Confirm Remove", "children": [
+          { "tag": "button", "id": "potential-mustang-confirm", "text": "Confirm" },
+          { "tag": "button", "id": "potential-mustang-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "input", "type": "checkbox", "id": "ConsumerReports.Auto.Product-intel#102", "checked": true },
+      { "tag": "select", "id": "ConsumerReports.Auto.RatingState", "options": [
+        { "value": "FL", "text": "FL", "selected": true }
+      ] },
+      { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports", "disabled": true }
+    ]
+  },
+  "snapshot-gather-edit-complete": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Edit Vehicle Year VIN Manufacturer Model Sub-Model Update",
+    "nodes": [
+      { "tag": "h2", "text": "Edit Vehicle" },
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].ModelYear", "value": "2024" },
+      { "tag": "input", "type": "text", "id": "CommonComponent.Vehicle[0].VehIdentificationNumber", "value": "1FA6P8THXR5000001" },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].Manufacturer", "disabled": true, "options": [
+        { "value": "FORD", "text": "FORD", "selected": true }
+      ] },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].Model", "disabled": true, "options": [
+        { "value": "MUSTANG", "text": "MUSTANG", "selected": true }
+      ] },
+      { "tag": "select", "id": "CommonComponent.Vehicle[0].SubModel", "disabled": true, "options": [
+        { "value": "ECOBOOST", "text": "EcoBoost Coupe", "selected": true }
+      ] },
+      { "tag": "button", "id": "submitButtonVehicleComponent_0", "text": "Update" },
+      { "tag": "button", "id": "vehicle-edit-cancel", "text": "Cancel" }
+    ]
+  },
+  "snapshot-gather-confirmed-cards": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2024 Ford MUSTANG 1FA6P8THXR5000001 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-mustang-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-mustang-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports" }
+    ]
+  },
+  "snapshot-asc-unresolved": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Save and Continue",
+    "nodes": [
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2024 Ford Mustang VIN: FAKEVIN*******01 Add", "children": [
+        { "tag": "button", "id": "2024-ford-mustang-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-inline-participant": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Let's get some more details Save",
+    "nodes": [
+      { "tag": "h2", "text": "Let's get some more details" },
+      { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+      { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
+      { "tag": "input", "type": "radio", "id": "militaryInd_false", "name": "agreement.agreementParticipant.militaryInd", "value": "false", "checked": true },
+      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
+    ]
+  },
+  "snapshot-asc-remove-driver": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Remove Driver Test Secondary Why do you want to remove this person? Save",
+    "nodes": [
+      { "tag": "div", "role": "dialog", "text": "Remove Driver Test Secondary Why do you want to remove this person?", "children": [
+        { "tag": "h2", "text": "Remove Driver Test Secondary" },
+        { "tag": "label", "text": "This driver has their own car insurance", "children": [
+          { "tag": "input", "type": "radio", "id": "nonDriverReasonOthers_0006", "name": "nonDriverReasonEntCd", "value": "0006", "checked": true }
+        ] },
+        { "tag": "button", "id": "REMOVE_PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] }
+    ]
+  },
   "scan-current-page-rich": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
     "bodyText": "Begin Quoting Create New Prospect sanitized body sample with enough content to verify scanner shape without raw customer data.",
