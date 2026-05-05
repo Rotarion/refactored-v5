@@ -1,457 +1,179 @@
 # Advisor Pro Scan Workflow Reference
 
-This document consolidates the scan-backed workflow details for the refactored Advisor Pro quote automation.
+This is the scan-backed workflow reference for the implemented Advisor Pro quote automation. It keeps only selectors, text anchors, route families, and business rules that the current workflow depends on.
 
-It is organized by workflow stage and only includes selectors, ids, text anchors, and business rules that came from the scans and user confirmations in this thread.
+## Entry
 
-## 1. Advisor Pro Entry
+- Hotkey: `Ctrl+Alt+-` / AHK `^!-`
+- AHK entry: `RunAdvisorQuoteWorkflowFromClipboard()`
+- Landing quote button: `button#group2_Quoting_button`
+- Begin quoting continue button: `button#PrimaryApplicant-Continue-button`
 
-### Advisor Pro home
-- Purpose: enter the quoting flow from the Advisor Pro landing page.
-- Known control:
-  - `button#group2_Quoting_button`
+## Prospect And Duplicate Handling
 
-### Begin Quoting
-- Purpose: move from the start page into the prospect flow.
-- Known control:
-  - `button#PrimaryApplicant-Continue-button`
+- Prospect fields are filled from the normalized clipboard lead profile.
+- New-prospect readiness is checked through the JS operator before writing.
+- Address verification is handled as an intermediate state when `snaOption` radio choices and `Continue with Selected` are present.
+- Duplicate page text anchor: `This Prospect May Already Exist`
+- Duplicate candidate shape can include `.sfmOption` rows.
+- Existing prospect selection requires an exact normalized last name and normalized address match on street number, street text, and ZIP. First-name exact/prefix/fuzzy match is supporting evidence. DOB is weak evidence only.
+- If exactly one duplicate candidate passes the required checks, select it. Otherwise create a new prospect.
 
-## 2. Prospect Creation and Duplicate Resolution
+## Customer Summary Overview
 
-### New Prospect
-- The refactored app already has a prospect fill path via `FillNewProspectForm(fields)`.
-- Current scan retention for this stage is behavioral, not selector-complete.
-- Practical rule:
-  - use the normalized clipboard lead
-  - continue into duplicate resolution or a newly created prospect
+- Route family: `/apps/customer-summary/{id}/overview`
+- Primary action text: `START HERE (Pre-fill included)`
+- Supporting anchors: `Quote History`, `Assets Details`, `Contact Information`, `Family Members`, `Net Worth`
+- Implemented effect: click `START HERE (Pre-fill included)` and wait for Product Overview, Rapport, Select Product, ASC Product, or Incidents.
+- Do not click `START HERE` if the flow is already on `/apps/intel/102/overview` or a later quote state.
 
-### Duplicate prospect page
-- User-confirmed page text:
-  - `This Prospect May Already Exist`
-- Earlier scan reference mentioned duplicate candidate rows as:
-  - `.sfmOption`
-- Matching rule confirmed by the user:
-  - require exact normalized last-name match
-  - require normalized address match on street number + street text + zip
-  - use first-name exact/prefix/fuzzy match as supporting evidence
-  - DOB is weak evidence only
-- Decision rule:
-  - if exactly one row passes the required checks, select it
-  - otherwise create a new prospect
+## Product Overview Grid
 
-## 3. Gather Data / Rapport
+- Route: `/apps/intel/102/overview`
+- Page text: `Select Product`
+- Product tile text: `Auto`
+- Continue text: `Save & Continue to Gather Data`
+- Implemented effect: resolve the scoped Auto tile, select it only when not already selected, verify selected-state evidence, then continue to Rapport.
+- This is not the older `/selectProduct` form page. The current implementation uses text/card resolution for this grid, not the `SelectProduct.Product` dropdown.
 
-### Page
-- URL pattern:
-  - `https://advisorpro.allstate.com/#/apps/intel/102/rapport`
+## Gather Data / Rapport
 
-### Known vehicle row structure
-- Vehicle row index is dynamic:
-  - `ConsumerData.Assets.Vehicles[n]`
-- Required add-car fields:
+- Route: `/apps/intel/102/rapport`
+- Vehicle row prefix: `ConsumerData.Assets.Vehicles[n]`
+- Vehicle fields:
   - `ConsumerData.Assets.Vehicles[n].ModelYear`
   - `ConsumerData.Assets.Vehicles[n].VehIdentificationNumber`
   - `ConsumerData.Assets.Vehicles[n].Manufacturer`
   - `ConsumerData.Assets.Vehicles[n].Model`
   - `ConsumerData.Assets.Vehicles[n].SubModel`
-- Confirm/add button:
-  - `button#confirmNewVehicle`
+- Confirm/add button: `button#confirmNewVehicle`
+- Person defaults used here:
+  - email: `input#ConsumerData.People[0].Communications.EmailAddr`
+  - age first licensed: `input#ConsumerData.People[0].Driver.AgeFirstLicensed`
+- Vehicle cascade is `Year -> Manufacturer -> Model -> Sub-Model`. Later fields remain disabled until prior fields are set.
+- Existing vehicle cards are matched by exact year, DB-backed Advisor make label/family, DB-normalized model key, and VIN evidence when available.
+- Confirmed cards are read first; exactly one DB-backed confirmed card satisfies a lead vehicle.
+- Potential/public-record cards can be confirmed only when exactly one scoped DB-backed card matches.
+- If no safe existing Advisor card matches, the lead vehicle is skipped/deferred in Rapport. Do not open Add Car or Truck for that unmatched vehicle.
+- Broad dropdown construction is not allowed for unmatched Rapport vehicles. Do not select the first model from a broad dropdown.
+- First valid non-placeholder Sub-Model selection is acceptable only inside an already-open Edit Vehicle panel when Advisor requires completion and no safer VIN/trim evidence distinguishes options.
+- If an open Edit Vehicle panel already has required fields populated and `Update` is enabled, click `Update` and verify the panel closes or the matching vehicle becomes confirmed.
+- Partial year/make lead vehicles may be promoted only from a unique confirmed card with visible model text and VIN or masked-VIN evidence.
+- The later Drivers and Vehicles page only reconciles quote membership. It does not create lead vehicles.
 
-### Known person fields used for defaults
-- Email:
-  - `input#ConsumerData.People[0].Communications.EmailAddr`
-- Age first licensed:
-  - `input#ConsumerData.People[0].Driver.AgeFirstLicensed`
+## Start Quoting On Rapport
 
-### Known vehicle flow
-- Confirmed progressive dependency:
-  - `Year -> Manufacturer -> Model -> Sub-Model`
-- Confirmed behavior:
-  - `Manufacturer`, `Model`, and `Sub-Model` stay disabled until prior fields are set
-  - if no exact trim/submodel match is available, first non-empty submodel is acceptable
+- Auto checkbox: `input#ConsumerReports.Auto.Product-intel#102`
+- Rating state select: `select#ConsumerReports.Auto.RatingState`
+- Create quote button: `button#consentModalTrigger`
+- Quote-block Add Product link: `a#quotesButton`
+- Sidebar Add Product link: `a#addProduct`
+- Implemented primary path: verify the Start Quoting block, ensure Auto is checked, ensure rating state is `FL`, click `Create Quotes & Order Reports`, then wait for Consumer Reports, Drivers and Vehicles, Incidents, or quote landing.
+- Implemented fallback path: use Add Product / `/selectProduct` only when the Start Quoting block cannot be made valid.
 
-### Existing vehicle tiles
-- Example scan-backed headings:
-  - `h3#2CARTRUCK_0_title` -> `2021 Nissan SENTRA 3N1AB8CV1MY219911`
-  - `h3#1CARTRUCK_0_title` -> `2026 Toyota TACOMA 3TYKB5FN0TT032861`
-  - `h3#3CARTRUCK_0_title` -> `2020 Toyota RAV4 JTMW1RFV8LJ019232`
-  - `h3#4CARTRUCK_0_title` -> `2014 Toyota CAMRY 4T4BF1FK8ER414537`
-  - `h3#5CARTRUCK_0_title` -> `Add Car or Truck`
+## Select Product Form Fallback
 
-### Start Quoting block at the end of Gather Data
-- Auto checkbox:
-  - `input#ConsumerReports.Auto.Product-intel#102`
-- Rating state:
-  - `select#ConsumerReports.Auto.RatingState`
-- Final create quote button:
-  - `button#consentModalTrigger`
-- Add product link in quote block:
-  - `a#quotesButton`
-- Sidebar add product link also exists:
-  - `a#addProduct`
+- Route: `/apps/intel/102/selectProduct`
+- Rating state: `select#SelectProduct.RatingState`
+- Product: `select#SelectProduct.Product`
+- Current insured radios: `input#SelectProduct.CustomerCurrentInsured`
+- Own/rent radios: `input#SelectProduct.CustomerOwnOrRent`
+- Continue button: `button#selectProductContinue`
+- Defaults: product `AUTO`, rating state `FL`, current insured `YES`, own/rent `OWN`.
 
-### Start Quoting rule after vehicle confirmation
-- Primary path:
-  - validate the Start Quoting block on Rapport
-  - ensure `Auto` is selected/checked
-  - ensure `Rating State = FL`
-  - click `Create Quotes & Order Reports`
-  - wait for Consumer Reports / ASC product / Drivers and Vehicles / Incidents
-- Fallback path:
-  - use `/selectProduct` only if the Start Quoting block cannot be made valid
-  - use `Add Product` only as the fallback entry to `/selectProduct`
-- Validation note:
-  - a successful `Auto` tile click on Product Overview is not enough by itself
-  - the workflow must validate downstream on Rapport that the Start Quoting block actually has `Auto` committed before launching quote creation
+## Consumer Reports
 
-### Gather Data rules confirmed by the user
-- Fill email here so it does not need to be entered again later.
-- Fill age first licensed here with `16`.
-- Vehicle creation/editing belongs here, not on the later Drivers and Vehicles page.
+- Route family: `/apps/ASCPRODUCT/{id}/`
+- Text anchor: `order consumer reports`
+- Consent button: `button#orderReportsConsent-yes-btn`
+- Implemented effect: always click Yes.
 
-## 3B. Customer Summary Overview Bridge
+## Drivers And Vehicles
 
-### Page
-- URL pattern:
-  - `/apps/customer-summary/{id}/overview`
+- Route family: `/apps/ASCPRODUCT/{id}/`
+- Text anchor: `Drivers and vehicles`
+- Continue button: `button#profile-summary-submitBtn`
+- Driver actions use row-scoped add/remove buttons.
+- Vehicle actions use row-scoped add buttons and modal handling.
+- Implemented rules:
+  - Always add the lead driver.
+  - Never leave a driver unresolved.
+  - Remove extra drivers with the configured reason.
+  - Do not remove extra vehicles.
+  - Add only lead-matching vehicles to the quote and leave non-matching vehicles untouched.
+  - Save only after driver and vehicle reconciliation reaches a complete state.
 
-### Scan-backed anchors
-- visible action:
-  - `START HERE (Pre-fill included)`
-- supporting page text:
-  - `Add Product`
-  - `Quote History`
-  - `Assets Details`
+## Participant Detail Modal
 
-### Confirmed rule
-- click `START HERE (Pre-fill included)`
-- expected next state is the Product Overview Grid at `/apps/intel/102/overview`
-- allowed skip-ahead states after the click:
-  - `RAPPORT/GATHER_DATA`
-  - `SELECT_PRODUCT`
-  - `ASC_PRODUCT`
-  - `INCIDENTS`
+- Heading anchor: `Let's get some more details`
+- Save button: `button#PARTICIPANT_SAVE-btn`
+- Known controls:
+  - gender: `input#gender_1002` / `input#gender_1001`
+  - marital status: `input#maritalStatusEntCd_0006`, `input#maritalStatusEntCd_0001`, `input#maritalStatusEntCd_0007`
+  - spouse chooser: `select#maritalStatusWithSpouse_spouseName`
+  - property ownership: `select#propertyOwnershipEntCd_option`
+  - age first licensed: `input#ageFirstLicensed_ageFirstLicensed`
+  - military: `input#militaryInd_true` / `input#militaryInd_false`
+  - violations: `input#violationInd_true` / `input#violationInd_false`
+  - defensive driving: `input#defensiveDriverInd_true` / `input#defensiveDriverInd_false`
+  - email: `input#emailAddress.emailAddress`
+  - phone: `input#phoneNumber_phoneNumber`
+- Defaults: lead gender, military No, moving violations No, defensive driving No when shown, own home unless the parsed address classifies as renter, age first licensed `16`.
+- Married leads select an exact spouse match first, then a unique safe spouse candidate. Single leads skip spouse selection.
 
-### Important notes
-- this page may appear after creating a new prospect, selecting an existing prospect, or resuming a customer profile
-- do not click `START HERE` if already on `/apps/intel/102/overview` or later quote states
+## Remove Driver Modal
 
-## 4. Product Overview Grid
+- Save button: `button#REMOVE_PARTICIPANT_SAVE-btn`
+- Configured reason: `input#nonDriverReasonOthers_0006` / own car insurance.
+- Implemented effect: select the reason and save the scoped removal modal.
 
-### Page
-- URL pattern:
-  - `https://advisorpro.allstate.com/#/apps/intel/102/overview`
+## Vehicle Add Modal
 
-### Scan-backed anchors
-- page text:
-  - `Select Product`
-- product tile:
-  - `Auto`
-- primary button:
-  - `Save & Continue to Gather Data`
-- sidebar link also present:
-  - `Add Product`
+- Save button: `button#ADD_ASSET_SAVE-btn`
+- Ownership controls:
+  - own: `input#vehicleOwnershipCd_0001`
+  - lease: `input#vehicleOwnershipCd_0003`
+  - finance: `input#vehicleOwnershipCd_0007`
+- Garaging same as home: `input#garagingAddressSameAsOther-control-item-0`
+- Purchased within 90 days No: `input#purchaseDate_false`
+- Implemented defaults: garaging Yes, recent purchase No, ownership Finance when vehicle year is greater than `2015`; leave ownership blank for `2015` or older.
 
-### Confirmed rule
-- select `Auto`
-- click `Save & Continue to Gather Data`
-- wait for Gather Data / Rapport
+## Incidents
 
-### Important note
-- this is different from the older `/selectProduct` form page
-- do not treat this page as the old `SelectProduct.Product` select-form
-- use text-based matching for the `Auto` tile and `Save & Continue to Gather Data`
+- Route family: `/apps/ASCPRODUCT/{id}/`
+- Text anchor: `Incidents`
+- Continue button: `button#CONTINUE_OFFER-btn`
+- Back button: `button#BACK_TO_PROFILE_SUMMARY-btn`
+- Incident ids are dynamic; use label text.
+- Configured incident reason: `Accident caused by being hit by animal or road debris`
+- Implemented effect: choose that label and continue.
 
-## 4B. Select Product Form
+## Quote Landing
 
-### Page
-- URL pattern:
-  - `https://advisorpro.allstate.com/#/apps/intel/102/selectProduct`
+- Route family: `/apps/ASCPRODUCT/{id}/`
+- Success condition: page has quote/offer landing evidence after incidents or reconciliation.
+- Workflow returns success at the first quote-ready page.
 
-### Known controls
-- Rating state:
-  - `select#SelectProduct.RatingState`
-- Product:
-  - `select#SelectProduct.Product`
-- Current insured radios:
-  - `input#SelectProduct.CustomerCurrentInsured`
-- Own/rent radios:
-  - `input#SelectProduct.CustomerOwnOrRent`
-- Continue button:
-  - `button#selectProductContinue`
-- Current address selector also appeared in scan:
-  - `select#SelectProduct.CurrentAddress`
+## Workflow Defaults
 
-### Confirmed defaults
-- `SelectProduct.Product = AUTO`
-- `SelectProduct.RatingState = FL`
-- current insured = `YES`
-- own/rent = `OWN`
+- Rating state: `FL`
+- Current insured: `Yes`
+- Own/rent: `Own`
+- Consumer reports: `Yes`
+- Age first licensed: `16`
+- Military: `No`
+- Moving violations: `No`
+- Defensive driving: `No` only when the question appears
+- Vehicle ownership: `Finance` for `year > 2015`, blank for `year <= 2015`
+- Garaging: `Yes`
+- Purchased in last 90 days: `No`
+- Remove-driver reason: own car insurance
+- Incident reason: animal or road debris
 
-## 5. Consumer Reports
+## Safety Rules
 
-### Page
-- URL pattern seen in scan:
-  - `https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/`
-- Heading:
-  - `order consumer reports`
-
-### Known controls
-- Consent yes:
-  - `button#orderReportsConsent-yes-btn`
-
-### Confirmed rule
-- Always click `Yes`.
-
-## 6. Drivers and Vehicles
-
-### Page
-- URL pattern seen in scan:
-  - `https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/`
-- Heading:
-  - `Drivers and vehicles`
-
-### Known driver action examples
-- Add lead driver:
-  - `button#amalia-garcia-add`
-- Add spouse/other driver:
-  - `button#dennis-rivera-addToQuote`
-- Remove driver:
-  - `button#dennis-rivera-remove`
-
-### Known vehicle action examples
-- Add matching vehicle:
-  - `button#2021-nissan-sentra-add`
-  - `button#2026-toyota-tacoma 2wd-add`
-  - `button#2026-toyota-rav4-add`
-- Remove vehicle buttons also exist, but user explicitly said they are not needed for normal workflow:
-  - `button#2021-nissan-sentra-remove`
-  - `button#2026-toyota-tacoma 2wd-remove`
-  - `button#2026-toyota-rav4-remove`
-
-### Continue button
-- Save and continue:
-  - `button#profile-summary-submitBtn`
-
-### Confirmed workflow rules
-- Always add the lead driver.
-- Never leave a driver unresolved.
-- Remove extra drivers only.
-- Do not remove extra vehicles.
-- Add only lead-matching vehicles to the quote and leave non-matching vehicles untouched.
-
-## 7. Driver Details Modal
-
-### Modal heading
-- `Let's get some more details`
-
-### Known controls
-- Gender:
-  - `input#gender_1002` -> `Male`
-  - `input#gender_1001` -> `Female`
-- Marital status:
-  - `input#maritalStatusEntCd_0006` -> `Single`
-  - `input#maritalStatusEntCd_0001` -> `Married`
-  - `input#maritalStatusEntCd_0007` -> `Widowed`
-- Spouse chooser:
-  - `select#maritalStatusWithSpouse_spouseName`
-- Own/rent home:
-  - `select#propertyOwnershipEntCd_option`
-- Age first licensed:
-  - `input#ageFirstLicensed_ageFirstLicensed`
-- Military:
-  - `input#militaryInd_true`
-  - `input#militaryInd_false`
-- Moving violations:
-  - `input#violationInd_true`
-  - `input#violationInd_false`
-- Defensive driving:
-  - `input#defensiveDriverInd_true`
-  - `input#defensiveDriverInd_false`
-- Email:
-  - `input#emailAddress.emailAddress`
-- Phone:
-  - `input#phoneNumber_phoneNumber`
-- Save:
-  - `button#PARTICIPANT_SAVE-btn`
-
-### Confirmed defaults
-- gender from lead
-- military = `No`
-- moving violations = `No`
-- defensive driving = `No` when shown
-- own/rent default = `Own a home`
-- age first licensed = `16`
-
-## 8. Spouse Modal
-
-### Scan-backed behavior
-- If `Married` is selected, a spouse flow can appear.
-- One observed example showed:
-  - heading `Dennis Rivera`
-  - modal text `Add spouse`
-
-### Known controls
-- Name fields:
-  - `input#fullName_givenName`
-  - `input#fullName_middleName`
-  - `input#fullName_surname`
-  - `select#fullName_nameSuffix`
-- Gender:
-  - `input#gender_1002`
-  - `input#gender_1001`
-- Age first licensed:
-  - `input#ageFirstLicensed_ageFirstLicensed`
-- Moving violations:
-  - `input#violationInd_true`
-  - `input#violationInd_false`
-- Defensive driving:
-  - `input#defensiveDriverInd_true`
-  - `input#defensiveDriverInd_false`
-- Save:
-  - `button#PARTICIPANT_SAVE-btn`
-
-### Confirmed spouse rule
-- Aggressive heuristic:
-  - temporarily choose `Married`
-  - if the spouse selector reveals exactly one spouse candidate, select that candidate
-  - if the spouse modal appears:
-    - default gender to opposite of the lead if blank
-    - set age first licensed = `16`
-    - set moving violations = `No`
-    - set defensive driving = `No` only if the question exists
-  - if no unique spouse candidate exists, revert to the original non-spouse path
-
-## 9. Remove Driver Modal
-
-### Example heading
-- `Remove Driver Angel Test`
-
-### Known reason controls
-- `input#nonDriverReasonOthers_0008` -> duplicated or incorrect
-- `input#nonDriverReasonOthers_0006` -> has their own car insurance
-- `input#nonDriverReasonOthers_0012` -> does not have a license
-- `input#nonDriverReasonOthers_0009` -> away on military duty
-- `input#nonDriverReasonOthers_0010` -> deceased
-- `input#nonDriverReasonOthers_0013` -> no longer lives with me
-- `input#nonDriverReasonOthers_0014` -> I don't know this person
-- `input#nonDriverReasonOthers_0011` -> I don't want to cover this driver
-
-### Save controls
-- Save:
-  - `button#REMOVE_PARTICIPANT_SAVE-btn`
-- Cancel:
-  - `button#PARTICIPANT_CANCEL-btn`
-
-### Confirmed remove rule
-- When removing a driver, always choose:
-  - `input#nonDriverReasonOthers_0006`
-- User reason:
-  - remove now, but add later if requested by the customer
-
-## 10. Vehicle Add-to-Quote Modal
-
-### Example heading
-- `2021 Nissan Sentra`
-
-### Known controls
-- Ownership:
-  - `input#vehicleOwnershipCd_0001` -> `Own`
-  - `input#vehicleOwnershipCd_0003` -> `Lease`
-  - `input#vehicleOwnershipCd_0007` -> `Finance`
-- Garaging same as home:
-  - `input#garagingAddressSameAsOther-control-item-0` -> `Yes`
-  - `input#garagingAddressSameAsOther-control-item-1` -> `No`
-- Purchased within 90 days:
-  - `input#purchaseDate_true` -> `Yes`
-  - `input#purchaseDate_false` -> `No`
-- Save:
-  - `button#ADD_ASSET_SAVE-btn`
-- Cancel:
-  - `button#ASSET_CANCEL-btn`
-
-### Confirmed vehicle modal rules
-- Always set garaging = `Yes`
-- Always set recent purchase = `No`
-- If vehicle year is greater than `2015`, set ownership = `Finance`
-- If vehicle year is `2015` or older, leave ownership blank
-
-## 11. Incidents
-
-### Page
-- URL seen in scan:
-  - `https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/`
-- Heading:
-  - `Incidents`
-
-### Known controls
-- Continue:
-  - `button#CONTINUE_OFFER-btn`
-- Back:
-  - `button#BACK_TO_PROFILE_SUMMARY-btn`
-
-### Important note
-- Incident checkbox ids are dynamic and should not be treated as stable selectors.
-- Stable interaction anchor is the label text.
-
-### Example labels from scan
-- `Hit by a driver who left the scene of the accident`
-- `Hit by a driver who did not have enough insurance to cover the damage to the vehicle`
-- `Accident caused by being hit by animal or road debris`
-- `None of these`
-
-### Confirmed incident rule
-- Always choose:
-  - `Accident caused by being hit by animal or road debris`
-- Then click:
-  - `button#CONTINUE_OFFER-btn`
-
-## 12. Workflow Defaults Confirmed by User
-
-- Hotkey:
-  - `Ctrl+Alt+-`
-  - AHK binding:
-    - `^!-::`
-- Rating state:
-  - `FL`
-- Current insured:
-  - `Yes`
-- Own/rent:
-  - `Own`
-- Consumer reports:
-  - `Yes`
-- Age first licensed:
-  - `16`
-- Military:
-  - `No`
-- Moving violations:
-  - `No`
-- Defensive driving:
-  - `No` only when the question appears
-- Vehicle ownership in add-to-quote modal:
-  - `Finance` for `year > 2015`
-  - blank for `year <= 2015`
-- Garaging:
-  - `Yes`
-- Purchased in last 90 days:
-  - `No`
-- Remove-driver reason:
-  - `This driver has their own car insurance`
-- Incident reason:
-  - `Accident caused by being hit by animal or road debris`
-
-## 13. Workflow Notes
-
-- The environment is user-driven and page readiness can stall, so every page/action handler should have a timeout and a fallback path.
-- Existing vehicles should be matched by normalized `year + make + model`, ignoring trim.
-- Later Drivers and Vehicles logic should only add/remove already-listed entities and should not be used for creating new vehicles.
-- The scan history proved that `selected: false` on raw option entries is not reliable; use the parent select's `value`, `selectedIndex`, and `selectedText`.
-
-## 14. Known Gaps
-
-- Exact selector retention for the New Prospect page was not preserved in this document.
-- Exact selector retention for the Duplicate Prospect primary action button was not preserved in this document.
-- Those stages should rely on:
-  - the existing prospect fill path
-  - scan-backed duplicate matching heuristics
-  - runtime DOM discovery with timeouts/fallbacks
+- Every page wait, action wait, retry loop, and readiness loop must have an explicit timeout.
+- Do not send Enter unless the active context and target field are verified.
+- Do not assume the correct browser tab merely because Edge or Chrome is focused.
+- Preserve clipboard contents where practical; document any destructive clipboard action when preservation is not practical.
+- Scan-backed selectors and text anchors in this file are the source of truth for Advisor Pro workflow patches.
