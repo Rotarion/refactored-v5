@@ -1254,6 +1254,220 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
 }
 
+AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, attemptCount, routedToEditVehicle := "0", afterResult := "") {
+    return "rapportSnapshotActiveModalType=" AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        . ", rapportSnapshotBlockerCode=" AdvisorQuoteStatusValue(snapshot, "blockerCode")
+        . ", rapportSnapshotEditUpdateEnabled=" AdvisorQuoteStatusValue(snapshot, "editVehicleUpdateEnabled")
+        . ", rapportSnapshotRoutedToEditVehicle=" routedToEditVehicle
+        . ", rapportSnapshotAfterEditResult=" afterResult
+        . ", rapportSnapshotRouteAttemptCount=" attemptCount
+        . ", editVehiclePanelPresent=" AdvisorQuoteStatusValue(snapshot, "editVehiclePanelPresent")
+        . ", editVehicleStatus=" AdvisorQuoteStatusValue(snapshot, "editVehicleStatus")
+        . ", editVehicleYear=" AdvisorQuoteStatusValue(snapshot, "editVehicleYear")
+        . ", editVehicleMake=" AdvisorQuoteStatusValue(snapshot, "editVehicleMake")
+        . ", editVehicleModel=" AdvisorQuoteStatusValue(snapshot, "editVehicleModel")
+}
+
+AdvisorQuoteFindGatherEditVehicleForSnapshot(snapshot, actionableVehicles) {
+    if !IsObject(actionableVehicles)
+        return ""
+    year := AdvisorQuoteStatusValue(snapshot, "editVehicleYear")
+    make := AdvisorQuoteStatusValue(snapshot, "editVehicleMake")
+    model := AdvisorQuoteStatusValue(snapshot, "editVehicleModel")
+    if (year = "" || make = "" || model = "")
+        return ""
+
+    targetMake := AdvisorVehicleNormalizeMake(make)
+    targetModelKey := AdvisorVehicleDbNormalizeModelKey(model)
+    matches := []
+    for _, vehicle in actionableVehicles {
+        vehicleYear := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+        vehicleMake := IsObject(vehicle) && vehicle.Has("make") ? AdvisorVehicleNormalizeMake(vehicle["make"]) : ""
+        vehicleModel := IsObject(vehicle) && vehicle.Has("model") ? AdvisorVehicleDbNormalizeModelKey(vehicle["model"]) : ""
+        if (vehicleYear = year && vehicleMake = targetMake && vehicleModel = targetModelKey)
+            matches.Push(vehicle)
+    }
+    return (matches.Length = 1) ? matches[1] : ""
+}
+
+AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    Loop 2 {
+        snapshot := AdvisorQuoteGetGatherRapportSnapshot()
+        activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        blockerCode := AdvisorQuoteStatusValue(snapshot, "blockerCode")
+        updateEnabled := AdvisorQuoteStatusValue(snapshot, "editVehicleUpdateEnabled")
+        AdvisorQuoteAppendLog(
+            "RAPPORT_SNAPSHOT_GATE",
+            AdvisorQuoteGetLastStep(),
+            AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, A_Index, "0")
+        )
+
+        if (AdvisorQuoteStatusValue(snapshot, "result") != "OK") {
+            failureReason := "RAPPORT_SNAPSHOT_UNREADABLE: " AdvisorQuoteBuildGatherRapportSnapshotDetail(snapshot)
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-snapshot-unreadable")
+            return false
+        }
+        if (activeModalType = "" || activeModalType = "NONE")
+            return true
+
+        if (activeModalType != "GATHER_EDIT_VEHICLE") {
+            failureReason := "RAPPORT_ACTIVE_BLOCKER_UNHANDLED: activeModalType=" activeModalType ", blockerCode=" blockerCode
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-active-blocker-unhandled")
+            AdvisorQuoteAppendLog(
+                "RAPPORT_SNAPSHOT_BLOCKER_UNHANDLED",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, A_Index, "0")
+            )
+            return false
+        }
+
+        vehicle := AdvisorQuoteFindGatherEditVehicleForSnapshot(snapshot, actionableVehicles)
+        if !IsObject(vehicle) {
+            failureReason := "GATHER_EDIT_VEHICLE_NO_MATCHING_LEAD_VEHICLE: active Edit Vehicle panel could not be matched to exactly one actionable lead vehicle. " AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, A_Index, "0")
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-edit-vehicle-no-matching-lead")
+            return false
+        }
+
+        editFailureReason := ""
+        editFailureScanPath := ""
+        editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &editFailureReason, &editFailureScanPath, "snapshot-gate")
+        afterSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+        afterActiveModalType := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
+        afterResult := AdvisorQuoteStatusValue(afterSnapshot, "result")
+        AdvisorQuoteAppendLog(
+            "RAPPORT_SNAPSHOT_EDIT_ROUTE_RESULT",
+            AdvisorQuoteGetLastStep(),
+            AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, A_Index, "1", afterResult)
+                . ", routedVehicle=" AdvisorQuoteVehicleLabel(vehicle)
+                . ", editOutcome=" editOutcome
+                . ", rapportSnapshotAfterActiveModalType=" afterActiveModalType
+                . ", rapportSnapshotAfterBlockerCode=" AdvisorQuoteStatusValue(afterSnapshot, "blockerCode")
+                . ", rapportSnapshotAfterEditUpdateEnabled=" AdvisorQuoteStatusValue(afterSnapshot, "editVehicleUpdateEnabled")
+        )
+
+        if (editOutcome = "FAILED") {
+            failureReason := editFailureReason
+            failureScanPath := editFailureScanPath
+            if (failureReason = "")
+                failureReason := "GATHER_EDIT_VEHICLE_SNAPSHOT_ROUTE_FAILED"
+            if (failureScanPath = "")
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-edit-vehicle-snapshot-route-failed")
+            return false
+        }
+        if (afterResult = "OK" && afterActiveModalType != "GATHER_EDIT_VEHICLE" && AdvisorQuoteStatusValue(afterSnapshot, "editVehiclePanelPresent") != "1")
+            return true
+        if !SafeSleep(db["timeouts"]["pollMs"]) {
+            failureReason := "GATHER_EDIT_VEHICLE_SNAPSHOT_ROUTE_WAIT_FAILED"
+            return false
+        }
+    }
+
+    failureReason := "GATHER_EDIT_VEHICLE_SNAPSHOT_ROUTE_GUARD: Edit Vehicle panel remained active after two snapshot-routed attempts."
+    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-edit-vehicle-snapshot-route-guard")
+    return false
+}
+
+AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot, removeRouted := "0", inlineRouted := "0", afterModalResult := "", afterPanelResult := "") {
+    return "ascSnapshotActiveModalType=" AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        . ", ascSnapshotActivePanelType=" AdvisorQuoteStatusValue(snapshot, "activePanelType")
+        . ", ascSnapshotBlockerCode=" AdvisorQuoteStatusValue(snapshot, "blockerCode")
+        . ", ascSnapshotRoutedToRemoveModal=" removeRouted
+        . ", ascSnapshotRoutedToInlineParticipant=" inlineRouted
+        . ", ascSnapshotAfterModalResult=" afterModalResult
+        . ", ascSnapshotAfterPanelResult=" afterPanelResult
+        . ", removeDriverModalPresent=" AdvisorQuoteStatusValue(snapshot, "removeDriverModalPresent")
+        . ", inlineParticipantPanelPresent=" AdvisorQuoteStatusValue(snapshot, "inlineParticipantPanelPresent")
+}
+
+AdvisorQuoteResolveAscSnapshotBlockers(profile, db) {
+    removeAttempts := 0
+    inlineAttempts := 0
+    Loop 5 {
+        snapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+        activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+        AdvisorQuoteAppendLog(
+            "ASC_SNAPSHOT_GATE",
+            AdvisorQuoteGetLastStep(),
+            AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot)
+                . ", ascSnapshotRemoveAttemptCount=" removeAttempts
+                . ", ascSnapshotInlineAttemptCount=" inlineAttempts
+        )
+
+        result := AdvisorQuoteStatusValue(snapshot, "result")
+        if (result = "NOT_ASC_DRIVERS_VEHICLES")
+            return true
+        if (result != "OK") {
+            AdvisorQuoteAppendLog("ASC_SNAPSHOT_UNREADABLE", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(snapshot))
+            return false
+        }
+        if ((activeModalType = "" || activeModalType = "NONE") && (activePanelType = "" || activePanelType = "NONE"))
+            return true
+
+        if (activeModalType = "ASC_REMOVE_DRIVER_MODAL") {
+            removeAttempts += 1
+            if (removeAttempts > 2) {
+                AdvisorQuoteAppendLog("ASC_SNAPSHOT_REMOVE_MODAL_GUARD", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot, "1", "0"))
+                return false
+            }
+            if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+                return false
+            afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+            afterModalType := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
+            AdvisorQuoteAppendLog(
+                "ASC_SNAPSHOT_REMOVE_MODAL_ROUTE_RESULT",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot, "1", "0", AdvisorQuoteStatusValue(afterSnapshot, "result"), "")
+                    . ", ascSnapshotAfterActiveModalType=" afterModalType
+                    . ", ascSnapshotAfterBlockerCode=" AdvisorQuoteStatusValue(afterSnapshot, "blockerCode")
+            )
+            if (afterModalType != "ASC_REMOVE_DRIVER_MODAL")
+                continue
+            if !SafeSleep(db["timeouts"]["pollMs"])
+                return false
+            continue
+        }
+
+        if (activePanelType = "ASC_INLINE_PARTICIPANT_PANEL" || activeModalType = "ASC_INLINE_PARTICIPANT_PANEL") {
+            inlineAttempts += 1
+            if (inlineAttempts > 2) {
+                AdvisorQuoteAppendLog("ASC_SNAPSHOT_INLINE_PANEL_GUARD", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot, "0", "1"))
+                return false
+            }
+            if !AdvisorQuoteHandleOpenModals(profile, db, 15000)
+                return false
+            afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+            afterModalType := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
+            afterPanelType := AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
+            AdvisorQuoteAppendLog(
+                "ASC_SNAPSHOT_INLINE_PANEL_ROUTE_RESULT",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot, "0", "1", "", AdvisorQuoteStatusValue(afterSnapshot, "result"))
+                    . ", ascSnapshotAfterActiveModalType=" afterModalType
+                    . ", ascSnapshotAfterActivePanelType=" afterPanelType
+                    . ", ascSnapshotAfterBlockerCode=" AdvisorQuoteStatusValue(afterSnapshot, "blockerCode")
+            )
+            if (afterModalType != "ASC_INLINE_PARTICIPANT_PANEL" && afterPanelType != "ASC_INLINE_PARTICIPANT_PANEL")
+                continue
+            if !SafeSleep(db["timeouts"]["pollMs"])
+                return false
+            continue
+        }
+
+        AdvisorQuoteAppendLog("ASC_SNAPSHOT_BLOCKER_UNHANDLED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscSnapshotRouteDetail(snapshot))
+        return false
+    }
+
+    AdvisorQuoteAppendLog(
+        "ASC_SNAPSHOT_ROUTE_GUARD",
+        AdvisorQuoteGetLastStep(),
+        "ascSnapshotRemoveAttemptCount=" removeAttempts ", ascSnapshotInlineAttemptCount=" inlineAttempts
+    )
+    return false
+}
+
 AdvisorQuotePostProspectSubmitStates() {
     return ["DUPLICATE", "CUSTOMER_SUMMARY_OVERVIEW", "PRODUCT_OVERVIEW", "RAPPORT", "SELECT_PRODUCT", "ASC_PRODUCT", "INCIDENTS"]
 }
@@ -1622,6 +1836,10 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     AdvisorQuoteLogGatherVehiclePolicy(vehiclePolicy)
     actionableVehicles := vehiclePolicy["actionableVehicles"]
     partialYearMakeVehicles := vehiclePolicy["partialYearMakeVehicles"]
+
+    if !AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason, &failureScanPath)
+        return false
+
     if (actionableVehicles.Length = 0 && partialYearMakeVehicles.Length = 0) {
         failureReason := (vehiclePolicy["deferredVinVehicles"].Length > 0)
             ? "VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED: Gather Data has no actionable year/make/model vehicle."
@@ -4152,6 +4370,9 @@ AdvisorQuoteHandleDriversVehicles(profile, db) {
 
     if AdvisorQuoteIsIncidentsPage(db)
         return true
+
+    if !AdvisorQuoteResolveAscSnapshotBlockers(profile, db)
+        return false
 
     AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1")
     participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
