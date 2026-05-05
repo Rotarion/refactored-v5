@@ -32,7 +32,7 @@ It is a contract inventory, not a refactor design.
 - Stale Gather Data row note: `gather_stale_add_vehicle_row_status` and `cancel_stale_add_vehicle_row` were added to clean up a stale incomplete Add Car/Truck row only after all expected vehicles are already confirmed or safely promoted. The cancel action is row-scoped, never clicks Add/Remove, and verifies the row closed before the workflow continues.
 - ASCPRODUCT reconciliation note: the Drivers and Vehicles stage now uses `asc_*` status/action ops for participant marital/spouse truth, driver row add/remove, vehicle row add/promote, and save gating. ASCPRODUCT route detection is dynamic (`/apps/ASCPRODUCT/<id>/`) and does not depend on fixed route ids such as 109 or 112.
 - Resident runner Phase 1 note: `resident_runner_command` was added as a disabled-by-default, read-only resident runner skeleton. It can bootstrap `window.__advisorRunner` and report status/events through the existing `copy(String(...))` bridge, but production workflow remains on the old op path unless the AHK feature flag is explicitly enabled. Phase 1 runner commands do not click, select, add, remove, confirm, direct-navigate, or answer fields.
-- Resident runner Phase 2 note: `resident_runner_command command=runReadOnlyPoll` adds bounded read-only polling for allowlisted wait conditions and status ops. It requires `readOnly=1`, refuses unknown or mutating requests, hard-caps `timeoutMs`/`pollMs`/`maxSteps`, returns key=value status, and remains behind `advisorQuoteResidentRunnerFeatureEnabled := false` by default. `AdvisorQuoteWaitForCondition()` may try the runner only when the flag is enabled and the condition is allowlisted; otherwise it uses the existing `wait_condition` op loop.
+- Resident runner Phase 2 note: `resident_runner_command command=runReadOnlyPoll` adds bounded read-only polling for allowlisted wait conditions and status ops. It requires `readOnly=1`, refuses unknown or mutating requests, hard-caps `timeoutMs`/`pollMs`/`maxSteps`, returns key=value status, and remains behind `advisorQuoteResidentRunnerFeatureEnabled := false` by default. After bootstrap, AHK can use a tiny `copy(String(...))` snippet that calls `window.__advisorRunner.handleTinyCommand(...)`, so status/poll commands do not paste the full generated operator. `AdvisorQuoteWaitForCondition()` may try the runner only when the flag is enabled and the condition is allowlisted; otherwise it uses the existing `wait_condition` op loop.
 
 ## Top-Level Op Inventory
 
@@ -106,13 +106,15 @@ Negative-evidence risk: `add_asset_modal_closed` returns `1` when `document.getE
 
 `resident_runner_command` supports `runReadOnlyPoll` in addition to the Phase 1 commands. This command is a read-only allowlisted polling pilot, not autonomous JS automation.
 
+Bootstrap still uses the normal generated `ops_result.js` op contract. Once `window.__advisorRunner` exists, the runner exposes `handleTinyCommand(commandArgs)`. AHK may call that method with a tiny `copy(String(...))` snippet instead of rendering and pasting the full generated operator for every status/wait command. The tiny command returns the same key=value contract as `resident_runner_command`.
+
 Accepted args:
 
 - `conditionName` or `statusOp`
 - `conditionArgs`
-- `timeoutMs`
-- `pollMs`
-- `maxSteps`
+- `timeoutMs`, capped to tiny work in lean mode
+- `pollMs`, ignored in lean mode because AHK owns sleeps between reads
+- `maxSteps`, capped to one immediate read for `runReadOnlyPoll` through the tiny bridge
 - `expectedBuildHash`
 - `readOnly=1`
 - `allowedConditions`
@@ -201,8 +203,10 @@ AHK wrappers:
 
 - `AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "")`
 - `AdvisorQuoteRunnerReadStatus(opName, args)`
+- `AdvisorQuoteRunnerTinyCommand(command, args := Map(), timeoutMs := 1500)`
+- `AdvisorQuoteExecuteTinyRunnerJs(js, timeoutMs := 1500)`
 
-The feature flag remains `advisorQuoteResidentRunnerFeatureEnabled := false` by default, with `advisorQuoteResidentRunnerReadOnlyOnly := true`. Any runner error, missing/stale runner, wrong context, refused request, empty result, or unsupported condition/status op falls back to the old AHK-mediated op path. Mutating ops remain on the existing op path.
+The feature flag remains `advisorQuoteResidentRunnerFeatureEnabled := false` by default, with `advisorQuoteResidentRunnerReadOnlyOnly := true`. `advisorQuoteResidentRunnerUseTinyBridge := true` only matters after the main runner feature flag is explicitly enabled. Any runner error, missing/stale runner, wrong context, refused request, empty result, or unsupported condition/status op falls back to the old AHK-mediated op path. Mutating ops remain on the existing op path.
 
 ## Page State Values
 
@@ -257,7 +261,7 @@ The smoke test covers representative DOM/location cases for `CUSTOMER_SUMMARY_OV
 - `ensure_start_quoting_auto_checkbox` returns keys: `result`, `autoPresent`, `autoCheckedBefore`, `autoCheckedAfter`, `clicked`, `directSetUsed`, `method`, `failedFields`, and `alerts`. It targets only `ConsumerReports.Auto.Product-intel#102`.
 - `address_verification_status` returns keys: `result`, `modalPresent`, `radioCount`, `continuePresent`, `continueEnabled`, `enteredText`, `suggestionCount`, `suggestions`, `selectedValue`, `evidence`, `missing`, and `url`.
 - `handle_address_verification` returns keys: `result`, `method`, `selectedValue`, `selectedText`, `selectedIndex`, `radioSelected`, `continueButtonPresent`, `continueButtonEnabledBefore`, `continueButtonEnabledAfter`, `continueClicked`, `enteredText`, `suggestions`, `matchScore`, `matchedBy`, `failedFields`, and `evidence`. On unit-preserving fallback it can also return `unitDroppedOrNotShown`.
-- `resident_runner_command` supports `bootstrap`, `status`, `stop`, `reset`, `getEvents`, read-only `runUntilBlocked`, and Phase 2 `runReadOnlyPoll`. `bootstrap` installs `window.__advisorRunner`; `status` returns runner health plus `routeFamily` and `detectedState`; `stop` sets only a runner stop flag; `reset` clears runner state when not running; `getEvents` returns a capped `eventsJson`; `runUntilBlocked` requires `readOnly=1`, reads only URL/route/state/modal evidence, and returns quickly on `MAX_STEPS`, `TIMEOUT`, `STOPPED`, `STALE_BUILD`, or `BLOCKED`. `runReadOnlyPoll` requires `readOnly=1`, polls only allowlisted wait/status reads, and returns `OK`, `TIMEOUT`, `MAX_STEPS`, `STOPPED`, `STALE_BUILD`, `WRONG_CONTEXT`, `REFUSED`, or `ERROR`. Non-read-only or mutating runner requests are refused with `mutatingRequestRefused=1`.
+- `resident_runner_command` supports `bootstrap`, `status`, `stop`, `reset`, `getEvents`, read-only `runUntilBlocked`, and Phase 2 `runReadOnlyPoll`. `bootstrap` installs `window.__advisorRunner` with `handleTinyCommand`; `status` returns runner health plus `routeFamily` and `detectedState`; `stop` sets only a runner stop flag; `reset` clears runner state when not running; `getEvents` returns a capped `eventsJson`; `runUntilBlocked` requires `readOnly=1`, reads only URL/route/state/modal evidence, and returns quickly on `MAX_STEPS`, `TIMEOUT`, `STOPPED`, `STALE_BUILD`, or `BLOCKED`. `runReadOnlyPoll` requires `readOnly=1`, polls only allowlisted wait/status reads, and returns `OK`, `TIMEOUT`, `MAX_STEPS`, `STOPPED`, `STALE_BUILD`, `WRONG_CONTEXT`, `REFUSED`, or `ERROR`. In tiny-bridge mode it performs one immediate read and lets AHK sleep/retry. Non-read-only or mutating runner requests are refused with `mutatingRequestRefused=1`.
 
 ## Coverage Summary
 

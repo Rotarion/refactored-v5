@@ -4,7 +4,7 @@
 
 The current Advisor automation uses a reliable but expensive one-op-at-a-time DevTools bridge. For every status read, action, scan, or wait poll, AutoHotkey renders the full Advisor operator, pastes it into DevTools, submits it, waits for `copy(String(...))` output, restores the clipboard, and returns to AHK. This keeps ownership clear, but ASCPRODUCT and Gather Data now perform many small status transitions, so repeated full injection is slow and fragile.
 
-A resident runner is feasible as a bounded page-resident state machine installed at `window.__advisorRunner`. The recommended implementation is a hybrid: add one backward-compatible operator command, `resident_runner_command`, to the existing generated Advisor operator. That command bootstraps and talks to `window.__advisorRunner` while preserving the existing `ops_result.js`, `@@OP@@` / `@@ARGS@@`, and `copy(String(...))` transport contracts.
+A resident runner is feasible as a bounded page-resident state machine installed at `window.__advisorRunner`. The recommended implementation is a hybrid: add one backward-compatible operator command, `resident_runner_command`, to the existing generated Advisor operator. The full generated operator is used for bootstrap and fallback. After bootstrap, AHK can send tiny snippets that call `window.__advisorRunner.handleTinyCommand(...)`, while preserving the existing `ops_result.js`, `@@OP@@` / `@@ARGS@@`, and `copy(String(...))` transport contracts.
 
 The first implementation phase should be disabled by default and read-only. It may read route/state/status, run bounded status polling, collect a small event ring buffer, and return `BLOCKED`. It must not click, add, remove, confirm, select spouse, resolve duplicates, resolve addresses, create quotes, or use sidebar Add Product. AHK remains the workflow owner and the existing op bridge remains the fallback.
 
@@ -30,6 +30,14 @@ advisorQuoteResidentRunnerReadOnlyOnly := true
 ```
 
 When the flag is disabled, production behavior is unchanged and `AdvisorQuoteWaitForCondition()` continues to use the old `AdvisorQuoteRunOp("wait_condition", ...)` polling loop. When the flag is explicitly enabled, AHK may try `AdvisorQuoteRunnerWaitCondition()` for allowlisted conditions. Any missing runner, stale build, wrong context, refused command, error, empty result, or unsupported condition falls back to the old op path without changing the business decision.
+
+Phase 2 now uses a lean bridge for post-bootstrap runner commands:
+
+- Bootstrap still uses `AdvisorQuoteRunOp("resident_runner_command", ...)`.
+- Runner `status`, `stop`, `reset`, `getEvents`, `runUntilBlocked`, and `runReadOnlyPoll` can use a tiny `copy(String(...))` snippet that calls `window.__advisorRunner.handleTinyCommand(...)`.
+- `advisorQuoteResidentRunnerUseTinyBridge := true` enables this lean path only when `advisorQuoteResidentRunnerFeatureEnabled := true`.
+- AHK owns polling cadence. `AdvisorQuoteRunnerWaitCondition()` repeats one-read tiny commands and sleeps in AHK between reads.
+- JS-side `runReadOnlyPoll` no longer performs long synchronous browser loops. Tiny-mode reads are capped to one immediate read; direct runner loops are hard-capped to very small work.
 
 `runReadOnlyPoll` accepts:
 
@@ -60,7 +68,7 @@ It returns key=value fields:
 - `readOnly=1`
 - `mutatingRequestRefused=0|1`
 
-The command refuses to run unless `readOnly=1`, refuses unknown conditions/status ops, refuses known mutating ops, checks stale build evidence, can reject wrong context, and hard-caps `timeoutMs`, `pollMs`, and `maxSteps`. The loop is synchronous to preserve the existing DevTools `copy(String(...))` contract, so it is bounded aggressively and must return control quickly.
+The command refuses to run unless `readOnly=1`, refuses unknown conditions/status ops, refuses known mutating ops, checks stale build evidence, can reject wrong context, and hard-caps `timeoutMs`, `pollMs`, and `maxSteps`. In tiny-bridge mode the command performs one immediate read and returns control to AHK; AHK repeats tiny reads if a wait needs polling. This avoids pasting the full generated operator and avoids freezing DevTools with browser-side busy waits.
 
 Allowed Phase 2 wait conditions:
 
@@ -100,6 +108,8 @@ Phase 2 AHK wrappers:
 
 - `AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "")`
 - `AdvisorQuoteRunnerReadStatus(opName, args)`
+- `AdvisorQuoteExecuteTinyRunnerJs(js, timeoutMs := 1500)`
+- `AdvisorQuoteRunnerTinyCommand(command, args := Map(), timeoutMs := 1500)`
 
 Phase 2 trace logs:
 
@@ -107,6 +117,10 @@ Phase 2 trace logs:
 - `ADVISOR_RUNNER_WAIT_USED`
 - `ADVISOR_RUNNER_WAIT_FALLBACK`
 - `ADVISOR_RUNNER_WAIT_RESULT`
+- `ADVISOR_RUNNER_TINY_PAYLOAD`
+- `ADVISOR_RUNNER_TINY_RESULT`
+- `ADVISOR_RUNNER_TINY_FALLBACK`
+- `ADVISOR_RUNNER_REBOOTSTRAP`
 
 ## Current Bridge Flow
 
@@ -154,7 +168,7 @@ The full Advisor operator is rendered and pasted for each small op. A typical AS
 - `scan_current_page`
 - repeated status re-reads after each row action
 
-Each call pays the same DevTools focus, clipboard, paste, submit, wait, and restore cost. There is no current Advisor-specific small-snippet command path for status polling.
+Each old-path call pays the same DevTools focus, clipboard, paste, submit, wait, and restore cost. The lean resident bridge adds an Advisor-specific tiny-snippet command path for runner status/polling after bootstrap, but the old full-op path remains the production default and fallback.
 
 ## Existing Operator Runtime Contract
 
@@ -360,12 +374,12 @@ Failure modes: missing runner, output too large. The runner must cap output to p
 
 ### `runUntilBlocked`
 
-Purpose: Run a bounded read-only status loop inside the page until a known stop or blocked state is reached.
+Purpose: Run a bounded read-only status loop inside the page until a known stop or blocked state is reached. In lean tiny-bridge use, this is intentionally capped to tiny work and AHK owns repeated polling.
 
 Args:
 
-- `maxSteps`, default 20, hard cap
-- `maxMs`, default 2000, hard cap
+- `maxSteps`, default 1, tiny hard cap 3
+- `maxMs`, default 250, tiny hard cap 250
 - `readOnly=1`, required in phase 1
 - `allowedRouteFamilies`
 - `allowedStates`

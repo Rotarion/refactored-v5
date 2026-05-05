@@ -4273,8 +4273,8 @@ copy(String((() => {
             eventSeq: String(this.eventSeq)
           };
         }
-        const maxSteps = advisorRunnerClampInt(source.maxSteps, 20, 1, 100);
-        const maxMs = source.maxMs === undefined ? 2000 : advisorRunnerClampInt(source.maxMs, 0, 0, 10000);
+        const maxSteps = advisorRunnerClampInt(source.maxSteps, 1, 1, 3);
+        const maxMs = source.maxMs === undefined ? 250 : advisorRunnerClampInt(source.maxMs, 0, 0, 250);
         const started = advisorRunnerNow();
         let steps = 0;
         let page = this.readPage(source);
@@ -4478,11 +4478,10 @@ copy(String((() => {
           return baseResult('WRONG_CONTEXT', { blockedReason: 'wrong-context' });
         }
 
-        const timeoutMs = source.timeoutMs === undefined ? 1000 : advisorRunnerClampInt(source.timeoutMs, 0, 0, 5000);
-        const pollMs = source.pollMs === undefined ? 100 : advisorRunnerClampInt(source.pollMs, 0, 0, 1000);
-        const maxSteps = advisorRunnerClampInt(source.maxSteps, 20, 1, 100);
+        const timeoutMs = source.timeoutMs === undefined ? 1 : advisorRunnerClampInt(source.timeoutMs, 0, 0, 250);
+        const pollMs = 0;
+        const maxSteps = advisorRunnerClampInt(source.maxSteps, 1, 1, 3);
         const requireKnownRoute = source.requireKnownRoute === undefined ? true : advisorRunnerBool(source.requireKnownRoute);
-        const deadline = started + timeoutMs;
 
         this.running = true;
         this.lastAction = 'runReadOnlyPoll';
@@ -4521,15 +4520,6 @@ copy(String((() => {
                 return baseResult('OK', { matched: '1', blockedReason: '' });
               }
             }
-            if (advisorRunnerNow() >= deadline) {
-              this.lastBlockedReason = 'timeout';
-              this.addEvent('blocked', 'timeout', { conditionName, statusOp, steps });
-              return baseResult('TIMEOUT', { blockedReason: 'timeout' });
-            }
-            const waitUntil = Math.min(deadline, advisorRunnerNow() + pollMs);
-            while (pollMs > 0 && advisorRunnerNow() < waitUntil) {
-              // Bounded synchronous wait keeps the DevTools bridge contract non-async.
-            }
           }
           this.lastBlockedReason = 'max-steps';
           this.addEvent('blocked', 'max-steps', { conditionName, statusOp, steps });
@@ -4543,6 +4533,45 @@ copy(String((() => {
         } finally {
           this.running = false;
         }
+      },
+      handleTinyCommand(source = {}) {
+        const command = safe(source.command || source.cmd).trim() || 'status';
+        if (command === 'bootstrap') {
+          const page = this.readPage(source);
+          return linesOut({
+            result: 'ALREADY_BOOTSTRAPPED',
+            runnerId: this.runnerId,
+            version: this.version,
+            buildHash: this.buildHash,
+            url: page.url,
+            state: page.detectedState,
+            eventSeq: String(this.eventSeq),
+            message: 'runner-present'
+          });
+        }
+        if (command === 'status') return linesOut(this.status(source));
+        if (command === 'stop') return linesOut(this.stop(safe(source.reason || '')));
+        if (command === 'reset') return linesOut(this.reset(advisorRunnerBool(source.clearEvents), safe(source.reason || '')));
+        if (command === 'getEvents') return linesOut(this.getEvents(source));
+        if (command === 'runUntilBlocked') {
+          return linesOut(this.runUntilBlocked(Object.assign({}, source, {
+            maxSteps: String(advisorRunnerClampInt(source.maxSteps, 1, 1, 3)),
+            maxMs: String(advisorRunnerClampInt(source.maxMs, 250, 0, 250))
+          })));
+        }
+        if (command === 'runReadOnlyPoll' || command === 'readWaitConditionOnce') {
+          return linesOut(this.runReadOnlyPoll(Object.assign({}, source, {
+            timeoutMs: '1',
+            pollMs: '0',
+            maxSteps: '1'
+          })));
+        }
+        return linesOut({
+          result: 'ERROR',
+          running: this.running ? '1' : '0',
+          stopRequested: this.stopRequested ? '1' : '0',
+          reason: `unknown-command:${compact(command, 80)}`
+        });
       }
     };
     runner.addEvent('bootstrap', 'runner-created', { version, buildHash });
@@ -4569,7 +4598,7 @@ copy(String((() => {
         const buildHash = safe(source.buildHash || 'dev').trim() || 'dev';
         const existing = host.__advisorRunner || null;
         const replaceStale = advisorRunnerBool(source.replaceStale);
-        if (existing && existing.version === version && existing.buildHash === buildHash) {
+        if (existing && existing.version === version && existing.buildHash === buildHash && typeof existing.handleTinyCommand === 'function') {
           const page = advisorRunnerReadPage(source);
           if (typeof existing.addEvent === 'function')
             existing.addEvent('bootstrap', 'already-bootstrapped');
@@ -4646,6 +4675,9 @@ copy(String((() => {
         }
         return linesOut({ result: 'MISSING', stopRequested: '0', running: '0', reason: safe(source.reason || '') });
       }
+
+      if (typeof runner.handleTinyCommand === 'function')
+        return runner.handleTinyCommand(source);
 
       if (command === 'status') return linesOut(runner.status(source));
       if (command === 'stop') return linesOut(runner.stop(safe(source.reason || '')));

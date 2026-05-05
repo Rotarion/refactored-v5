@@ -795,6 +795,21 @@ function runOperator(op, args, document, href = 'https://advisorpro.allstate.com
   return runOperatorInContext(op, args, createOperatorContext(document, href));
 }
 
+function tinyRunnerCommandScript(args) {
+  return `copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorRunner; if (!r || typeof r.handleTinyCommand !== 'function') return 'result=MISSING\\nreason=no-runner'; return r.handleTinyCommand(${JSON.stringify(args || {})}); } catch (e) { return 'result=ERROR\\nmessage=' + String(e && e.message || e); } })()))`;
+}
+
+function runTinyRunnerCommandInContext(args, operatorContext) {
+  operatorContext.state.copied = '';
+  vm.runInNewContext(tinyRunnerCommandScript(args), operatorContext.context, { timeout: 1000 });
+  return operatorContext.state.copied;
+}
+
+function operatorRuntimeSize() {
+  const sourcePath = path.join(__dirname, '..', 'assets', 'js', 'advisor_quote', 'ops_result.js');
+  return fs.readFileSync(sourcePath, 'utf8').length;
+}
+
 function testClickHelperDoesNotDoubleSubmit() {
   const form = {
     requestSubmitCalls: 0,
@@ -955,6 +970,12 @@ function testResidentRunnerContracts() {
   ]);
   assert.strictEqual(missing.result, 'MISSING');
 
+  const tinyMissing = assertKeyBlock(runTinyRunnerCommandInContext({
+    command: 'status'
+  }, createOperatorContext(new FakeDocument())), ['result', 'reason']);
+  assert.strictEqual(tinyMissing.result, 'MISSING');
+  assert.strictEqual(tinyMissing.reason, 'no-runner');
+
   const safeButton = createButton('runner-safe-button', 'Do Not Click');
   const runnerDoc = pageDoc('Gather Data Vehicles Start Quoting', [safeButton]);
   const runnerContext = createOperatorContext(runnerDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/rapport');
@@ -971,6 +992,13 @@ function testResidentRunnerContracts() {
   assert.strictEqual(bootstrap.version, 'test-v1');
   assert.strictEqual(bootstrap.buildHash, 'hash-a');
   assert.ok(runnerContext.context.__advisorRunner);
+  assert.strictEqual(typeof runnerContext.context.__advisorRunner.handleTinyCommand, 'function');
+
+  const tinyStatusPayloadLength = tinyRunnerCommandScript(baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  })).length;
+  assert.ok(tinyStatusPayloadLength < operatorRuntimeSize() / 20);
 
   const secondBootstrap = assertKeyBlock(runOperatorInContext('resident_runner_command', bootstrapArgs, runnerContext), [
     'result', 'runnerId', 'version', 'buildHash', 'url', 'state', 'eventSeq', 'message'
@@ -988,12 +1016,29 @@ function testResidentRunnerContracts() {
   assert.strictEqual(status.routeFamily, 'INTEL_102');
   assert.strictEqual(status.detectedState, 'RAPPORT');
 
+  const tinyStatus = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), [
+    'result', 'running', 'stopRequested', 'version', 'buildHash', 'url', 'routeFamily', 'detectedState', 'eventSeq', 'eventCount'
+  ]);
+  assert.strictEqual(tinyStatus.result, 'OK');
+  assert.strictEqual(tinyStatus.routeFamily, 'INTEL_102');
+  assert.strictEqual(tinyStatus.detectedState, 'RAPPORT');
+
   const stale = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'status',
     expectedBuildHash: 'hash-b'
   }), runnerContext), ['result', 'buildHash', 'routeFamily', 'detectedState']);
   assert.strictEqual(stale.result, 'STALE_BUILD');
   assert.strictEqual(stale.buildHash, 'hash-a');
+
+  const tinyStale = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-b'
+  }), runnerContext), ['result', 'buildHash', 'routeFamily', 'detectedState']);
+  assert.strictEqual(tinyStale.result, 'STALE_BUILD');
+  assert.strictEqual(tinyStale.buildHash, 'hash-a');
 
   const stopped = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'stop',
@@ -1010,6 +1055,21 @@ function testResidentRunnerContracts() {
   assert.strictEqual(reset.result, 'OK');
   assert.strictEqual(reset.stopRequested, '0');
 
+  const tinyStopped = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'stop',
+    reason: 'tiny-stop'
+  }), runnerContext), ['result', 'stopRequested', 'running', 'reason']);
+  assert.strictEqual(tinyStopped.result, 'OK');
+  assert.strictEqual(tinyStopped.stopRequested, '1');
+
+  const tinyReset = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'reset',
+    clearEvents: '0',
+    reason: 'tiny-reset'
+  }), runnerContext), ['result', 'eventCount', 'stopRequested', 'running']);
+  assert.strictEqual(tinyReset.result, 'OK');
+  assert.strictEqual(tinyReset.stopRequested, '0');
+
   const events = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'getEvents',
     sinceSeq: '0',
@@ -1018,6 +1078,15 @@ function testResidentRunnerContracts() {
   assert.strictEqual(events.result, 'OK');
   assert.strictEqual(events.truncated, '0');
   assert.ok(Array.isArray(JSON.parse(events.eventsJson)));
+
+  const tinyEvents = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'getEvents',
+    sinceSeq: '0',
+    limit: '3'
+  }), runnerContext), ['result', 'eventCount', 'truncated', 'eventsJson']);
+  assert.strictEqual(tinyEvents.result, 'OK');
+  assert.strictEqual(tinyEvents.truncated, '0');
+  assert.ok(Array.isArray(JSON.parse(tinyEvents.eventsJson)));
 
   const maxSteps = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'runUntilBlocked',
@@ -1048,10 +1117,90 @@ function testResidentRunnerContracts() {
   assert.strictEqual(refused.result, 'BLOCKED');
   assert.strictEqual(refused.mutatingRequestRefused, '1');
 
+  const tinyMaxSteps = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '1',
+    maxSteps: '50',
+    maxMs: '10000'
+  }), runnerContext), [
+    'result', 'blockedReason', 'steps', 'elapsedMs', 'url', 'routeFamily', 'detectedState', 'lastStatusOp', 'manualRequired', 'eventSeq'
+  ]);
+  assert.strictEqual(tinyMaxSteps.result, 'MAX_STEPS');
+  assert.strictEqual(tinyMaxSteps.steps, '3');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  const tinyTimeout = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '1',
+    maxSteps: '50',
+    maxMs: '0'
+  }), runnerContext), ['result', 'blockedReason', 'steps']);
+  assert.strictEqual(tinyTimeout.result, 'TIMEOUT');
+  assert.strictEqual(tinyTimeout.steps, '0');
+
+  const tinyRefused = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runUntilBlocked',
+    readOnly: '0',
+    maxSteps: '1'
+  }), runnerContext), ['result', 'blockedReason', 'mutatingRequestRefused', 'manualRequired']);
+  assert.strictEqual(tinyRefused.result, 'BLOCKED');
+  assert.strictEqual(tinyRefused.mutatingRequestRefused, '1');
+
   const pollKeys = [
     'result', 'conditionName', 'statusOp', 'matched', 'steps', 'elapsedMs', 'url', 'routeFamily',
     'detectedState', 'lastValue', 'blockedReason', 'eventSeq', 'readOnly', 'mutatingRequestRefused'
   ];
+  const tinyPollRefusedReadOnly = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_rapport',
+    readOnly: '0',
+    timeoutMs: '100',
+    pollMs: '100',
+    maxSteps: '50'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(tinyPollRefusedReadOnly.result, 'REFUSED');
+  assert.strictEqual(tinyPollRefusedReadOnly.mutatingRequestRefused, '1');
+
+  const tinyPollRefusedMutating = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    statusOp: 'click_by_id',
+    readOnly: '1',
+    timeoutMs: '100',
+    pollMs: '100',
+    maxSteps: '50'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(tinyPollRefusedMutating.result, 'REFUSED');
+  assert.strictEqual(tinyPollRefusedMutating.blockedReason, 'mutating-op-refused');
+  assert.strictEqual(tinyPollRefusedMutating.mutatingRequestRefused, '1');
+
+  const tinyPollRapport = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'is_rapport',
+    readOnly: '1',
+    allowedConditions: 'is_rapport',
+    timeoutMs: '100',
+    pollMs: '100',
+    maxSteps: '50',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(tinyPollRapport.result, 'OK');
+  assert.strictEqual(tinyPollRapport.matched, '1');
+  assert.strictEqual(tinyPollRapport.steps, '1');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  const tinyPollNoLongLoop = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    conditionName: 'on_product_overview',
+    readOnly: '1',
+    allowedConditions: 'on_product_overview',
+    timeoutMs: '5000',
+    pollMs: '5000',
+    maxSteps: '50'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(tinyPollNoLongLoop.result, 'MAX_STEPS');
+  assert.strictEqual(tinyPollNoLongLoop.steps, '1');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
   const pollRefusedReadOnly = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'runReadOnlyPoll',
     conditionName: 'is_rapport',
@@ -1185,6 +1334,13 @@ function testResidentRunnerContracts() {
   assert.strictEqual(afterHashRoute.result, 'OK');
   assert.strictEqual(afterHashRoute.routeFamily, 'ASCPRODUCT');
   assert.strictEqual(afterHashRoute.detectedState, 'ASC_PRODUCT');
+  const tinyAfterHashRoute = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'status',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), ['result', 'routeFamily', 'detectedState']);
+  assert.strictEqual(tinyAfterHashRoute.result, 'OK');
+  assert.strictEqual(tinyAfterHashRoute.routeFamily, 'ASCPRODUCT');
+  assert.strictEqual(tinyAfterHashRoute.detectedState, 'ASC_PRODUCT');
 
   runnerContext.context.location.href = 'https://example.invalid/';
   runnerContext.context.document = pageDoc('Unknown page');

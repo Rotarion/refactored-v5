@@ -12,6 +12,7 @@ global advisorQuoteGatherAutoCommitted := false
 global advisorQuoteProductTileRecoveryAttempted := false
 global advisorQuoteResidentRunnerFeatureEnabled := false
 global advisorQuoteResidentRunnerReadOnlyOnly := true
+global advisorQuoteResidentRunnerUseTinyBridge := true
 
 RunAdvisorQuoteWorkflowFromClipboard() {
     raw := Trim(A_Clipboard)
@@ -4587,7 +4588,7 @@ AdvisorQuoteResidentRunnerVersion() {
 }
 
 AdvisorQuoteResidentRunnerBuildHash() {
-    return "advisor-resident-runner-phase2-read-only-poll"
+    return "advisor-resident-runner-phase2-tiny-bridge"
 }
 
 AdvisorQuoteRunnerBuildCommandArgs(command, args := Map()) {
@@ -4616,6 +4617,13 @@ AdvisorQuoteRunnerCommand(command, args := Map(), eventName := "") {
         AdvisorQuoteAppendLog("ADVISOR_RUNNER_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", reason=stop-requested")
         return Map("result", "STOP_REQUESTED", "command", command)
     }
+    global advisorQuoteResidentRunnerUseTinyBridge
+    if (command != "bootstrap" && advisorQuoteResidentRunnerUseTinyBridge = true)
+        return AdvisorQuoteRunnerTinyCommand(command, args, eventName)
+    return AdvisorQuoteRunnerFullCommand(command, args, eventName)
+}
+
+AdvisorQuoteRunnerFullCommand(command, args := Map(), eventName := "") {
     raw := AdvisorQuoteRunOp("resident_runner_command", AdvisorQuoteRunnerBuildCommandArgs(command, args), 2, 120)
     status := AdvisorQuoteParseKeyValueLines(raw)
     if (status.Count = 0) {
@@ -4634,10 +4642,73 @@ AdvisorQuoteRunnerCommand(command, args := Map(), eventName := "") {
     return status
 }
 
+AdvisorQuoteRunnerTinyCommand(command, args := Map(), eventName := "") {
+    commandArgs := AdvisorQuoteRunnerBuildCommandArgs(command, args)
+    js := AdvisorQuoteBuildTinyRunnerCommandJs(commandArgs)
+    payloadLength := StrLen(js)
+    start := A_TickCount
+    AdvisorQuoteAppendLog("ADVISOR_RUNNER_TINY_PAYLOAD", AdvisorQuoteGetLastStep(), "command=" command ", payloadLength=" payloadLength)
+    raw := AdvisorQuoteExecuteTinyRunnerJs(js, 1500)
+    elapsed := A_TickCount - start
+    resultLength := StrLen(String(raw ?? ""))
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    if (status.Count = 0)
+        status := Map("result", "EMPTY", "command", command, "fallbackReason", "empty-result")
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_TINY_RESULT",
+        AdvisorQuoteGetLastStep(),
+        "command=" command
+            . ", result=" AdvisorQuoteStatusValue(status, "result")
+            . ", payloadLength=" payloadLength
+            . ", resultLength=" resultLength
+            . ", elapsedMs=" elapsed
+            . ", runnerPresent=" (AdvisorQuoteStatusValue(status, "result") = "MISSING" ? "0" : "1")
+            . ", buildHash=" AdvisorQuoteStatusValue(status, "buildHash")
+            . ", url=" AdvisorQuoteStatusValue(status, "url")
+    )
+    if (AdvisorQuoteStatusValue(status, "result") = "EMPTY") {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_TINY_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", fallbackReason=empty-result")
+        return status
+    }
+    AdvisorQuoteAppendLog(
+        eventName,
+        AdvisorQuoteGetLastStep(),
+        "command=" command
+            . ", result=" AdvisorQuoteStatusValue(status, "result")
+            . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+            . ", detectedState=" AdvisorQuoteStatusValue(status, "detectedState")
+            . ", eventSeq=" AdvisorQuoteStatusValue(status, "eventSeq")
+    )
+    return status
+}
+
+AdvisorQuoteBuildTinyRunnerCommandJs(commandArgs) {
+    argLiteral := JsLiteral(commandArgs)
+    return "copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorRunner; if (!r || typeof r.handleTinyCommand !== 'function') return 'result=MISSING\nreason=no-runner'; return r.handleTinyCommand(" argLiteral "); } catch (e) { return 'result=ERROR\nmessage=' + String(e && e.message || e); } })()))"
+}
+
+AdvisorQuoteExecuteTinyRunnerJs(js, timeoutMs := 1500) {
+    if StopRequested()
+        return ""
+    if !AdvisorQuoteEnsureConsoleBridge() {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_TINY_FALLBACK", AdvisorQuoteGetLastStep(), "command=tiny-js, fallbackReason=ensure-console-failed")
+        return ""
+    }
+    result := Trim(String(AdvisorQuoteExecuteBridgeJs(js, true, timeoutMs)))
+    if (result != "") {
+        AdvisorQuoteMarkConsoleBridgeFocused()
+        return result
+    }
+    AdvisorQuoteInvalidateConsoleBridge("tiny-runner-command-empty")
+    return ""
+}
+
 AdvisorQuoteEnsureResidentRunner() {
-    status := AdvisorQuoteRunnerCommand("bootstrap", Map("replaceStale", "0"), "ADVISOR_RUNNER_BOOTSTRAP")
+    status := AdvisorQuoteRunnerCommand("bootstrap", Map("replaceStale", "1"), "ADVISOR_RUNNER_BOOTSTRAP")
     result := AdvisorQuoteStatusValue(status, "result")
-    return result = "OK" || result = "ALREADY_BOOTSTRAPPED"
+    if (result = "STALE_REPLACED")
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_REBOOTSTRAP", AdvisorQuoteGetLastStep(), "result=STALE_REPLACED, runnerId=" AdvisorQuoteStatusValue(status, "runnerId"))
+    return result = "OK" || result = "ALREADY_BOOTSTRAPPED" || result = "STALE_REPLACED"
 }
 
 AdvisorQuoteRunnerStatus() {
@@ -4743,27 +4814,47 @@ AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "") {
     if !AdvisorQuoteEnsureResidentRunner()
         return AdvisorQuoteRunnerNotUsed("bootstrap-failed")
 
-    runnerArgs := AdvisorQuoteMergeArgs(args, Map(
+    waitTimeoutMs := Trim(String(timeoutMs)) != "" ? Max(1, Integer(timeoutMs)) : 1000
+    waitPollMs := Trim(String(pollMs)) != "" ? Max(0, Integer(pollMs)) : 100
+    start := A_TickCount
+    steps := 0
+    lastStatus := Map()
+    while ((A_TickCount - start) < waitTimeoutMs) {
+        if StopRequested()
+            return AdvisorQuoteRunnerUsedResult(false, Map("result", "STOPPED", "matched", "0", "steps", steps, "elapsedMs", A_TickCount - start))
+        runnerArgs := AdvisorQuoteMergeArgs(args, Map(
+            "conditionName", name,
+            "conditionArgs", args,
+            "readOnly", "1",
+            "allowedConditions", name,
+            "timeoutMs", "1",
+            "pollMs", "0",
+            "maxSteps", "1"
+        ))
+        lastStatus := AdvisorQuoteRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_WAIT_RESULT")
+        result := AdvisorQuoteStatusValue(lastStatus, "result")
+        matched := AdvisorQuoteStatusValue(lastStatus, "matched")
+        stepValue := AdvisorQuoteStatusValue(lastStatus, "steps")
+        steps += Max(1, Integer(stepValue = "" ? "1" : stepValue))
+        if (result = "OK" && matched = "1")
+            return AdvisorQuoteRunnerUsedResult(true, lastStatus)
+        if (result = "STOPPED")
+            return AdvisorQuoteRunnerUsedResult(false, lastStatus)
+        if AdvisorQuoteIsStateInList(result, ["", "MISSING", "STALE", "STALE_BUILD", "WRONG_CONTEXT", "ERROR", "EMPTY", "DISABLED", "STOP_REQUESTED", "REFUSED"])
+            return AdvisorQuoteRunnerNotUsed(result = "" ? "empty-result" : result, lastStatus)
+        if !SafeSleep(waitPollMs)
+            return AdvisorQuoteRunnerUsedResult(false, Map("result", "STOPPED", "matched", "0", "steps", steps, "elapsedMs", A_TickCount - start))
+    }
+    timeoutStatus := Map(
+        "result", "TIMEOUT",
+        "matched", "0",
+        "steps", steps,
+        "elapsedMs", A_TickCount - start,
+        "blockedReason", "timeout",
         "conditionName", name,
-        "conditionArgs", args,
-        "readOnly", "1",
-        "allowedConditions", name,
-        "timeoutMs", timeoutMs,
-        "pollMs", pollMs,
-        "maxSteps", 100
-    ))
-    status := AdvisorQuoteRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_WAIT_RESULT")
-    result := AdvisorQuoteStatusValue(status, "result")
-    matched := AdvisorQuoteStatusValue(status, "matched")
-    if (result = "OK" && matched = "1")
-        return AdvisorQuoteRunnerUsedResult(true, status)
-    if (result = "TIMEOUT" || result = "MAX_STEPS")
-        return AdvisorQuoteRunnerUsedResult(false, status)
-    if (result = "STOPPED")
-        return AdvisorQuoteRunnerUsedResult(false, status)
-    if AdvisorQuoteIsStateInList(result, ["", "MISSING", "STALE", "STALE_BUILD", "WRONG_CONTEXT", "ERROR", "EMPTY", "DISABLED", "STOP_REQUESTED", "REFUSED"])
-        return AdvisorQuoteRunnerNotUsed(result = "" ? "empty-result" : result, status)
-    return AdvisorQuoteRunnerNotUsed("unhandled-result-" result, status)
+        "lastValue", AdvisorQuoteStatusValue(lastStatus, "lastValue")
+    )
+    return AdvisorQuoteRunnerUsedResult(false, timeoutStatus)
 }
 
 AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
@@ -4784,9 +4875,9 @@ AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
         "conditionArgs", args,
         "readOnly", "1",
         "allowedStatusOps", opName,
-        "timeoutMs", 1000,
-        "pollMs", 0,
-        "maxSteps", 1
+        "timeoutMs", "1",
+        "pollMs", "0",
+        "maxSteps", "1"
     ))
     status := AdvisorQuoteRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_STATUS_POLL")
     result := AdvisorQuoteStatusValue(status, "result")
@@ -4905,7 +4996,7 @@ AdvisorQuoteRefocusPageForNativeInput(reason := "") {
     return true
 }
 
-AdvisorQuoteExecuteBridgeJs(jsCode, expectResult := true) {
+AdvisorQuoteExecuteBridgeJs(jsCode, expectResult := true, resultTimeoutMs := 2500) {
     global advisorQuoteConsoleBridgeFocus
 
     savedClip := ClipboardAll()
@@ -4946,7 +5037,8 @@ AdvisorQuoteExecuteBridgeJs(jsCode, expectResult := true) {
             return true
 
         result := ""
-        Loop 25 {
+        waitUntil := A_TickCount + Max(100, Integer(resultTimeoutMs))
+        while (A_TickCount < waitUntil) {
             if !SafeSleep(100)
                 return ""
             if (A_Clipboard != sentCode && Trim(A_Clipboard) != "") {
