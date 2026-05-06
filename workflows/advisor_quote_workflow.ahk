@@ -1851,10 +1851,21 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     vehicleSatisfiedCount := 0
     satisfiedVehicles := []
     promotedPartialVehicles := []
+    dbAddedVehicles := []
     deferredRapportVehicles := []
+    deferredCompleteVehicles := []
+    deferredUnknownVehicles := []
     deferredPartialVehicles := []
     staleDuplicateRowSeen := false
     staleDuplicateRowDetails := ""
+    rapportVehicleMode := AdvisorQuoteRapportVehicleMode(db)
+    vehicleModeAllowsAddComplete := AdvisorQuoteRapportVehicleModeAllowsAddComplete(rapportVehicleMode)
+    AdvisorQuoteAppendLog(
+        "RAPPORT_VEHICLE_MODE",
+        AdvisorQuoteGetLastStep(),
+        "rapportVehicleMode=" rapportVehicleMode
+            . ", vehicleModeAllowsAddComplete=" (vehicleModeAllowsAddComplete ? "1" : "0")
+    )
     for _, vehicle in actionableVehicles {
         if StopRequested() {
             failureReason := "Stopped manually."
@@ -1878,6 +1889,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         resolveResult := AdvisorQuoteVehicleDbResolveResult(resolvedVehicle)
         if (resolveResult = "AMBIGUOUS") {
             deferredRapportVehicles.Push(vehicle)
+            deferredCompleteVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
                 "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
                 AdvisorQuoteGetLastStep(),
@@ -1887,6 +1899,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         }
         if (resolveResult != "RESOLVED") {
             deferredRapportVehicles.Push(vehicle)
+            deferredUnknownVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
                 "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
                 AdvisorQuoteGetLastStep(),
@@ -1963,6 +1976,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             return false
         if (confirmOutcome = "AMBIGUOUS") {
             deferredRapportVehicles.Push(vehicle)
+            deferredCompleteVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
                 "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
                 AdvisorQuoteGetLastStep(),
@@ -1971,11 +1985,27 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             continue
         }
 
+        if vehicleModeAllowsAddComplete {
+            addOutcome := AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureReason, &failureScanPath)
+            if (addOutcome = "ADDED") {
+                vehicleSatisfiedCount += 1
+                satisfiedVehicles.Push(vehicle)
+                dbAddedVehicles.Push(vehicle)
+                continue
+            }
+            if (addOutcome = "FAILED")
+                return false
+            deferredRapportVehicles.Push(vehicle)
+            deferredCompleteVehicles.Push(vehicle)
+            continue
+        }
+
         deferredRapportVehicles.Push(vehicle)
+        deferredCompleteVehicles.Push(vehicle)
         AdvisorQuoteAppendLog(
             "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", source=potential-card, noAddRowOpened=1, noDropdownConstruction=1"
+            "vehicle=" vehicle["displayKey"] ", source=potential-card, rapportVehicleMode=" rapportVehicleMode ", noAddRowOpened=1, noDropdownConstruction=1"
         )
     }
 
@@ -2047,7 +2077,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     }
 
     if (vehicleSatisfiedCount = 0) {
-        failureReason := "NO_SAFE_RAPPORT_VEHICLE_MATCH: no lead vehicle matched exactly one existing Advisor confirmed/potential vehicle card. deferredVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles) " deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
+        failureReason := "NO_SAFE_RAPPORT_VEHICLE_MATCH: no lead vehicle was satisfied by existing Advisor evidence or DB-backed Add Car/Truck. deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles) " deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles) " deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-rapport-vehicle-match")
         return false
     }
@@ -2064,11 +2094,13 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             "PROMOTED_PARTIAL_DROPPED_FROM_EXPECTED_LIST",
             AdvisorQuoteGetLastStep(),
             "completeExpectedCount=" actionableVehicles.Length
-                . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
-                . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
-                . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
-                . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
-                . ", missingPromotedPartialExpectedVehicles=" missingPromotedPartialExpectedVehicles
+            . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
+            . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
+            . ", dbAddedVehicleCount=" dbAddedVehicles.Length
+            . ", dbAddedVehicles=" AdvisorQuoteVehicleListSummary(dbAddedVehicles)
+            . ", finalExpectedCount=" expectedVehicleCountForFinalGuard
+            . ", finalExpectedVehicles=" expectedVehiclesForFinalGuard
+            . ", missingPromotedPartialExpectedVehicles=" missingPromotedPartialExpectedVehicles
         )
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "promoted-partial-dropped-from-expected-list")
         return false
@@ -2082,8 +2114,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
             . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", dbAddedVehicleCount=" dbAddedVehicles.Length
+            . ", dbAddedVehicles=" AdvisorQuoteVehicleListSummary(dbAddedVehicles)
             . ", deferredRapportVehicleCount=" deferredRapportVehicles.Length
             . ", deferredRapportVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles)
+            . ", deferredCompleteVehicleCount=" deferredCompleteVehicles.Length
+            . ", deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles)
+            . ", deferredUnknownVehicleCount=" deferredUnknownVehicles.Length
+            . ", deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
@@ -2109,8 +2147,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", promotedPartialVehicleCount=" promotedPartialVehicles.Length
             . ", promotedPartialExpectedCount=" promotedPartialExpectedCount
             . ", promotedPartialVehicles=" AdvisorQuoteVehicleListSummary(promotedPartialVehicles)
+            . ", dbAddedVehicleCount=" dbAddedVehicles.Length
+            . ", dbAddedVehicles=" AdvisorQuoteVehicleListSummary(dbAddedVehicles)
             . ", deferredRapportVehicleCount=" deferredRapportVehicles.Length
             . ", deferredRapportVehicles=" AdvisorQuoteVehicleListSummary(deferredRapportVehicles)
+            . ", deferredCompleteVehicleCount=" deferredCompleteVehicles.Length
+            . ", deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles)
+            . ", deferredUnknownVehicleCount=" deferredUnknownVehicles.Length
+            . ", deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles)
             . ", deferredPartialVehicleCount=" deferredPartialVehicles.Length
             . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
             . ", expectedVehicleCountForFinalGuard=" expectedVehicleCountForFinalGuard
@@ -2726,6 +2770,27 @@ AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle) {
         && (!vehicle.Has("model") || Trim(String(vehicle["model"])) = "")
 }
 
+AdvisorQuoteRapportVehicleMode(db := "") {
+    mode := ""
+    if (IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]) && db["defaults"].Has("rapportVehicleMode"))
+        mode := Trim(String(db["defaults"]["rapportVehicleMode"]))
+    if (mode = "")
+        mode := "match-existing-then-add-complete"
+    if (mode = "match-existing-only" || mode = "match-existing-then-add-complete")
+        return mode
+    return "match-existing-then-add-complete"
+}
+
+AdvisorQuoteRapportVehicleModeAllowsAddComplete(mode) {
+    return Trim(String(mode)) = "match-existing-then-add-complete"
+}
+
+AdvisorQuoteCompleteDbResolvedVehicleAddEligible(vehicle, resolvedVehicle, rapportVehicleMode := "match-existing-then-add-complete") {
+    return AdvisorQuoteRapportVehicleModeAllowsAddComplete(rapportVehicleMode)
+        && AdvisorQuoteVehicleHasActionableFields(vehicle)
+        && (AdvisorQuoteVehicleDbResolveResult(resolvedVehicle) = "RESOLVED")
+}
+
 AdvisorQuoteVehicleLabel(vehicle) {
     if !IsObject(vehicle)
         return ""
@@ -3258,6 +3323,242 @@ AdvisorQuoteConfirmPotentialVehicle(vehicle, db, &failureReason := "", &failureS
     }
 }
 
+AdvisorQuoteBuildDbResolvedVehicleJsArgs(vehicle, resolvedVehicle) {
+    args := AdvisorQuoteBuildVehicleJsArgs(vehicle)
+    if IsObject(resolvedVehicle) {
+        dbArgs := AdvisorVehicleDbBuildJsVehicleArgs(resolvedVehicle)
+        for key, value in dbArgs
+            args[key] := value
+    }
+    args["strictModelMatch"] := "1"
+    return args
+}
+
+AdvisorQuoteResolvedListFirst(resolvedVehicle, key, fallback := "") {
+    if (IsObject(resolvedVehicle) && resolvedVehicle.Has(key) && IsObject(resolvedVehicle[key])) {
+        for _, value in resolvedVehicle[key] {
+            text := Trim(String(value))
+            if (text != "")
+                return text
+        }
+    }
+    return Trim(String(fallback))
+}
+
+AdvisorQuotePreferredDbMakeLabel(resolvedVehicle, fallback := "") {
+    if (IsObject(resolvedVehicle) && resolvedVehicle.Has("advisorMakeLabels") && IsObject(resolvedVehicle["advisorMakeLabels"])) {
+        possibleText := ""
+        if (resolvedVehicle.Has("possibleMatches") && IsObject(resolvedVehicle["possibleMatches"]))
+            possibleText := AdvisorVehicleNormalizeText(JoinArray(resolvedVehicle["possibleMatches"], " "))
+        if (possibleText != "") {
+            for _, label in resolvedVehicle["advisorMakeLabels"] {
+                labelText := Trim(String(label))
+                if (labelText != "" && RegExMatch(labelText, "i)\b(TRUCKS|VANS)\b") && InStr(possibleText, AdvisorVehicleNormalizeText(labelText)))
+                    return labelText
+            }
+            for _, label in resolvedVehicle["advisorMakeLabels"] {
+                labelText := Trim(String(label))
+                if (labelText != "" && InStr(possibleText, AdvisorVehicleNormalizeText(labelText)))
+                    return labelText
+            }
+        }
+    }
+    return AdvisorQuoteResolvedListFirst(resolvedVehicle, "advisorMakeLabels", fallback)
+}
+
+AdvisorQuoteVehicleOptionSummaryList(optionSummary) {
+    options := []
+    for _, optionText in StrSplit(String(optionSummary ?? ""), "|") {
+        text := Trim(optionText)
+        if (text != "")
+            options.Push(text)
+    }
+    return options
+}
+
+AdvisorQuoteSelectDbAddSubModelIfRequired(index, vehicle, resolvedVehicle, db) {
+    AdvisorQuoteWaitForVehicleSelectEnabled(index, "SubModel", db["timeouts"]["shortMs"], 1)
+    rowStatus := AdvisorQuoteGetGatherVehicleRowStatus(index, vehicle["year"])
+    AdvisorQuoteLogGatherVehicleRowStatus(rowStatus, "VEHICLE_DB_ADD_SUBMODEL_STATUS", vehicle)
+    if (AdvisorQuoteStatusValue(rowStatus, "hasSubModel") != "1")
+        return "OK"
+    if (Trim(String(AdvisorQuoteStatusValue(rowStatus, "subModelValue"))) != "")
+        return "OK"
+
+    subModelOptions := AdvisorQuoteVehicleOptionSummaryList(AdvisorQuoteStatusValue(rowStatus, "subModelOptions"))
+    if (subModelOptions.Length = 0)
+        return "NO_OPTIONS"
+
+    optionArgs := AdvisorQuoteBuildDbResolvedVehicleJsArgs(vehicle, resolvedVehicle)
+    trimHint := IsObject(vehicle) && vehicle.Has("trimHint") ? Trim(String(vehicle["trimHint"])) : ""
+    if (trimHint != "")
+        return AdvisorQuoteSelectVehicleDropdownOptionResult(index, "SubModel", trimHint, false, vehicle, optionArgs)
+
+    if (subModelOptions.Length = 1)
+        return AdvisorQuoteSelectVehicleDropdownOptionResult(index, "SubModel", subModelOptions[1], false, vehicle, optionArgs)
+
+    return "AMBIGUOUS"
+}
+
+AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    if !AdvisorQuoteCompleteDbResolvedVehicleAddEligible(vehicle, resolvedVehicle, "match-existing-then-add-complete") {
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DEFERRED_DB_ADD_UNSAFE",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", reason=not-complete-db-resolved, " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
+        )
+        return "DEFERRED"
+    }
+
+    AdvisorQuoteAppendLog(
+        "VEHICLE_DB_ADD_ATTEMPT",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
+    )
+    preAddStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle)
+    AdvisorQuoteLogGatherVehicleAddStatus(preAddStatus, "VEHICLE_DB_ADD_PREFLIGHT_STATUS", vehicle)
+    if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(preAddStatus) {
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DB_ADD_COMMITTED",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", method=already-confirmed-before-add, matchedText=" AdvisorQuoteStatusValue(preAddStatus, "matchedText")
+        )
+        return "ADDED"
+    }
+
+    AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_STATUS_BEFORE_DB_ADD_PREPARE", vehicle)
+    idx := AdvisorQuotePrepareVehicleRow(vehicle["year"])
+    if (idx < 0) {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_PREPARE_FAILED", vehicle)
+        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=prepare-row-failed")
+        return "DEFERRED"
+    }
+
+    yearCascadeStatus := AdvisorQuoteSetVehicleYearAndWaitManufacturer(idx, vehicle["year"], db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"])
+    AdvisorQuoteLogVehicleYearCascadeStatus(yearCascadeStatus, "VEHICLE_YEAR_CASCADE", vehicle)
+    if (AdvisorQuoteStatusValue(yearCascadeStatus, "yearVerified") != "1") {
+        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=year-not-verified")
+        return "DEFERRED"
+    }
+    AdvisorQuoteAppendLog(
+        "VEHICLE_DB_ADD_SELECTED_YEAR",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicle["displayKey"]
+            . ", year=" vehicle["year"]
+            . ", yearValue=" AdvisorQuoteStatusValue(yearCascadeStatus, "yearValue")
+            . ", method=" AdvisorQuoteStatusValue(yearCascadeStatus, "method")
+    )
+
+    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Manufacturer", db["timeouts"]["transitionMs"], 2) {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MAKE_OPTIONS_TIMEOUT", vehicle)
+        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=make-options-timeout")
+        return "DEFERRED"
+    }
+
+    optionArgs := AdvisorQuoteBuildDbResolvedVehicleJsArgs(vehicle, resolvedVehicle)
+    makeWanted := AdvisorQuotePreferredDbMakeLabel(resolvedVehicle, vehicle["make"])
+    makeResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "Manufacturer", makeWanted, false, vehicle, optionArgs)
+    if (makeResult != "OK") {
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DEFERRED_DB_ADD_UNSAFE",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", reason=make-option-" makeResult ", allowedMakeLabels=" AdvisorQuoteStatusValue(optionArgs, "allowedMakeLabels")
+        )
+        return "DEFERRED"
+    }
+    AdvisorQuoteAppendLog(
+        "VEHICLE_DB_ADD_SELECTED_MAKE",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicle["displayKey"] ", wanted=" makeWanted ", allowedMakeLabels=" AdvisorQuoteStatusValue(optionArgs, "allowedMakeLabels")
+    )
+
+    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Model", db["timeouts"]["transitionMs"], 2) {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MODEL_OPTIONS_TIMEOUT", vehicle)
+        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_MODEL_OPTION_NOT_FOUND", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=model-options-timeout")
+        return "DEFERRED"
+    }
+
+    modelWanted := AdvisorQuoteResolvedListFirst(resolvedVehicle, "modelAliases", vehicle["model"])
+    modelResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "Model", modelWanted, false, vehicle, optionArgs)
+    switch modelResult {
+        case "OK":
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DB_ADD_SELECTED_MODEL",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+            )
+        case "AMBIGUOUS":
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_DB_MODEL_OPTION_AMBIGUOUS",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+            )
+            return "DEFERRED"
+        case "NO_OPTION":
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_DB_MODEL_OPTION_NOT_FOUND",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+            )
+            return "DEFERRED"
+        default:
+            AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=model-option-" modelResult)
+            return "DEFERRED"
+    }
+
+    subModelResult := AdvisorQuoteSelectDbAddSubModelIfRequired(idx, vehicle, resolvedVehicle, db)
+    if (subModelResult != "OK") {
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DEFERRED_DB_SUBMODEL_AMBIGUOUS",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", result=" subModelResult
+        )
+        return "DEFERRED"
+    }
+
+    readyStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle, idx)
+    AdvisorQuoteLogGatherVehicleAddStatus(readyStatus, "VEHICLE_DB_ADD_READY_STATUS", vehicle)
+    if (AdvisorQuoteStatusValue(readyStatus, "rowComplete") != "1") {
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DEFERRED_DB_ADD_UNSAFE",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicle["displayKey"] ", reason=row-not-complete-after-db-selection, method=" AdvisorQuoteStatusValue(readyStatus, "method")
+        )
+        return "DEFERRED"
+    }
+
+    if !AdvisorQuoteClickById(db["selectors"]["confirmVehicleId"], db["timeouts"]["actionMs"]) {
+        if !AdvisorQuoteClickByText("Add", "button,a", db["timeouts"]["actionMs"]) {
+            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
+            AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=add-click-failed")
+            return "DEFERRED"
+        }
+    }
+
+    postAddStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db, idx)
+    AdvisorQuoteLogGatherVehicleAddStatus(postAddStatus, "VEHICLE_DB_ADD_STATUS_FINAL", vehicle)
+    if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postAddStatus) {
+        AdvisorQuoteAppendLog("VEHICLE_DB_ADD_COMMITTED", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", method=confirmed-card, matchedText=" AdvisorQuoteStatusValue(postAddStatus, "matchedText"))
+        return "ADDED"
+    }
+
+    editFailureReason := ""
+    editFailureScanPath := ""
+    editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &editFailureReason, &editFailureScanPath, "db-add")
+    AdvisorQuoteAppendLog("VEHICLE_DB_ADD_SUBMODEL_STATUS", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", editOutcome=" editOutcome ", editFailureReason=" editFailureReason)
+    if (editOutcome = "CONFIRMED") {
+        AdvisorQuoteAppendLog("VEHICLE_DB_ADD_COMMITTED", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", method=edit-vehicle-update")
+        return "ADDED"
+    }
+
+    failureReason := "VEHICLE_DB_ADD_DID_NOT_COMMIT: Add Car/Truck did not produce a matching confirmed vehicle card for " vehicle["displayKey"] "."
+    failureScanPath := (editFailureScanPath != "") ? editFailureScanPath : AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-db-add-did-not-commit")
+    AdvisorQuoteAppendLog("VEHICLE_DB_ADD_DID_NOT_COMMIT", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", postAddResult=" AdvisorQuoteStatusValue(postAddStatus, "result") ", editOutcome=" editOutcome)
+    return "FAILED"
+}
+
 AdvisorQuoteAddVehicleInGatherData(vehicle, db) {
     AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_STATUS_BEFORE_PREPARE", vehicle)
     idx := AdvisorQuotePrepareVehicleRow(vehicle["year"])
@@ -3348,22 +3649,31 @@ AdvisorQuoteWaitForVehicleSelectEnabled(index, fieldName, timeoutMs, minOptions 
     return AdvisorQuoteWaitForCondition("vehicle_select_enabled", timeoutMs, 300, args)
 }
 
-AdvisorQuoteSelectVehicleDropdownOptionRaw(index, fieldName, wantedText, allowFirstNonEmpty := false) {
+AdvisorQuoteSelectVehicleDropdownOptionRaw(index, fieldName, wantedText, allowFirstNonEmpty := false, extraArgs := "") {
     args := Map(
         "index", index,
         "fieldName", fieldName,
         "wantedText", wantedText,
         "allowFirstNonEmpty", allowFirstNonEmpty
     )
+    if IsObject(extraArgs) {
+        for key, value in extraArgs
+            args[key] := value
+    }
     return AdvisorQuoteRunOp("select_vehicle_dropdown_option", args)
 }
 
-AdvisorQuoteSelectVehicleDropdownOption(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "") {
-    result := AdvisorQuoteSelectVehicleDropdownOptionRaw(index, fieldName, wantedText, allowFirstNonEmpty)
+AdvisorQuoteSelectVehicleDropdownOptionResult(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "", extraArgs := "") {
+    result := AdvisorQuoteSelectVehicleDropdownOptionRaw(index, fieldName, wantedText, allowFirstNonEmpty, extraArgs)
     vehicleKey := IsObject(vehicle) && vehicle.Has("displayKey") ? vehicle["displayKey"] : ""
     AdvisorQuoteAppendLog("VEHICLE_DROPDOWN_SELECT", AdvisorQuoteGetLastStep(), "vehicle=" vehicleKey ", field=" fieldName ", wanted=" wantedText ", allowFirstNonEmpty=" (allowFirstNonEmpty ? "1" : "0") ", result=" result)
     if (result != "OK" && IsObject(vehicle))
         AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(index, vehicle["year"]), "VEHICLE_DROPDOWN_SELECT_FAILED", vehicle)
+    return result
+}
+
+AdvisorQuoteSelectVehicleDropdownOption(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "") {
+    result := AdvisorQuoteSelectVehicleDropdownOptionResult(index, fieldName, wantedText, allowFirstNonEmpty, vehicle)
     return result = "OK"
 }
 

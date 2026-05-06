@@ -3368,37 +3368,95 @@ copy(String((() => {
     }
     return new Set([wanted]);
   };
-  const findVehicleDropdownOption = (select, fieldName, wantedText, allowFirstNonEmpty = false) => {
+  const uniqueVehicleOptions = (matches) => {
+    const out = [];
+    for (const option of matches) {
+      if (option && !out.includes(option)) out.push(option);
+    }
+    return out;
+  };
+  const vehicleDropdownOptionResult = (option, status = '') => ({
+    option: option || null,
+    status: status || (option ? 'OK' : 'NO_OPTION')
+  });
+  const normalizedVehicleDropdownKeys = (source = {}, wantedText = '') => {
+    const keys = parseVehicleListArg(source.normalizedModelKeys)
+      .map((value) => normalizeVehicleModelKey(value) || safe(value).toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .filter(Boolean);
+    const wantedKey = normalizeVehicleModelKey(wantedText);
+    if (wantedKey) keys.push(wantedKey);
+    return new Set(keys);
+  };
+  const vehicleDropdownWantedTexts = (fieldName, wantedText, source = {}) => {
+    const values = [wantedText];
+    const field = safe(fieldName);
+    if (field === 'Manufacturer')
+      values.push(...parseVehicleListArg(source.allowedMakeLabels || source.advisorMakeLabels || source.makeAliases));
+    if (field === 'Model')
+      values.push(...parseVehicleListArg(source.modelAliases));
+    return Array.from(new Set(values.map(normUpper).filter(Boolean)));
+  };
+  const findVehicleDropdownOptionResult = (select, fieldName, wantedText, allowFirstNonEmpty = false, source = {}) => {
     const options = Array.from((select && select.options) || []).filter(validVehicleOption);
-    const wanted = normUpper(wantedText);
     const field = safe(fieldName);
     if (!options.length) return null;
     if (field === 'ModelYear') {
       const wantedYear = normalizeDigits(wantedText);
       if (!wantedYear) return null;
-      return options.find((opt) => normalizeDigits(vehicleOptionValue(opt)) === wantedYear)
+      return vehicleDropdownOptionResult(options.find((opt) => normalizeDigits(vehicleOptionValue(opt)) === wantedYear)
         || options.find((opt) => normalizeDigits(vehicleOptionText(opt)) === wantedYear)
-        || null;
+        || null);
     }
-    if (wanted) {
-      let match = options.find((opt) => normUpper(vehicleOptionValue(opt)) === wanted) || null;
-      if (match) return match;
-      match = options.find((opt) => normUpper(vehicleOptionText(opt)) === wanted) || null;
-      if (match) return match;
+    const wantedValues = vehicleDropdownWantedTexts(field, wantedText, source);
+    if (wantedValues.length) {
+      if (field === 'Manufacturer' && wantedValues[0]) {
+        const primaryMatches = uniqueVehicleOptions(options.filter((opt) =>
+          normUpper(vehicleOptionValue(opt)) === wantedValues[0]
+          || normUpper(vehicleOptionText(opt)) === wantedValues[0]
+        ));
+        if (primaryMatches.length === 1) return vehicleDropdownOptionResult(primaryMatches[0]);
+        if (primaryMatches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+      }
+      let matches = uniqueVehicleOptions(options.filter((opt) =>
+        wantedValues.includes(normUpper(vehicleOptionValue(opt)))
+        || wantedValues.includes(normUpper(vehicleOptionText(opt)))
+      ));
+      if (matches.length === 1) return vehicleDropdownOptionResult(matches[0]);
+      if (matches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+      if (field === 'Model' && (String(source.strictModelMatch || '') === '1' || source.strictModelMatch === true)) {
+        const keys = normalizedVehicleDropdownKeys(source, wantedText);
+        matches = uniqueVehicleOptions(options.filter((opt) => {
+          const valueKey = normalizeVehicleModelKey(vehicleOptionValue(opt));
+          const textKey = normalizeVehicleModelKey(vehicleOptionText(opt));
+          return (valueKey && keys.has(valueKey)) || (textKey && keys.has(textKey));
+        }));
+        if (matches.length === 1) return vehicleDropdownOptionResult(matches[0]);
+        if (matches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+        return vehicleDropdownOptionResult(null, 'NO_OPTION');
+      }
+      const wanted = wantedValues[0];
       const aliases = vehicleAliasValues(wanted);
-      match = options.find((opt) => aliases.has(normUpper(vehicleOptionValue(opt))) || aliases.has(normUpper(vehicleOptionText(opt)))) || null;
-      if (match) return match;
+      matches = uniqueVehicleOptions(options.filter((opt) =>
+        aliases.has(normUpper(vehicleOptionValue(opt))) || aliases.has(normUpper(vehicleOptionText(opt)))
+      ));
+      if (matches.length === 1) return vehicleDropdownOptionResult(matches[0]);
+      if (matches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
       const containsMatches = options.filter((opt) => {
         const text = normUpper(vehicleOptionText(opt));
         const value = normUpper(vehicleOptionValue(opt));
         return (text && (text.includes(wanted) || wanted.includes(text)))
           || (value && (value.includes(wanted) || wanted.includes(value)));
       });
-      if (containsMatches.length === 1) return containsMatches[0];
+      if (containsMatches.length === 1) return vehicleDropdownOptionResult(containsMatches[0]);
+      if (containsMatches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
     }
     if (allowFirstNonEmpty)
-      return options[0] || null;
-    return null;
+      return vehicleDropdownOptionResult(options[0] || null);
+    return vehicleDropdownOptionResult(null, 'NO_OPTION');
+  };
+  const findVehicleDropdownOption = (select, fieldName, wantedText, allowFirstNonEmpty = false, source = {}) => {
+    const result = findVehicleDropdownOptionResult(select, fieldName, wantedText, allowFirstNonEmpty, source);
+    return result && result.option ? result.option : null;
   };
   const applyVehicleDropdownOption = (select, option) => {
     if (!select || !option) return false;
@@ -6282,9 +6340,11 @@ copy(String((() => {
       const allowFirstNonEmpty = String(args.allowFirstNonEmpty || '') === '1' || args.allowFirstNonEmpty === true;
       const select = vehicleField(index, fieldName);
       if (!select || select.disabled) return 'NO_SELECT';
-      const best = findVehicleDropdownOption(select, fieldName, args.wantedText, allowFirstNonEmpty);
-      if (!best) return 'NO_OPTION';
-      return applyVehicleDropdownOption(select, best) ? 'OK' : 'NO_OPTION';
+      const selected = findVehicleDropdownOptionResult(select, fieldName, args.wantedText, allowFirstNonEmpty, args);
+      if (!selected || selected.status === 'NO_OPTION') return 'NO_OPTION';
+      if (selected.status === 'AMBIGUOUS') return 'AMBIGUOUS';
+      if (!selected.option) return 'NO_OPTION';
+      return applyVehicleDropdownOption(select, selected.option) ? 'OK' : 'NO_OPTION';
     }
 
     case 'gather_vehicle_row_status': {

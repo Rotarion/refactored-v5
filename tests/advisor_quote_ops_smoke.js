@@ -2977,6 +2977,106 @@ function testVehicleContracts() {
   const aliasDoc = new FakeDocument(createVehicleInputRow(0, ''));
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Manufacturer', wantedText: 'Chevy' }, aliasDoc), 'OK');
   assert.strictEqual(aliasDoc.getElementById('ConsumerData.Assets.Vehicles[0].Manufacturer').value, 'CHEVROLET');
+  const dbAddSelectDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].ModelYear', [
+      { value: '', text: 'Select One' },
+      { value: '2023', text: '2023' },
+      { value: '2024', text: '2024' }
+    ]),
+    createSelect('ConsumerData.Assets.Vehicles[0].Manufacturer', [
+      { value: '', text: 'Select One' },
+      { value: 'CHEVROLET', text: 'Chevrolet' },
+      { value: 'CHEVYTRUCKS', text: 'CHEVY TRUCKS' },
+      { value: 'HONDA', text: 'Honda' }
+    ]),
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'SILVERADO', text: 'Silverado' },
+      { value: 'TAHOE', text: 'Tahoe' },
+      { value: 'CIVIC', text: 'Civic' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'ModelYear', wantedText: '2024' }, dbAddSelectDoc), 'OK');
+  assert.strictEqual(dbAddSelectDoc.getElementById('ConsumerData.Assets.Vehicles[0].ModelYear').value, '2024');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Manufacturer',
+    wantedText: 'CHEVY TRUCKS',
+    allowedMakeLabels: 'CHEVROLET|CHEVY TRUCKS|CHEVY VANS'
+  }, dbAddSelectDoc), 'OK');
+  assert.strictEqual(dbAddSelectDoc.getElementById('ConsumerData.Assets.Vehicles[0].Manufacturer').value, 'CHEVYTRUCKS');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'Tahoe',
+    modelAliases: 'TAHOE',
+    normalizedModelKeys: 'TAHOE',
+    strictModelMatch: '1'
+  }, dbAddSelectDoc), 'OK');
+  assert.strictEqual(dbAddSelectDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'TAHOE');
+  const civicModelDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'ACCORD', text: 'Accord' },
+      { value: 'CIVIC', text: 'Civic' },
+      { value: 'CIVICHYBRID', text: 'Civic Hybrid' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'Civic', modelAliases: 'CIVIC', normalizedModelKeys: 'CIVIC', strictModelMatch: '1' }, civicModelDoc), 'OK');
+  assert.strictEqual(civicModelDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'CIVIC');
+  const tahoeNotSilveradoDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'SILVERADO', text: 'Silverado' },
+      { value: 'TAHOE', text: 'Tahoe' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'Tahoe', modelAliases: 'TAHOE', normalizedModelKeys: 'TAHOE', strictModelMatch: '1' }, tahoeNotSilveradoDoc), 'OK');
+  assert.strictEqual(tahoeNotSilveradoDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'TAHOE');
+  const f150NotF250Doc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'F250', text: 'F-250' },
+      { value: 'F150', text: 'F-150' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'F-150', modelAliases: 'F-150|F150', normalizedModelKeys: 'F150', strictModelMatch: '1' }, f150NotF250Doc), 'OK');
+  assert.strictEqual(f150NotF250Doc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'F150');
+  const priusNotPrimeDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'PRIUSPRIME', text: 'Prius Prime' },
+      { value: 'PRIUS', text: 'Prius' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'Prius', modelAliases: 'PRIUS', normalizedModelKeys: 'PRIUS', strictModelMatch: '1' }, priusNotPrimeDoc), 'OK');
+  assert.strictEqual(priusNotPrimeDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'PRIUS');
+  const noBroadFirstModelDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'ACCORD', text: 'Accord' },
+      { value: 'PILOT', text: 'Pilot' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'Civic', modelAliases: 'CIVIC', normalizedModelKeys: 'CIVIC', strictModelMatch: '1' }, noBroadFirstModelDoc), 'NO_OPTION');
+  assert.strictEqual(noBroadFirstModelDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, '');
+  const ambiguousModelDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'F150A', text: 'F-150' },
+      { value: 'F150B', text: 'F150' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'F-Series', modelAliases: 'F-Series', normalizedModelKeys: 'F150', strictModelMatch: '1' }, ambiguousModelDoc), 'AMBIGUOUS');
+  assert.strictEqual(ambiguousModelDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, '');
+  const ambiguousSubModelDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].SubModel', [
+      { value: '', text: 'Select One' },
+      { value: 'LESEDAN', text: 'LE Sedan' },
+      { value: 'LEHATCH', text: 'LE Hatchback' }
+    ])
+  ]);
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'SubModel', wantedText: 'LE' }, ambiguousSubModelDoc), 'AMBIGUOUS');
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Manufacturer', wantedText: 'FORD' }, new FakeDocument()), 'NO_SELECT');
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Manufacturer', wantedText: 'TESLA' }, new FakeDocument(createVehicleInputRow(0, ''))), 'NO_OPTION');
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'ModelYear', wantedText: '2024' }, new FakeDocument(createVehicleSelectYearRow(0))), 'NO_OPTION');

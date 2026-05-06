@@ -68,7 +68,7 @@ Non-overmatch guards remain required:
 
 ## Rapport Vehicle Flow
 
-Gather Data / Rapport is now evidence-first:
+Gather Data / Rapport is evidence-first, then controlled-add for complete DB-resolved vehicles. The default mode is `match-existing-then-add-complete`; `match-existing-only` remains supported to preserve the stricter Step 1 behavior.
 
 1. Resolve each complete lead vehicle through the DB.
 2. Read confirmed Advisor vehicle cards first.
@@ -76,24 +76,38 @@ Gather Data / Rapport is now evidence-first:
 4. Read potential/public-record cards only after confirmed-card preflight.
 5. If exactly one scoped potential/public-record card matches the same DB-backed evidence, confirm that card.
 6. If the confirm action opens an Edit Vehicle panel, complete or update the panel and verify commit.
-7. If no safe existing Advisor card matches, skip/defer the vehicle.
-8. If DB or card evidence is ambiguous, skip/defer or fail safe.
-9. Final expected vehicle reconciliation includes only vehicles already satisfied or safely confirmed/updated from existing Advisor evidence.
+7. If no safe existing Advisor card matches and the lead vehicle is complete and DB-resolved, open Add Car/Truck through the controlled DB-backed add path.
+8. The controlled add path selects exact year, DB-backed Advisor make label, and DB-backed strict model alias/key. It does not select the first model from a broad dropdown.
+9. If Sub-Model becomes required, it is resolved only through bounded existing submodel/edit-panel policy. Ambiguous submodel state is deferred/fails safe.
+10. If DB or card evidence is ambiguous, partial, unknown, duplicate, or unsafe to add, skip/defer or fail safe.
+11. Final expected vehicle reconciliation includes vehicles already confirmed, safely confirmed from potential/public-record cards, promoted partials, and DB-added vehicles.
 
-Rapport must not construct unmatched vehicles from broad dropdowns. In this flow, unmatched lead vehicles do not open Add Car or Truck, do not call `prepare_vehicle_row`, and do not select the first model from a dropdown.
+Rapport must not construct vehicles from broad dropdowns. Add Car/Truck is allowed only after confirmed and potential cards fail to match safely and only for complete DB-resolved vehicles. Partial year/make-only vehicles, DB misses, ambiguous DB results, and ambiguous model dropdowns remain deferred.
 
 Skipped/deferred vehicles are logged but not counted as missing expected confirmed vehicles.
 
 ## Failure And Trace Codes
 
 - `VEHICLE_DB_RESOLVER`
+- `RAPPORT_VEHICLE_MODE`
+- `VEHICLE_DB_ADD_ATTEMPT`
+- `VEHICLE_DB_ADD_SELECTED_YEAR`
+- `VEHICLE_DB_ADD_SELECTED_MAKE`
+- `VEHICLE_DB_ADD_SELECTED_MODEL`
+- `VEHICLE_DB_ADD_SUBMODEL_STATUS`
+- `VEHICLE_DB_ADD_COMMITTED`
 - `VEHICLE_DEFERRED_NO_DB_CARD_MATCH`
 - `VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH`
+- `VEHICLE_DEFERRED_DB_ADD_UNSAFE`
+- `VEHICLE_DEFERRED_DB_MODEL_OPTION_NOT_FOUND`
+- `VEHICLE_DEFERRED_DB_MODEL_OPTION_AMBIGUOUS`
+- `VEHICLE_DEFERRED_DB_SUBMODEL_AMBIGUOUS`
+- `VEHICLE_DB_ADD_DID_NOT_COMMIT`
 - `NO_SAFE_RAPPORT_VEHICLE_MATCH`
 - `VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT`
 - `VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED`
 
-If no vehicle is safely satisfied and Advisor still requires at least one vehicle, the workflow fails with `NO_SAFE_RAPPORT_VEHICLE_MATCH` and includes resolver diagnostics plus candidate/deferred vehicle summaries.
+If no vehicle is safely satisfied or DB-added and Advisor still requires at least one vehicle, the workflow fails with `NO_SAFE_RAPPORT_VEHICLE_MATCH` and includes resolver diagnostics plus complete, unknown, and partial deferred vehicle summaries.
 
 ## Edit Vehicle Rule
 
@@ -112,7 +126,7 @@ JS reports this as `UPDATE_REQUIRED_READY`. AHK then clicks Update through `hand
 
 ## Fallback Policy
 
-The old small make/model alias rules remain only as fallback for DB misses or DB load failure. Fallback logic must not broaden fuzzy matching and must not re-enable Rapport dropdown construction for unmatched vehicles.
+The old small make/model alias rules remain only as fallback for DB misses or DB load failure. Fallback logic must not broaden fuzzy matching. It must not enable Add Car/Truck for partial or DB-unresolved vehicles, and it must not select the first model from a dropdown.
 
 ## Validation
 
@@ -127,3 +141,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AhkToolchain.ps
 ```
 
 Use the bundled Node runtime if PATH `node` is unavailable. AutoHotkey validation must use the bounded toolchain checker; do not run raw interpreter or compiler diagnostics.
+
+Vehicle regressions must stay scenario-based and sanitized. Do not add live customer names, live VINs, phone numbers, emails, addresses, or raw lead data to fixtures.

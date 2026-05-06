@@ -46,7 +46,8 @@ GetAdvisorQuoteWorkflowDb() {
         "recentPurchase", "false",
         "driverRemoveReasonCode", "0006",
         "incidentReasonText", "Accident caused by being hit by animal or road debris",
-        "vehicleFinanceYearThreshold", 2015
+        "vehicleFinanceYearThreshold", 2015,
+        "rapportVehicleMode", "match-existing-then-add-complete"
     )
 
     timeouts := Map(

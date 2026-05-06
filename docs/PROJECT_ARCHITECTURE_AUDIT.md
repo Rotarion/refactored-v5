@@ -112,7 +112,7 @@ Workflow impact:
 - The flow can resume from later page states because handlers first detect the current Advisor route/state.
 - Customer Summary Overview is now a first-class bridge after create/select prospect.
 - Product Overview Grid selection is separate from the older Select Product form.
-- Rapport owns lead email, age-first-licensed defaults, vehicle creation, edit-panel completion, confirmed-card reconciliation, and Start Quoting validation.
+- Rapport owns lead email, age-first-licensed defaults, vehicle handling, edit-panel completion, confirmed-card reconciliation, and Start Quoting validation.
 - Drivers and Vehicles only reconciles quote membership. It does not create lead vehicles.
 - Incidents chooses the configured animal/road-debris reason and continues.
 
@@ -141,6 +141,8 @@ Workflow impact:
 
 - Rapport confirmed-card matching can accept Advisor labels such as `TOY. TRUCKS` for compatible lead vehicles.
 - Exact normalized model matching prevents overmatching pairs such as Prius/Prius Prime, Transit/Transit Connect, F150/F250, and CR-V/HR-V.
+- Default Rapport vehicle mode is `match-existing-then-add-complete`: confirmed/potential Advisor evidence is preferred, then complete DB-resolved unmatched vehicles may use the controlled Add Car/Truck flow.
+- `match-existing-only` remains supported for strict defer-only behavior. Partial, unknown, ambiguous, duplicate, or unsafe vehicle candidates are still deferred and excluded from missing expected reconciliation.
 - Partial year/make vehicles are promoted only from unique VIN-bearing confirmed cards with visible model evidence.
 
 ## JavaScript Operator Contract
