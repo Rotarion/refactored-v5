@@ -297,6 +297,109 @@ AssertEqual(ascVehiclePolicy["completeVehicles"].Length, 2, "ASC policy should k
 AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"].Length, 1, "ASC policy should classify year/make-only vehicle as partial")
 AssertEqual(ascVehiclePolicy["partialYearMakeVehicles"][1]["displayKey"], "2010|NISSAN", "ASC partial should preserve year/make identity")
 
+ascSingleLedgerProfile := TestAscProfile("Single", "", [TestVehicle("2019", "HONDA", "CRV")])
+ascPrimaryNeedsAddLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=0|add=1|remove=0", "1", "0"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascPrimaryNeedsAddLedger, "nextAction"), "add_primary_driver", "Ledger should add primary before other row actions")
+AssertEqual(AdvisorQuoteStatusValue(ascPrimaryNeedsAddLedger, "primaryDriverStatus"), "needs_add", "Ledger should classify unadded primary row")
+
+ascResolvedSingleLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0", "0", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "spousePolicy"), "single-wins", "Explicit Single should keep conservative spouse policy")
+AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "spouseStatus"), "not_applicable", "Explicit Single should not add spouse")
+AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "nextAction"), "save", "Resolved ledger with enabled save should save")
+
+ascMarriedExactProfile := TestAscProfile("Married", "Test Exact Spouse", [TestVehicle("2019", "HONDA", "CRV")])
+ascMarriedExactLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascMarriedExactProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Exact Spouse|age=38|added=0|add=1|remove=0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Married", "Test Exact Spouse", "driver-a:Test Exact Spouse||driver-b:Test Other Candidate")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactLedger, "nextAction"), "add_spouse_driver", "Married exact spouse row should be added when selected")
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactLedger, "selectedSpouseName"), "Test Exact Spouse", "Ledger should preserve selected exact spouse")
+
+ascMarriedWindowProfile := TestAscProfile("Married", "", [TestVehicle("2019", "HONDA", "CRV")])
+ascMarriedWindowLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascMarriedWindowProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=37|added=0|add=1|remove=0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Married", "", "driver-a:Test Near Candidate")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedWindowLedger, "nextAction"), "resolve_participant_policy", "Married unique age-window spouse should select participant policy before row add")
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedWindowLedger, "spouseStatus"), "needs_select", "Unique age-window spouse should be represented as needs_select")
+
+ascMarriedAmbiguousLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascMarriedWindowProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Candidate One|age=38|added=0|add=1|remove=0||Test Candidate Two|age=37|added=0|add=1|remove=0", "2", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Married", "", "driver-a:Test Candidate One||driver-b:Test Candidate Two")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedAmbiguousLedger, "nextAction"), "fail", "Married multiple age-window candidates should fail safe")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascMarriedAmbiguousLedger, "reason"), "ASC_SPOUSE_AMBIGUOUS") = 1, "Ambiguous spouse failure should be explicit")
+
+ascExtraDriverLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Other Driver|age=66|added=0|add=0|remove=1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascExtraDriverLedger, "nextAction"), "remove_extra_driver", "Ledger should remove unrelated driver after expected drivers are resolved")
+AssertEqual(AdvisorQuoteStatusValue(ascExtraDriverLedger, "nextActionTarget"), "Test Other Driver", "Ledger should target the extra driver row by summary")
+
+ascRemoveModalLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0", "ASC_REMOVE_DRIVER_MODAL", "NONE", "ASC_REMOVE_DRIVER_MODAL_OPEN"),
+    Map(),
+    Map(),
+    Map()
+)
+AssertEqual(AdvisorQuoteStatusValue(ascRemoveModalLedger, "nextAction"), "handle_remove_driver_modal", "Remove modal should route before row reconciliation")
+
+ascInlinePanelLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0", "NONE", "ASC_INLINE_PARTICIPANT_PANEL", "ASC_INLINE_PARTICIPANT_PANEL_OPEN"),
+    Map(),
+    Map(),
+    Map()
+)
+AssertEqual(AdvisorQuoteStatusValue(ascInlinePanelLedger, "nextAction"), "handle_inline_participant_panel", "Inline participant panel should route before row reconciliation")
+
+ascVehicleNeedsAddLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0", "0", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=0|vin=1", "1", "0"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascVehicleNeedsAddLedger, "nextAction"), "add_vehicle_row", "Ledger should add expected ASC vehicle membership row")
+
+ascSaveDisabledLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0", "0", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSaveDisabledLedger, "nextAction"), "fail", "Resolved ledger with disabled save should fail diagnostic")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascSaveDisabledLedger, "reason"), "ASC_SAVE_DISABLED_AFTER_LEDGER_RESOLUTION") = 1, "Disabled save diagnostic should be explicit")
+AssertFalse(AdvisorQuoteAscLedgerLoopGuardHit(2), "Repeated same action should be allowed through the second attempt")
+AssertTrue(AdvisorQuoteAscLedgerLoopGuardHit(3), "Repeated same action guard should trigger after two attempts")
+
 gatherPartialPolicy := AdvisorQuoteClassifyGatherVehicles(Map("vehicles", [
     TestVehicle("2019", "HONDA", "CRV"),
     TestVehicle("2013", "HYUNDAI", "SONATA"),
@@ -493,6 +596,69 @@ TestVehicle(year, make, model, vin := "") {
         vehicle["vinSuffix"] := SubStr(vin, -5)
     }
     return vehicle
+}
+
+TestAscProfile(maritalStatus, spouseName := "", vehicles := "") {
+    raw := "Marital Status: " maritalStatus
+    if (Trim(String(spouseName)) != "")
+        raw .= "`nSpouse: " spouseName
+    return Map(
+        "raw", raw,
+        "person", Map("fullName", "Test Primary Driver"),
+        "vehicles", IsObject(vehicles) ? vehicles : []
+    )
+}
+
+TestAscSnapshot(mainSavePresent := "1", mainSaveEnabled := "0", activeModalType := "NONE", activePanelType := "NONE", blockerCode := "", unresolvedDriverCount := "0", unresolvedVehicleCount := "0", addedVehicleCount := "0") {
+    return Map(
+        "result", "OK",
+        "routeFamily", "ASCPRODUCT",
+        "ascProductRouteId", "112",
+        "activeModalType", activeModalType,
+        "activePanelType", activePanelType,
+        "blockerCode", blockerCode,
+        "unresolvedDriverCount", unresolvedDriverCount,
+        "unresolvedVehicleCount", unresolvedVehicleCount,
+        "addedVehicleCount", addedVehicleCount,
+        "mainSavePresent", mainSavePresent,
+        "mainSaveEnabled", mainSaveEnabled
+    )
+}
+
+TestAscParticipantStatus(maritalStatus, spouseText := "", spouseOptions := "") {
+    return Map(
+        "result", "FOUND",
+        "maritalStatusSelected", maritalStatus,
+        "spouseDropdownText", spouseText,
+        "spouseOptions", spouseOptions,
+        "ageFirstLicensedValue", "16",
+        "propertyOwnershipValue", "0001_0120",
+        "propertyOwnershipText", "Own Home",
+        "missing", ""
+    )
+}
+
+TestAscDriverStatus(driverSummaries, unresolvedDriverCount := "0", addedDriverCount := "0") {
+    return Map(
+        "result", "FOUND",
+        "driverCount", String(AdvisorQuoteAscSplitSummaryRecords(driverSummaries).Length),
+        "unresolvedDriverCount", unresolvedDriverCount,
+        "addedDriverCount", addedDriverCount,
+        "removedDriverCount", "0",
+        "driverSummaries", driverSummaries
+    )
+}
+
+TestAscVehicleStatus(vehicleSummaries, unresolvedVehicleCount := "0", addedVehicleCount := "0") {
+    return Map(
+        "result", "FOUND",
+        "vehicleCount", String(AdvisorQuoteAscSplitSummaryRecords(vehicleSummaries).Length),
+        "unresolvedVehicleCount", unresolvedVehicleCount,
+        "addedVehicleCount", addedVehicleCount,
+        "confirmedOrAddedVehicleCount", addedVehicleCount,
+        "removedVehicleCount", "0",
+        "vehicleSummaries", vehicleSummaries
+    )
 }
 
 AssertEqual(actual, expected, message) {

@@ -6774,9 +6774,46 @@ copy(String((() => {
     }
 
     case 'select_remove_reason': {
-      const el = document.getElementById('nonDriverReasonOthers_' + safe(args.reasonCode));
-      if (!el) return 'NO_REASON';
-      return clickEl(el) ? 'OK' : 'NO_REASON';
+      const reasonCode = safe(args.reasonCode || '0006');
+      const root = advisorRemoveDriverModalRoot() || document;
+      const candidates = Array.from(root.querySelectorAll('input[type=radio],input'))
+        .filter((input) => /nonDriver/i.test(`${safe(input.id)} ${safe(input.name)}`));
+      const el = document.getElementById('nonDriverReasonOthers_' + reasonCode)
+        || candidates.find((input) => safe(input.value) === reasonCode || safe(input.id).endsWith('_' + reasonCode))
+        || candidates.find((input) => answerTextMatches(readInputLabel(input), safe(args.reasonText || 'This driver has their own car insurance')));
+      if (!el) {
+        return linesOut({
+          result: 'NO_REASON',
+          reasonCode,
+          reasonSelected: '0',
+          clicked: '0',
+          method: 'reason-missing',
+          failedFields: 'removeReason'
+        });
+      }
+      let clicked = false;
+      let method = el.checked ? 'already-selected' : '';
+      if (!el.checked) {
+        const target = getInputClickTarget(el) || el;
+        clicked = clickCenterEl(target);
+        if (!el.checked) {
+          try { el.checked = true; } catch {}
+          try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+          try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+          method = clicked ? 'click|direct-check' : 'direct-check';
+        } else {
+          method = clicked ? 'click' : 'click-target-selected';
+        }
+      }
+      const selected = !!el.checked || readCheckedRadioState(root, /nonDriver/i).code === reasonCode;
+      return linesOut({
+        result: selected ? 'OK' : 'SELECT_FAILED',
+        reasonCode,
+        reasonSelected: selected ? '1' : '0',
+        clicked: clicked ? '1' : '0',
+        method,
+        failedFields: selected ? '' : 'removeReason'
+      });
     }
 
     case 'fill_vehicle_modal': {

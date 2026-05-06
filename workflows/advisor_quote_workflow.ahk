@@ -604,9 +604,14 @@ AdvisorQuoteStateDriversVehicles(profile, db, attempt := 1, entryScanPath := "")
     if (state = "INCIDENTS")
         return AdvisorQuoteResultOkValue("DRIVERS_VEHICLES", "DRIVERS_VEHICLES", "Drivers and Vehicles already completed.", entryScanPath, state)
 
-    if !AdvisorQuoteHandleDriversVehicles(profile, db) {
-        failScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "drivers-vehicles-failed")
-        return AdvisorQuoteResultFail("DRIVERS_VEHICLES", "DRIVERS_VEHICLES", "Drivers and Vehicles stage did not complete.", true, failScan, AdvisorQuoteDetectState(db))
+    failureReason := ""
+    failureScan := ""
+    if !AdvisorQuoteHandleDriversVehicles(profile, db, &failureReason, &failureScan) {
+        if (failureScan = "")
+            failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "drivers-vehicles-failed")
+        if (failureReason = "")
+            failureReason := "Drivers and Vehicles stage did not complete."
+        return AdvisorQuoteResultFail("DRIVERS_VEHICLES", "DRIVERS_VEHICLES", failureReason, true, failureScan, AdvisorQuoteDetectState(db))
     }
     return AdvisorQuoteResultOkValue("DRIVERS_VEHICLES", "DRIVERS_VEHICLES", "Drivers and Vehicles completed.", entryScanPath, AdvisorQuoteDetectState(db))
 }
@@ -798,10 +803,12 @@ AdvisorQuoteTryRouteConsumerReportsAscProduct(profile, db, observedState, entryS
                 . ", ascDriversVehiclesHandlerInvoked=1"
                 . ", consumerReportsReadyWaitSkippedReason=already-on-asc-drivers-vehicles"
         )
-        if AdvisorQuoteHandleDriversVehicles(profile, db)
+        handlerFailureReason := ""
+        handlerFailureScan := ""
+        if AdvisorQuoteHandleDriversVehicles(profile, db, &handlerFailureReason, &handlerFailureScan)
             return "OK"
-        failureReason := "ASC_DRIVERS_VEHICLES_HANDLER_FAILED"
-        failureScan := AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-drivers-vehicles-handler-failed")
+        failureReason := (handlerFailureReason != "") ? handlerFailureReason : "ASC_DRIVERS_VEHICLES_HANDLER_FAILED"
+        failureScan := (handlerFailureScan != "") ? handlerFailureScan : AdvisorQuoteScanCurrentPage("CONSUMER_REPORTS", "asc-drivers-vehicles-handler-failed")
         return "FAILED"
     }
 
@@ -4672,45 +4679,20 @@ AdvisorQuoteHandleConsumerReports(db, &failureReason := "") {
     return true
 }
 
-AdvisorQuoteHandleDriversVehicles(profile, db) {
+AdvisorQuoteHandleDriversVehicles(profile, db, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
     AdvisorQuoteSetStep("DRIVERS_VEHICLES", "Waiting for Drivers and vehicles stage.")
     AdvisorQuoteAppendLog("ASC_DRIVERS_VEHICLES_HANDLER_INVOKED", AdvisorQuoteGetLastStep(), "ascDriversVehiclesHandlerInvoked=1")
-    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
+    if !AdvisorQuoteWaitForCondition("drivers_or_incidents", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db)) {
+        failureReason := "ASC_DRIVERS_VEHICLES_WAIT_TIMEOUT"
         return false
+    }
 
     if AdvisorQuoteIsIncidentsPage(db)
         return true
 
-    if !AdvisorQuoteResolveAscSnapshotBlockers(profile, db)
-        return false
-
-    AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1")
-    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
-    AdvisorQuoteLogAscParticipantDetailStatus(participantStatus, "ASC_PARTICIPANT_DETAIL_STATUS")
-    if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND") {
-        AdvisorQuoteAppendLog("ASC_PARTICIPANT_DETAIL_NOT_FOUND", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus))
-        return false
-    }
-
-    maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db)
-    AdvisorQuoteAppendLog("ASC_PARTICIPANT_MARITAL_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus))
-    maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
-    if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"])
-        return false
-
-    selectedSpouseName := AdvisorQuoteStatusValue(maritalStatus, "selectedSpouseText")
-    AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascDriverReconcileCalled=1")
-    if !AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName)
-        return false
-
-    AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_CALL", AdvisorQuoteGetLastStep(), "ascVehicleReconcileCalled=1")
-    if !AdvisorQuoteReconcileAscVehicles(profile, db)
-        return false
-
-    if !AdvisorQuoteAscSaveAndContinueIfReady(profile, db)
-        return false
-
-    return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
+    return AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason, &failureScan)
 }
 
 AdvisorQuoteGetAscParticipantDetailStatus() {
@@ -4760,6 +4742,767 @@ AdvisorQuoteBuildAscMaritalStatusDetail(status) {
         . ", spouseSelectionMethod=" AdvisorQuoteStatusValue(status, "spouseSelectionMethod")
         . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
+}
+
+AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    lastActionKey := ""
+    sameActionCount := 0
+    driverActionCount := 0
+    vehicleActionCount := 0
+    inlineSaveCount := 0
+    removeAttemptsByTarget := Map()
+
+    Loop 20 {
+        iteration := A_Index
+        snapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+        participantStatus := Map()
+        driverStatus := Map()
+        vehicleStatus := Map()
+
+        if (AdvisorQuoteStatusValue(snapshot, "result") = "NOT_ASC_DRIVERS_VEHICLES") {
+            if AdvisorQuoteIsIncidentsPage(db)
+                return true
+            failureReason := "ASC_LEDGER_NOT_ON_DRIVERS_VEHICLES"
+            failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-wrong-page")
+            return false
+        }
+
+        activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+        hasActiveBlocker := !AdvisorQuoteAscModalPanelClear(activeModalType) || !AdvisorQuoteAscModalPanelClear(activePanelType)
+        if !hasActiveBlocker {
+            AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1, source=ledger")
+            participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+            AdvisorQuoteLogAscParticipantDetailStatus(participantStatus, "ASC_PARTICIPANT_DETAIL_STATUS")
+            driverStatus := AdvisorQuoteGetAscDriverRowsStatus()
+            AdvisorQuoteAppendLog("ASC_DRIVER_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverRowsStatusDetail(driverStatus))
+            vehicleStatus := AdvisorQuoteGetAscVehicleRowsStatus()
+            AdvisorQuoteAppendLog("ASC_VEHICLE_ROWS_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleRowsStatusDetail(vehicleStatus))
+        }
+
+        ledger := AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus, vehicleStatus, participantStatus)
+        AdvisorQuoteAppendLog("ASC_LEDGER_STATUS", AdvisorQuoteGetLastStep(), "iteration=" iteration ", " AdvisorQuoteBuildAscLedgerDetail(ledger))
+        nextAction := AdvisorQuoteStatusValue(ledger, "nextAction")
+        nextActionTarget := AdvisorQuoteStatusValue(ledger, "nextActionTarget")
+        actionKey := nextAction "|" nextActionTarget
+        if (actionKey = lastActionKey)
+            sameActionCount += 1
+        else {
+            sameActionCount := 1
+            lastActionKey := actionKey
+        }
+        if AdvisorQuoteAscLedgerLoopGuardHit(sameActionCount) {
+            failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: repeated nextAction=" nextAction ", target=" nextActionTarget ", ledger=" AdvisorQuoteBuildAscLedgerDetail(ledger)
+            failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-repeat-guard")
+            AdvisorQuoteAppendLog("ASC_LEDGER_LOOP_GUARD_HIT", AdvisorQuoteGetLastStep(), failureReason)
+            return false
+        }
+
+        Switch nextAction {
+            Case "done":
+                return true
+            Case "fail":
+                failureReason := AdvisorQuoteStatusValue(ledger, "reason")
+                if (failureReason = "")
+                    failureReason := "ASC_LEDGER_FAILED"
+                failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-failed")
+                return false
+            Case "handle_remove_driver_modal":
+                targetKey := (nextActionTarget != "") ? nextActionTarget : "unknown"
+                attempts := removeAttemptsByTarget.Has(targetKey) ? removeAttemptsByTarget[targetKey] : 0
+                attempts += 1
+                removeAttemptsByTarget[targetKey] := attempts
+                if (attempts > 2) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: remove modal repeated for target=" targetKey
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-remove-modal-guard")
+                    return false
+                }
+                if !AdvisorQuoteHandleAscRemoveDriverModalLedger(profile, db, snapshot, &failureReason, &failureScan)
+                    return false
+            Case "handle_inline_participant_panel":
+                inlineSaveCount += 1
+                if (inlineSaveCount > 2) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: inline participant panel repeated."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-inline-panel-guard")
+                    return false
+                }
+                if !AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, snapshot, &failureReason, &failureScan)
+                    return false
+            Case "handle_vehicle_modal":
+                vehicleActionCount += 1
+                if (vehicleActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: vehicle modal/action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-vehicle-action-guard")
+                    return false
+                }
+                if !AdvisorQuoteHandleAscVehicleModalLedger(profile, db, snapshot, &failureReason, &failureScan)
+                    return false
+            Case "resolve_participant_policy":
+                inlineSaveCount += 1
+                if (inlineSaveCount > 2) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: participant policy resolution repeated."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-participant-policy-guard")
+                    return false
+                }
+                maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db)
+                AdvisorQuoteAppendLog("ASC_PARTICIPANT_MARITAL_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus))
+                maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
+                if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"]) {
+                    failureReason := "ASC_PARTICIPANT_POLICY_RESOLVE_FAILED: " AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus)
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-participant-policy-failed")
+                    return false
+                }
+            Case "add_primary_driver":
+                driverActionCount += 1
+                if (driverActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: driver row action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-driver-action-guard")
+                    return false
+                }
+                selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+                result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
+                AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
+                    return false
+            Case "add_spouse_driver":
+                driverActionCount += 1
+                if (driverActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: driver row action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-driver-action-guard")
+                    return false
+                }
+                selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+                result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
+                AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
+                    return false
+            Case "remove_extra_driver":
+                driverActionCount += 1
+                if (driverActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: driver row action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-driver-action-guard")
+                    return false
+                }
+                selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+                result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
+                AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
+                    return false
+            Case "add_vehicle_row":
+                vehicleActionCount += 1
+                if (vehicleActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: vehicle row action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-vehicle-action-guard")
+                    return false
+                }
+                policy := AdvisorQuoteClassifyAscVehicles(profile)
+                result := AdvisorQuoteRunAscVehicleReconcile(policy)
+                AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleReconcileDetail(result) ", ledgerAction=" nextAction)
+                if !AdvisorQuoteVerifyAscLedgerRowActionProgress("vehicle", nextAction, snapshot, result, db, &failureReason, &failureScan)
+                    return false
+            Case "remove_vehicle_row":
+                vehicleActionCount += 1
+                if (vehicleActionCount > 10) {
+                    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: vehicle row action count exceeded."
+                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-vehicle-action-guard")
+                    return false
+                }
+                policy := AdvisorQuoteClassifyAscVehicles(profile)
+                result := AdvisorQuoteRunAscVehicleReconcile(policy)
+                AdvisorQuoteAppendLog("ASC_VEHICLE_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscVehicleReconcileDetail(result) ", ledgerAction=" nextAction)
+                if !AdvisorQuoteVerifyAscLedgerRowActionProgress("vehicle", nextAction, snapshot, result, db, &failureReason, &failureScan)
+                    return false
+            Case "save":
+                if !AdvisorQuoteAscSaveAndContinueFromLedger(ledger, db, &failureReason, &failureScan)
+                    return false
+                return AdvisorQuoteWaitForCondition("after_driver_vehicle_continue", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], AdvisorQuoteAscWaitArgs(db))
+            Default:
+                failureReason := "ASC_LEDGER_UNKNOWN_ACTION: " nextAction
+                failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-unknown-action")
+                return false
+        }
+
+        if !SafeSleep(db["timeouts"]["pollMs"]) {
+            failureReason := "ASC_LEDGER_WAIT_FAILED"
+            return false
+        }
+    }
+
+    failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: max total ASC ledger iterations reached."
+    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-total-guard")
+    AdvisorQuoteAppendLog("ASC_LEDGER_LOOP_GUARD_HIT", AdvisorQuoteGetLastStep(), failureReason)
+    return false
+}
+
+AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "", vehicleStatus := "", participantStatus := "") {
+    db := GetAdvisorQuoteWorkflowDb()
+    ledger := Map(
+        "result", "OK",
+        "routeFamily", AdvisorQuoteStatusValue(snapshot, "routeFamily"),
+        "ascProductRouteId", AdvisorQuoteStatusValue(snapshot, "ascProductRouteId"),
+        "activeModalType", AdvisorQuoteStatusValue(snapshot, "activeModalType"),
+        "activePanelType", AdvisorQuoteStatusValue(snapshot, "activePanelType"),
+        "blockerCode", AdvisorQuoteStatusValue(snapshot, "blockerCode"),
+        "primaryDriverStatus", "ambiguous",
+        "spousePolicy", AdvisorQuoteAscSpousePolicyName(profile, db),
+        "spouseStatus", "not_applicable",
+        "selectedSpouseName", "",
+        "extraDriverCount", "0",
+        "extraDriversToRemove", "",
+        "unresolvedDriverCount", AdvisorQuoteStatusValue(snapshot, "unresolvedDriverCount"),
+        "expectedVehicleCount", "0",
+        "vehiclesAdded", AdvisorQuoteStatusValue(snapshot, "addedVehicleCount"),
+        "vehiclesToAdd", "",
+        "unresolvedVehicleCount", AdvisorQuoteStatusValue(snapshot, "unresolvedVehicleCount"),
+        "mainSavePresent", AdvisorQuoteStatusValue(snapshot, "mainSavePresent"),
+        "mainSaveEnabled", AdvisorQuoteStatusValue(snapshot, "mainSaveEnabled"),
+        "nextAction", "",
+        "nextActionType", "",
+        "nextActionTarget", "",
+        "reason", "",
+        "evidence", ""
+    )
+
+    snapshotResult := AdvisorQuoteStatusValue(snapshot, "result")
+    if (snapshotResult != "OK")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_LEDGER_SNAPSHOT_NOT_OK:" snapshotResult, "snapshot")
+
+    activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+    activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+    if (activeModalType = "ASC_REMOVE_DRIVER_MODAL")
+        return AdvisorQuoteAscLedgerNext(ledger, "BLOCKED", "handle_remove_driver_modal", "modal", AdvisorQuoteStatusValue(snapshot, "removeDriverTargetName"), "ASC_REMOVE_DRIVER_MODAL_OPEN", "snapshot")
+    if (activePanelType = "ASC_INLINE_PARTICIPANT_PANEL" || activeModalType = "ASC_INLINE_PARTICIPANT_PANEL")
+        return AdvisorQuoteAscLedgerNext(ledger, "BLOCKED", "handle_inline_participant_panel", "panel", "inline-participant", "ASC_INLINE_PARTICIPANT_PANEL_OPEN", "snapshot")
+    if (activeModalType = "ASC_VEHICLE_MODAL")
+        return AdvisorQuoteAscLedgerNext(ledger, "BLOCKED", "handle_vehicle_modal", "modal", "vehicle-modal", "ASC_VEHICLE_MODAL_OPEN", "snapshot")
+    if !AdvisorQuoteAscModalPanelClear(activeModalType)
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_ACTIVE_MODAL_UNHANDLED:" activeModalType, "snapshot")
+    if !AdvisorQuoteAscModalPanelClear(activePanelType)
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_ACTIVE_PANEL_UNHANDLED:" activePanelType, "snapshot")
+
+    if (!IsObject(participantStatus) || AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_PARTICIPANT_DETAIL_NOT_FOUND", "participant")
+
+    driverRows := AdvisorQuoteAscParseDriverRows(driverStatus)
+    vehicleRows := AdvisorQuoteAscParseVehicleRows(vehicleStatus)
+    primaryName := AdvisorQuoteProfileFullName(profile)
+    leadMarital := AdvisorQuoteLeadMaritalStatus(profile)
+    primaryRow := AdvisorQuoteAscFindDriverRow(driverRows, primaryName)
+    if IsObject(primaryRow) {
+        if (AdvisorQuoteStatusValue(primaryRow, "added") = "1")
+            ledger["primaryDriverStatus"] := "added"
+        else if (AdvisorQuoteStatusValue(primaryRow, "add") = "1")
+            ledger["primaryDriverStatus"] := "needs_add"
+        else
+            ledger["primaryDriverStatus"] := "ambiguous"
+    } else {
+        ledger["primaryDriverStatus"] := (primaryName = "") ? "ambiguous" : "missing"
+    }
+
+    spouseEval := AdvisorQuoteAscEvaluateSpouse(profile, participantStatus, driverRows, db)
+    ledger["spousePolicy"] := spouseEval["policy"]
+    ledger["spouseStatus"] := spouseEval["status"]
+    ledger["selectedSpouseName"] := spouseEval["selectedSpouseName"]
+    if (spouseEval["reason"] != "")
+        ledger["reason"] := spouseEval["reason"]
+
+    if (ledger["spouseStatus"] = "ambiguous")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_AMBIGUOUS:" spouseEval["reason"], spouseEval["evidence"])
+    if (ledger["spouseStatus"] = "blocked")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_BLOCKED:" spouseEval["reason"], spouseEval["evidence"])
+    if AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db)
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "resolve_participant_policy", "panel", ledger["selectedSpouseName"], "participant-policy-not-resolved", spouseEval["evidence"])
+
+    if (ledger["primaryDriverStatus"] = "needs_add")
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_primary_driver", "driver", primaryName, "primary-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+    if (ledger["primaryDriverStatus"] != "added")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_PRIMARY_DRIVER_ROW_" StrUpper(ledger["primaryDriverStatus"]), AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+
+    expectedNames := AdvisorQuoteAscExpectedDriverNames(profile, ledger["selectedSpouseName"])
+    if (leadMarital = "Married" && ledger["spouseStatus"] != "not_applicable") {
+        spouseRow := AdvisorQuoteAscFindDriverRow(driverRows, ledger["selectedSpouseName"])
+        if IsObject(spouseRow) {
+            if (AdvisorQuoteStatusValue(spouseRow, "added") = "1")
+                ledger["spouseStatus"] := "added"
+            else if (AdvisorQuoteStatusValue(spouseRow, "add") = "1") {
+                ledger["spouseStatus"] := "needs_add"
+                return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_spouse_driver", "driver", ledger["selectedSpouseName"], "spouse-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+            } else
+                return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+        }
+    }
+
+    extras := []
+    for _, row in driverRows {
+        if AdvisorQuoteAscRowMatchesAnyDriver(row, expectedNames)
+            continue
+        if (AdvisorQuoteStatusValue(row, "remove") = "1")
+            extras.Push(AdvisorQuoteStatusValue(row, "name"))
+    }
+    ledger["extraDriverCount"] := String(extras.Length)
+    ledger["extraDriversToRemove"] := JoinArray(extras, "||")
+    if (extras.Length > 0)
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "remove_extra_driver", "driver", extras[1], "extra-driver-remove-candidate", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+
+    unresolvedDrivers := AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount")
+    ledger["unresolvedDriverCount"] := String(unresolvedDrivers)
+    if (unresolvedDrivers > 0)
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_DRIVER_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+
+    vehiclePolicy := AdvisorQuoteClassifyAscVehicles(profile)
+    expectedVehicleCount := vehiclePolicy["completeVehicles"].Length
+    addedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "addedVehicleCount")
+    unresolvedVehicles := AdvisorQuoteStatusInteger(vehicleStatus, "unresolvedVehicleCount")
+    ledger["expectedVehicleCount"] := String(expectedVehicleCount)
+    ledger["vehiclesAdded"] := String(addedVehicles)
+    ledger["unresolvedVehicleCount"] := String(unresolvedVehicles)
+    if (expectedVehicleCount > 0 && addedVehicles < expectedVehicleCount) {
+        ledger["vehiclesToAdd"] := AdvisorQuoteVehicleListSummary(vehiclePolicy["completeVehicles"])
+        if (unresolvedVehicles > 0)
+            return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_vehicle_row", "vehicle", ledger["vehiclesToAdd"], "expected-vehicle-row-needs-add", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_VERIFY_FAILED", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+    }
+    if (expectedVehicleCount = 0 && addedVehicles < 1)
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_VERIFY_FAILED:no-expected-or-added-vehicle", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+    if (unresolvedVehicles > 0)
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+
+    ledger["mainSavePresent"] := AdvisorQuoteStatusValue(snapshot, "mainSavePresent")
+    ledger["mainSaveEnabled"] := AdvisorQuoteStatusValue(snapshot, "mainSaveEnabled")
+    if (ledger["mainSavePresent"] != "1")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SAVE_MISSING_AFTER_LEDGER_RESOLUTION", AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(snapshot))
+    if (ledger["mainSaveEnabled"] != "1")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SAVE_DISABLED_AFTER_LEDGER_RESOLUTION", AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(snapshot))
+    return AdvisorQuoteAscLedgerNext(ledger, "OK", "save", "save", "profile-summary-submitBtn", "ledger-resolved-save-enabled", AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(snapshot))
+}
+
+AdvisorQuoteAscLedgerNext(ledger, result, action, actionType, target, reason, evidence := "") {
+    ledger["result"] := result
+    ledger["nextAction"] := action
+    ledger["nextActionType"] := actionType
+    ledger["nextActionTarget"] := target
+    ledger["reason"] := reason
+    ledger["evidence"] := evidence
+    return ledger
+}
+
+AdvisorQuoteAscLedgerFail(ledger, reason, evidence := "") {
+    return AdvisorQuoteAscLedgerNext(ledger, "ERROR", "fail", "fail", "", reason, evidence)
+}
+
+AdvisorQuoteAscLedgerLoopGuardHit(sameActionCount, maxSameActionCount := 2) {
+    return sameActionCount > maxSameActionCount
+}
+
+AdvisorQuoteBuildAscLedgerDetail(ledger) {
+    return "result=" AdvisorQuoteStatusValue(ledger, "result")
+        . ", routeFamily=" AdvisorQuoteStatusValue(ledger, "routeFamily")
+        . ", ascProductRouteId=" AdvisorQuoteStatusValue(ledger, "ascProductRouteId")
+        . ", activeModalType=" AdvisorQuoteStatusValue(ledger, "activeModalType")
+        . ", activePanelType=" AdvisorQuoteStatusValue(ledger, "activePanelType")
+        . ", blockerCode=" AdvisorQuoteStatusValue(ledger, "blockerCode")
+        . ", primaryDriverStatus=" AdvisorQuoteStatusValue(ledger, "primaryDriverStatus")
+        . ", spousePolicy=" AdvisorQuoteStatusValue(ledger, "spousePolicy")
+        . ", spouseStatus=" AdvisorQuoteStatusValue(ledger, "spouseStatus")
+        . ", selectedSpouseName=" AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+        . ", extraDriverCount=" AdvisorQuoteStatusValue(ledger, "extraDriverCount")
+        . ", extraDriversToRemove=" AdvisorQuoteStatusValue(ledger, "extraDriversToRemove")
+        . ", unresolvedDriverCount=" AdvisorQuoteStatusValue(ledger, "unresolvedDriverCount")
+        . ", expectedVehicleCount=" AdvisorQuoteStatusValue(ledger, "expectedVehicleCount")
+        . ", vehiclesAdded=" AdvisorQuoteStatusValue(ledger, "vehiclesAdded")
+        . ", vehiclesToAdd=" AdvisorQuoteStatusValue(ledger, "vehiclesToAdd")
+        . ", unresolvedVehicleCount=" AdvisorQuoteStatusValue(ledger, "unresolvedVehicleCount")
+        . ", mainSavePresent=" AdvisorQuoteStatusValue(ledger, "mainSavePresent")
+        . ", mainSaveEnabled=" AdvisorQuoteStatusValue(ledger, "mainSaveEnabled")
+        . ", nextAction=" AdvisorQuoteStatusValue(ledger, "nextAction")
+        . ", nextActionType=" AdvisorQuoteStatusValue(ledger, "nextActionType")
+        . ", nextActionTarget=" AdvisorQuoteStatusValue(ledger, "nextActionTarget")
+        . ", reason=" AdvisorQuoteStatusValue(ledger, "reason")
+        . ", evidence=" AdvisorQuoteStatusValue(ledger, "evidence")
+}
+
+AdvisorQuoteAscModalPanelClear(value) {
+    value := Trim(String(value))
+    return value = "" || value = "NONE"
+}
+
+AdvisorQuoteAscSpouseOverrideSingleEnabled(db) {
+    defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
+    value := defaults.Has("ascSpouseOverrideSingleEnabled") ? defaults["ascSpouseOverrideSingleEnabled"] : "false"
+    text := StrLower(Trim(String(value)))
+    return text = "true" || text = "1" || text = "yes"
+}
+
+AdvisorQuoteAscSpouseAgeWindowYears(db) {
+    defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
+    value := defaults.Has("ascSpouseAgeWindowYears") ? defaults["ascSpouseAgeWindowYears"] : 14
+    return RegExMatch(String(value), "^\d+$") ? Integer(value) : 14
+}
+
+AdvisorQuoteAscRemoveReasonCode(db) {
+    defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
+    if (defaults.Has("ascDriverRemoveReasonCode"))
+        return Trim(String(defaults["ascDriverRemoveReasonCode"]))
+    return defaults.Has("driverRemoveReasonCode") ? Trim(String(defaults["driverRemoveReasonCode"])) : "0006"
+}
+
+AdvisorQuoteAscRemoveReasonText(db) {
+    defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
+    return defaults.Has("ascDriverRemoveReasonText") ? Trim(String(defaults["ascDriverRemoveReasonText"])) : "This driver has their own car insurance"
+}
+
+AdvisorQuoteAscSpousePolicyName(profile, db) {
+    leadMarital := AdvisorQuoteLeadMaritalStatus(profile)
+    if (leadMarital = "Single" && !AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
+        return "single-wins"
+    if (leadMarital = "Married")
+        return "married-required"
+    return AdvisorQuoteAscSpouseOverrideSingleEnabled(db) ? "override-enabled" : "override-disabled"
+}
+
+AdvisorQuoteAscEvaluateSpouse(profile, participantStatus, driverRows, db) {
+    policy := AdvisorQuoteAscSpousePolicyName(profile, db)
+    leadMarital := AdvisorQuoteLeadMaritalStatus(profile)
+    selectedSpouse := AdvisorQuoteStatusValue(participantStatus, "spouseDropdownText")
+    result := Map("policy", policy, "status", "not_applicable", "selectedSpouseName", selectedSpouse, "reason", "", "evidence", AdvisorQuoteStatusValue(participantStatus, "spouseOptions"))
+    if (leadMarital = "Single" && !AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
+        return result
+    if (leadMarital != "Married")
+        return result
+
+    leadSpouseName := AdvisorQuoteLeadSpouseName(profile)
+    options := AdvisorQuoteAscParseSpouseOptions(AdvisorQuoteStatusValue(participantStatus, "spouseOptions"))
+    if (leadSpouseName != "") {
+        if (selectedSpouse != "" && AdvisorQuoteLedgerPersonNameMatches(selectedSpouse, leadSpouseName)) {
+            result["status"] := "candidate_selected"
+            result["selectedSpouseName"] := selectedSpouse
+            return result
+        }
+        matches := []
+        for _, option in options
+            if AdvisorQuoteLedgerPersonNameMatches(option["text"], leadSpouseName)
+                matches.Push(option)
+        if (matches.Length = 1) {
+            result["status"] := "needs_select"
+            result["selectedSpouseName"] := matches[1]["text"]
+            result["reason"] := "exact-spouse-needs-select"
+            return result
+        }
+        result["status"] := (matches.Length > 1) ? "ambiguous" : "blocked"
+        result["reason"] := (matches.Length > 1) ? "exact-spouse-ambiguous" : "exact-spouse-not-found"
+        return result
+    }
+
+    primaryRow := AdvisorQuoteAscFindDriverRow(driverRows, AdvisorQuoteProfileFullName(profile))
+    primaryAge := IsObject(primaryRow) ? AdvisorQuoteStatusInteger(primaryRow, "age") : 0
+    inWindow := []
+    ageWindow := AdvisorQuoteAscSpouseAgeWindowYears(db)
+    for _, option in options {
+        row := AdvisorQuoteAscFindDriverRow(driverRows, option["text"])
+        age := IsObject(row) ? AdvisorQuoteStatusInteger(row, "age") : 0
+        if (primaryAge > 0 && age > 0 && Abs(primaryAge - age) <= ageWindow)
+            inWindow.Push(option)
+    }
+    if (selectedSpouse != "") {
+        for _, option in inWindow {
+            if AdvisorQuoteLedgerPersonNameMatches(option["text"], selectedSpouse) {
+                result["status"] := "candidate_selected"
+                result["selectedSpouseName"] := selectedSpouse
+                return result
+            }
+        }
+    }
+    if (inWindow.Length = 1) {
+        result["status"] := "needs_select"
+        result["selectedSpouseName"] := inWindow[1]["text"]
+        result["reason"] := "unique-age-window-spouse-needs-select"
+        return result
+    }
+    result["status"] := (inWindow.Length > 1) ? "ambiguous" : "blocked"
+    result["reason"] := (inWindow.Length > 1) ? "age-window-spouse-ambiguous" : "no-safe-spouse-candidate"
+    return result
+}
+
+AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db) {
+    leadMarital := AdvisorQuoteLeadMaritalStatus(profile)
+    selectedMarital := AdvisorQuoteStatusValue(participantStatus, "maritalStatusSelected")
+    if (leadMarital = "Single" && !AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
+        return !AdvisorQuoteAscMaritalTextMatches(selectedMarital, "Single")
+    if (leadMarital = "Married") {
+        if !AdvisorQuoteAscMaritalTextMatches(selectedMarital, "Married")
+            return true
+        return AdvisorQuoteStatusValue(ledger, "spouseStatus") = "needs_select"
+    }
+    return false
+}
+
+AdvisorQuoteAscMaritalTextMatches(actual, wanted) {
+    value := AdvisorNormalizeLooseToken(actual)
+    target := AdvisorNormalizeLooseToken(wanted)
+    if (target = "SINGLE")
+        return value = "SINGLE" || value = "UNMARRIED"
+    if (target = "MARRIED")
+        return value = "MARRIED"
+    return value = target
+}
+
+AdvisorQuoteAscParseDriverRows(status) {
+    rows := []
+    summaries := AdvisorQuoteStatusValue(status, "driverSummaries")
+    for _, record in AdvisorQuoteAscSplitSummaryRecords(summaries) {
+        row := AdvisorQuoteAscParseSummaryRecord(record)
+        if !row.Has("name")
+            row["name"] := row.Has("__label") ? row["__label"] : ""
+        rows.Push(row)
+    }
+    return rows
+}
+
+AdvisorQuoteAscParseVehicleRows(status) {
+    rows := []
+    summaries := AdvisorQuoteStatusValue(status, "vehicleSummaries")
+    for _, record in AdvisorQuoteAscSplitSummaryRecords(summaries)
+        rows.Push(AdvisorQuoteAscParseSummaryRecord(record))
+    return rows
+}
+
+AdvisorQuoteAscSplitSummaryRecords(text) {
+    records := []
+    for _, record in StrSplit(String(text ?? ""), "||") {
+        value := Trim(record)
+        if (value != "")
+            records.Push(value)
+    }
+    return records
+}
+
+AdvisorQuoteAscParseSummaryRecord(record) {
+    row := Map("__label", "")
+    parts := StrSplit(String(record), "|")
+    if (parts.Length >= 1) {
+        row["__label"] := Trim(parts[1])
+        row["name"] := Trim(parts[1])
+    }
+    remainingParts := parts.Length - 1
+    Loop remainingParts {
+        part := Trim(parts[A_Index + 1])
+        if RegExMatch(part, "^([^=]+)=(.*)$", &m)
+            row[Trim(m[1])] := Trim(m[2])
+    }
+    return row
+}
+
+AdvisorQuoteAscParseSpouseOptions(optionsText) {
+    options := []
+    for _, record in AdvisorQuoteAscSplitSummaryRecords(optionsText) {
+        value := record
+        text := record
+        pos := InStr(record, ":")
+        if (pos > 0) {
+            value := SubStr(record, 1, pos - 1)
+            text := SubStr(record, pos + 1)
+        }
+        text := Trim(text)
+        if (text = "" || text = "NewDriver")
+            continue
+        options.Push(Map("value", Trim(value), "text", text))
+    }
+    return options
+}
+
+AdvisorQuoteAscExpectedDriverNames(profile, selectedSpouseName := "") {
+    names := []
+    primary := AdvisorQuoteProfileFullName(profile)
+    if (primary != "")
+        names.Push(primary)
+    if (AdvisorQuoteLeadMaritalStatus(profile) = "Married" && Trim(String(selectedSpouseName)) != "")
+        names.Push(Trim(String(selectedSpouseName)))
+    return names
+}
+
+AdvisorQuoteAscFindDriverRow(rows, name) {
+    if !IsObject(rows)
+        return ""
+    for _, row in rows
+        if AdvisorQuoteLedgerPersonNameMatches(AdvisorQuoteStatusValue(row, "name"), name)
+            return row
+    return ""
+}
+
+AdvisorQuoteAscRowMatchesAnyDriver(row, expectedNames) {
+    for _, name in expectedNames
+        if AdvisorQuoteLedgerPersonNameMatches(AdvisorQuoteStatusValue(row, "name"), name)
+            return true
+    return false
+}
+
+AdvisorQuoteNormalizeLedgerPersonName(value) {
+    text := StrUpper(Trim(String(value ?? "")))
+    text := RegExReplace(text, "\bAGE\s+\d+\b", " ")
+    text := RegExReplace(text, "\b(ADD|REMOVE|EDIT|ADDED|QUOTE|TO|DO|YOU|WANT|DRIVER|SPOUSE)\b", " ")
+    text := RegExReplace(text, "[^A-Z0-9 ]", " ")
+    text := RegExReplace(text, "\s+", " ")
+    return Trim(text)
+}
+
+AdvisorQuoteLedgerPersonNameMatches(actual, expected) {
+    a := AdvisorQuoteNormalizeLedgerPersonName(actual)
+    e := AdvisorQuoteNormalizeLedgerPersonName(expected)
+    return a != "" && e != "" && (a = e || InStr(a, e) > 0 || InStr(e, a) > 0)
+}
+
+AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, result, db, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    outcome := AdvisorQuoteStatusValue(result, "result")
+    if (outcome = "OK")
+        return true
+    if (outcome != "PARTIAL") {
+        failureReason := (kind = "driver") ? "ASC_DRIVER_ROW_VERIFY_FAILED: " : "ASC_VEHICLE_ROW_VERIFY_FAILED: "
+        failureReason .= (kind = "driver") ? AdvisorQuoteBuildAscDriverReconcileDetail(result) : AdvisorQuoteBuildAscVehicleReconcileDetail(result)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-failed")
+        return false
+    }
+    if !SafeSleep(db["timeouts"]["pollMs"]) {
+        failureReason := "ASC_LEDGER_ROW_ACTION_WAIT_FAILED"
+        return false
+    }
+    afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+    afterModal := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
+    afterPanel := AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
+    if !AdvisorQuoteAscModalPanelClear(afterModal) || !AdvisorQuoteAscModalPanelClear(afterPanel)
+        return true
+    if (kind = "driver" && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount"))
+        return true
+    if (kind = "vehicle" && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedVehicleCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedVehicleCount"))
+        return true
+    if (kind = "vehicle" && AdvisorQuoteStatusInteger(afterSnapshot, "addedVehicleCount") > AdvisorQuoteStatusInteger(beforeSnapshot, "addedVehicleCount"))
+        return true
+    failureReason := (kind = "driver") ? "ASC_DRIVER_ROW_VERIFY_FAILED" : "ASC_VEHICLE_ROW_VERIFY_FAILED"
+    failureReason .= ": action=" action ", before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
+    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress")
+    return false
+}
+
+AdvisorQuoteHandleAscRemoveDriverModalLedger(profile, db, beforeSnapshot, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    reasonCode := AdvisorQuoteAscRemoveReasonCode(db)
+    reasonText := AdvisorQuoteAscRemoveReasonText(db)
+    selectStatus := Map()
+    if !AdvisorQuoteSelectRemoveReason(reasonCode, &selectStatus, reasonText) {
+        result := AdvisorQuoteStatusValue(selectStatus, "result")
+        failureReason := (result = "NO_REASON") ? "ASC_REMOVE_REASON_NOT_FOUND" : "ASC_REMOVE_REASON_SELECT_FAILED"
+        failureReason .= ": reasonCode=" reasonCode ", result=" result
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-remove-reason-failed")
+        return false
+    }
+    if (AdvisorQuoteStatusValue(selectStatus, "reasonSelected") != "1") {
+        failureReason := "ASC_REMOVE_REASON_SELECT_FAILED: reasonCode=" reasonCode ", " AdvisorQuoteBuildRemoveReasonStatusDetail(selectStatus)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-remove-reason-not-selected")
+        return false
+    }
+    if !AdvisorQuoteClickById(db["selectors"]["removeParticipantSaveId"], db["timeouts"]["actionMs"]) {
+        failureReason := "ASC_REMOVE_DRIVER_SAVE_DID_NOT_COMMIT: remove save click failed."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-remove-save-click-failed")
+        return false
+    }
+    if !SafeSleep(db["timeouts"]["pollMs"]) {
+        failureReason := "ASC_REMOVE_DRIVER_SAVE_DID_NOT_COMMIT: wait interrupted."
+        return false
+    }
+    afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+    if (AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") != "ASC_REMOVE_DRIVER_MODAL")
+        return true
+    if (AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount"))
+        return true
+    failureReason := "ASC_REMOVE_DRIVER_SAVE_DID_NOT_COMMIT: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
+    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-remove-save-did-not-commit")
+    return false
+}
+
+AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    if !AdvisorQuoteFillParticipantModal(profile, db) {
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: fill failed."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-fill-failed")
+        return false
+    }
+    if !AdvisorQuoteClickById(db["selectors"]["participantSaveId"], db["timeouts"]["actionMs"]) {
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: save click failed."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-save-click-failed")
+        return false
+    }
+    if !SafeSleep(db["timeouts"]["pollMs"]) {
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: wait interrupted."
+        return false
+    }
+    afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
+    if (AdvisorQuoteStatusValue(afterSnapshot, "activePanelType") != "ASC_INLINE_PARTICIPANT_PANEL" && AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") != "ASC_INLINE_PARTICIPANT_PANEL")
+        return true
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    if AdvisorQuoteAscParticipantRequiredSatisfied(participantStatus)
+        return true
+    failureReason := "ASC_INLINE_PARTICIPANT_VERIFY_FAILED: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot) ", participant=" AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
+    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-verify-failed")
+    return false
+}
+
+AdvisorQuoteAscParticipantRequiredSatisfied(participantStatus) {
+    if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND")
+        return false
+    if (AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedValue") = "")
+        return false
+    if (AdvisorQuoteStatusValue(participantStatus, "propertyOwnershipValue") = "" && AdvisorQuoteStatusValue(participantStatus, "propertyOwnershipText") = "")
+        return false
+    return AdvisorQuoteStatusValue(participantStatus, "missing") = ""
+}
+
+AdvisorQuoteHandleAscVehicleModalLedger(profile, db, beforeSnapshot, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    if !AdvisorQuoteFillVehicleModal(profile, db) {
+        failureReason := "ASC_VEHICLE_ROW_VERIFY_FAILED: vehicle modal fill failed."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-vehicle-modal-fill-failed")
+        return false
+    }
+    if !AdvisorQuoteClickById(db["selectors"]["addAssetSaveId"], db["timeouts"]["actionMs"]) {
+        failureReason := "ASC_VEHICLE_ROW_VERIFY_FAILED: vehicle modal save click failed."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-vehicle-modal-save-click-failed")
+        return false
+    }
+    waitArgs := Map("addAssetSaveId", db["selectors"]["addAssetSaveId"])
+    if !AdvisorQuoteWaitForCondition("add_asset_modal_closed", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs) {
+        failureReason := "ASC_VEHICLE_ROW_VERIFY_FAILED: vehicle modal did not close."
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-vehicle-modal-close-failed")
+        return false
+    }
+    return true
+}
+
+AdvisorQuoteAscSaveAndContinueFromLedger(ledger, db, &failureReason := "", &failureScan := "") {
+    failureReason := ""
+    failureScan := ""
+    if (AdvisorQuoteStatusValue(ledger, "mainSavePresent") != "1") {
+        failureReason := "ASC_SAVE_DISABLED_AFTER_LEDGER_RESOLUTION: main save missing. " AdvisorQuoteBuildAscLedgerDetail(ledger)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-save-missing")
+        return false
+    }
+    if (AdvisorQuoteStatusValue(ledger, "mainSaveEnabled") != "1") {
+        failureReason := "ASC_SAVE_DISABLED_AFTER_LEDGER_RESOLUTION: main save disabled. " AdvisorQuoteBuildAscLedgerDetail(ledger)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-save-disabled")
+        return false
+    }
+    if !AdvisorQuoteClickById(db["selectors"]["driverVehicleContinueId"], db["timeouts"]["actionMs"]) {
+        failureReason := "ASC_SAVE_DISABLED_AFTER_LEDGER_RESOLUTION: main save click failed. " AdvisorQuoteBuildAscLedgerDetail(ledger)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-save-click-failed")
+        return false
+    }
+    AdvisorQuoteAppendLog("ASC_LEDGER_SAVE_AND_CONTINUE_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscLedgerDetail(ledger))
+    return true
 }
 
 AdvisorQuoteReconcileAscDrivers(profile, db, selectedSpouseName := "") {
@@ -5211,9 +5954,31 @@ AdvisorQuoteResolveParticipantPropertyOwnership(profile, db) {
     return db["defaults"]["propertyOwnershipOwnHome"]
 }
 
-AdvisorQuoteSelectRemoveReason(reasonCode) {
-    result := AdvisorQuoteRunOp("select_remove_reason", Map("reasonCode", reasonCode))
-    return result = "OK"
+AdvisorQuoteSelectRemoveReason(reasonCode, &status := "", reasonText := "") {
+    args := Map("reasonCode", reasonCode)
+    if (Trim(String(reasonText)) != "")
+        args["reasonText"] := reasonText
+    raw := AdvisorQuoteRunOp("select_remove_reason", args)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    if (status.Count = 0) {
+        status := Map(
+            "result", raw,
+            "reasonSelected", raw = "OK" ? "1" : "0",
+            "reasonCode", reasonCode,
+            "method", "legacy"
+        )
+    }
+    AdvisorQuoteAppendLog("ASC_REMOVE_REASON_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildRemoveReasonStatusDetail(status))
+    return AdvisorQuoteStatusValue(status, "result") = "OK" && AdvisorQuoteStatusValue(status, "reasonSelected") = "1"
+}
+
+AdvisorQuoteBuildRemoveReasonStatusDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", reasonCode=" AdvisorQuoteStatusValue(status, "reasonCode")
+        . ", reasonSelected=" AdvisorQuoteStatusValue(status, "reasonSelected")
+        . ", clicked=" AdvisorQuoteStatusValue(status, "clicked")
+        . ", method=" AdvisorQuoteStatusValue(status, "method")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
 }
 
 AdvisorQuoteFillVehicleModal(profile, db) {

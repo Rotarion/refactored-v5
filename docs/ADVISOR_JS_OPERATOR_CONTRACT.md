@@ -20,6 +20,8 @@ The detailed current operator overview is consolidated in `docs/PROJECT_ARCHITEC
 - DB-backed Rapport vehicle matching behavior is documented in `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
 - Read-only snapshot ops are `advisor_active_modal_status`, `gather_rapport_snapshot`, and `asc_drivers_vehicles_snapshot`.
 - Snapshot ops return compact key/value blocks for route, active modal/panel, save gates, card/row counts, blocker codes, evidence, and missing data. They must not click, type, save, confirm vehicles, remove drivers, create quotes, or navigate.
-- AHK wrappers are `AdvisorQuoteGetActiveModalStatus()`, `AdvisorQuoteGetGatherRapportSnapshot()`, and `AdvisorQuoteGetAscDriversVehiclesSnapshot()`. They parse the key/value blocks and log compact trace entries without changing production workflow decisions.
-- Future page-level action handlers should prefer checking active modal/panel state before acting on the underlying page.
+- AHK wrappers are `AdvisorQuoteGetActiveModalStatus()`, `AdvisorQuoteGetGatherRapportSnapshot()`, and `AdvisorQuoteGetAscDriversVehiclesSnapshot()`. They parse the key/value blocks and log compact trace entries.
+- Drivers/Vehicles now uses the ASC snapshot as the first read in a ledger-driven loop. The snapshot and ledger are read-only decision inputs; existing action ops still perform fills, clicks, removals, vehicle row adds, and save/continue.
+- `select_remove_reason` returns key/value diagnostics: `result`, `reasonCode`, `reasonSelected`, `clicked`, `method`, and `failedFields`. Callers must verify `result=OK` and `reasonSelected=1` before clicking `REMOVE_PARTICIPANT_SAVE-btn`.
+- Page-level action handlers should check active modal/panel state before acting on the underlying page.
 - Generated operator changes require `build_operator.js --check`, regeneration, another `--check`, and the Advisor JS smoke test.

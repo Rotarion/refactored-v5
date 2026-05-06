@@ -1700,8 +1700,30 @@ function testGenericOpsContract() {
   assert.strictEqual(runOperator('modal_exists', { saveButtonId: 'SAVE-btn' }, new FakeDocument([createButton('SAVE-btn', 'Save')])), '1');
   assert.strictEqual(runOperator('modal_exists', { saveButtonId: 'SAVE-btn' }, new FakeDocument()), '0');
 
-  assert.strictEqual(runOperator('select_remove_reason', { reasonCode: '0006' }, new FakeDocument([createRadio('nonDriverReasonOthers_0006', 'reason', '0006')])), 'OK');
-  assert.strictEqual(runOperator('select_remove_reason', { reasonCode: '0006' }, new FakeDocument()), 'NO_REASON');
+  const removeReasonRadio = createRadio('nonDriverReasonOthers_0006', 'nonDriverReasonEntCd', '0006');
+  const removeReason = assertKeyBlock(runOperator('select_remove_reason', { reasonCode: '0006' }, new FakeDocument([removeReasonRadio])), [
+    'result', 'reasonCode', 'reasonSelected', 'clicked', 'method', 'failedFields'
+  ]);
+  assert.strictEqual(removeReason.result, 'OK');
+  assert.strictEqual(removeReason.reasonCode, '0006');
+  assert.strictEqual(removeReason.reasonSelected, '1');
+  assert.strictEqual(removeReasonRadio.checked, true);
+  assert.strictEqual(removeReasonRadio.clickCalls, 1);
+
+  const hiddenRemoveReasonRadio = createRadio('nonDriverReasonOthers_0006', 'nonDriverReasonEntCd', '0006', { style: { display: 'none' } });
+  const hiddenRemoveReason = assertKeyBlock(runOperator('select_remove_reason', { reasonCode: '0006' }, new FakeDocument([hiddenRemoveReasonRadio])), [
+    'result', 'reasonCode', 'reasonSelected', 'clicked', 'method', 'failedFields'
+  ]);
+  assert.strictEqual(hiddenRemoveReason.result, 'OK');
+  assert.strictEqual(hiddenRemoveReason.reasonSelected, '1');
+  assert.strictEqual(hiddenRemoveReason.clicked, '0');
+  assert.strictEqual(hiddenRemoveReasonRadio.checked, true);
+
+  const missingRemoveReason = assertKeyBlock(runOperator('select_remove_reason', { reasonCode: '0006' }, new FakeDocument()), [
+    'result', 'reasonCode', 'reasonSelected', 'clicked', 'method', 'failedFields'
+  ]);
+  assert.strictEqual(missingRemoveReason.result, 'NO_REASON');
+  assert.strictEqual(missingRemoveReason.reasonSelected, '0');
 
   assert.strictEqual(runOperator('handle_incidents', { reasonText: BASE_DEFAULTS.incidentReasonText, incidentContinueId: 'CONTINUE_OFFER-btn' }, createIncidentActionDoc(true, true)), 'OK');
   assert.strictEqual(runOperator('handle_incidents', { reasonText: BASE_DEFAULTS.incidentReasonText, incidentContinueId: 'CONTINUE_OFFER-btn' }, createIncidentActionDoc(false, true)), 'NO_REASON');

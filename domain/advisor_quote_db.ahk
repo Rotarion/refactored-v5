@@ -45,6 +45,10 @@ GetAdvisorQuoteWorkflowDb() {
         "garagingSameAsHome", "yes",
         "recentPurchase", "false",
         "driverRemoveReasonCode", "0006",
+        "ascSpouseOverrideSingleEnabled", "false",
+        "ascSpouseAgeWindowYears", 14,
+        "ascDriverRemoveReasonCode", "0006",
+        "ascDriverRemoveReasonText", "This driver has their own car insurance",
         "incidentReasonText", "Accident caused by being hit by animal or road debris",
         "vehicleFinanceYearThreshold", 2015,
         "rapportVehicleMode", "match-existing-then-add-complete"
