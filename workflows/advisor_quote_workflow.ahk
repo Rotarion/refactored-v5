@@ -13,6 +13,8 @@ global advisorQuoteProductTileRecoveryAttempted := false
 global advisorQuoteResidentRunnerFeatureEnabled := false
 global advisorQuoteResidentRunnerReadOnlyOnly := true
 global advisorQuoteResidentRunnerUseTinyBridge := true
+global advisorQuoteJsMetrics := 0
+global advisorQuoteJsMetricOps := Map()
 
 RunAdvisorQuoteWorkflowFromClipboard() {
     raw := Trim(A_Clipboard)
@@ -33,10 +35,12 @@ RunAdvisorQuoteWorkflowFromClipboard() {
     result := RunAdvisorQuoteWorkflow(profile, db)
 
     if StopRequested() {
+        AdvisorQuoteLogJsMetricsSummary("manual-stop")
         AdvisorQuoteLogStop("manual-stop-detected-after-run")
         return AdvisorQuoteResultFail(AdvisorQuoteGetLastStep(), AdvisorQuoteGetLastStep(), "Stopped manually.", false, AdvisorQuoteResultValue(result, "scanPath"))
     }
 
+    AdvisorQuoteLogJsMetricsSummary(AdvisorQuoteResultOk(result) ? "success" : "fail")
     if !AdvisorQuoteResultOk(result) {
         AdvisorQuoteAppendLog("FAIL", AdvisorQuoteResultValue(result, "state"), AdvisorQuoteFormatResultForLog(result))
         MsgBox(AdvisorQuoteFormatResultMessage(result))
@@ -7475,21 +7479,27 @@ AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
 }
 
 AdvisorQuoteRunJsOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
+    global advisorQuoteConsoleBridgeOpen
     attempts := Max(1, Integer(retries))
     rendered := AdvisorQuoteRenderOpJs(op, args)
     if (rendered = "")
         return ""
+    renderedLength := StrLen(rendered)
 
     Loop attempts {
         if StopRequested()
             return ""
         AdvisorQuoteLogJsBridgeOp(op, args, A_Index, attempts)
+        bridgeWasOpen := (advisorQuoteConsoleBridgeOpen ?? false) = true
         if !AdvisorQuoteEnsureConsoleBridge() {
+            AdvisorQuoteRecordJsInjectionMetric(op, args, A_Index, attempts, renderedLength, false, false, true, false, false, false)
             AdvisorQuoteInvalidateConsoleBridge("op=" op ", attempt=" A_Index "/" attempts ", reason=ensure-console-failed")
             return ""
         }
 
         result := Trim(String(AdvisorQuoteExecuteBridgeJs(rendered, true)))
+        emptyResult := result = ""
+        AdvisorQuoteRecordJsInjectionMetric(op, args, A_Index, attempts, renderedLength, !bridgeWasOpen, bridgeWasOpen, emptyResult, true, emptyResult, false)
         if (result != "") {
             AdvisorQuoteMarkConsoleBridgeFocused()
             return result
@@ -7671,6 +7681,347 @@ AdvisorQuoteLogJsBridgeOp(op, args, attempt, attempts) {
         AdvisorQuoteAppendLog("ACTION_JS", AdvisorQuoteGetLastStep(), "op=" op ", attempt=" attempt "/" attempts)
 }
 
+AdvisorQuoteResetJsMetricsCollector(writeNow := true) {
+    global advisorQuoteRunId, advisorQuoteRunStartedAt, advisorQuoteJsMetrics, advisorQuoteJsMetricOps
+
+    runId := AdvisorQuoteSanitizeScanToken(advisorQuoteRunId)
+    if (runId = "")
+        runId := "run-" . FormatTime(A_Now, "yyyyMMdd-HHmmss")
+    startedAt := Trim(String(advisorQuoteRunStartedAt ?? ""))
+    if (startedAt = "")
+        startedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+
+    advisorQuoteJsMetrics := Map(
+        "schema", "advisor-js-injection-metrics-v1",
+        "runId", runId,
+        "startedAt", startedAt,
+        "attemptCount", 0,
+        "submittedCount", 0,
+        "renderedLengthTotal", 0,
+        "submittedLengthTotal", 0,
+        "renderedLengthMax", 0,
+        "bridgeOpenedCount", 0,
+        "bridgeReusedCount", 0,
+        "bridgeFailedCount", 0,
+        "emptyResultCount", 0,
+        "retryCount", 0
+    )
+    advisorQuoteJsMetricOps := Map()
+    if writeNow
+        AdvisorQuoteWriteJsMetricsFiles()
+}
+
+AdvisorQuoteEnsureJsMetricsCollector() {
+    global advisorQuoteJsMetrics
+    if !IsObject(advisorQuoteJsMetrics) || !advisorQuoteJsMetrics.Has("runId")
+        AdvisorQuoteResetJsMetricsCollector()
+}
+
+AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength, bridgeOpened, bridgeReused, bridgeFailed, submitted, emptyResult, writeNow := true) {
+    global advisorQuoteJsMetrics, advisorQuoteJsMetricOps
+
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        state := AdvisorQuoteJsMetricSafeToken(AdvisorQuoteGetLastStep(), "UNKNOWN")
+        opName := AdvisorQuoteJsMetricSafeToken(op, "unknown")
+        category := AdvisorQuoteJsMetricCategory(opName)
+        waitConditionName := AdvisorQuoteJsMetricWaitConditionName(opName, args)
+        key := state "|" category "|" opName "|" waitConditionName
+
+        if !advisorQuoteJsMetricOps.Has(key) {
+            advisorQuoteJsMetricOps[key] := Map(
+                "state", state,
+                "op", opName,
+                "category", category,
+                "waitConditionName", waitConditionName,
+                "attemptCount", 0,
+                "submittedCount", 0,
+                "renderedLengthTotal", 0,
+                "submittedLengthTotal", 0,
+                "renderedLengthMax", 0,
+                "bridgeOpenedCount", 0,
+                "bridgeReusedCount", 0,
+                "bridgeFailedCount", 0,
+                "emptyResultCount", 0,
+                "retryCount", 0
+            )
+        }
+
+        length := Max(0, Integer(renderedLength))
+        retryAttempt := Integer(attempt) > 1
+        record := advisorQuoteJsMetricOps[key]
+
+        AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "attemptCount")
+        AdvisorQuoteMetricIncrement(record, "attemptCount")
+        AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "renderedLengthTotal", length)
+        AdvisorQuoteMetricIncrement(record, "renderedLengthTotal", length)
+        AdvisorQuoteMetricMax(advisorQuoteJsMetrics, "renderedLengthMax", length)
+        AdvisorQuoteMetricMax(record, "renderedLengthMax", length)
+
+        if submitted {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "submittedCount")
+            AdvisorQuoteMetricIncrement(record, "submittedCount")
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "submittedLengthTotal", length)
+            AdvisorQuoteMetricIncrement(record, "submittedLengthTotal", length)
+        }
+        if bridgeOpened {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "bridgeOpenedCount")
+            AdvisorQuoteMetricIncrement(record, "bridgeOpenedCount")
+        }
+        if bridgeReused {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "bridgeReusedCount")
+            AdvisorQuoteMetricIncrement(record, "bridgeReusedCount")
+        }
+        if bridgeFailed {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "bridgeFailedCount")
+            AdvisorQuoteMetricIncrement(record, "bridgeFailedCount")
+        }
+        if emptyResult {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "emptyResultCount")
+            AdvisorQuoteMetricIncrement(record, "emptyResultCount")
+        }
+        if retryAttempt {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "retryCount")
+            AdvisorQuoteMetricIncrement(record, "retryCount")
+        }
+
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
+AdvisorQuoteMetricIncrement(target, key, amount := 1) {
+    current := (IsObject(target) && target.Has(key)) ? Integer(target[key]) : 0
+    target[key] := current + Integer(amount)
+}
+
+AdvisorQuoteMetricMax(target, key, value) {
+    current := (IsObject(target) && target.Has(key)) ? Integer(target[key]) : 0
+    if (Integer(value) > current)
+        target[key] := Integer(value)
+}
+
+AdvisorQuoteJsMetricCategory(op) {
+    opName := String(op ?? "")
+    if (opName = "wait_condition")
+        return "wait_poll"
+    if (opName = "scan_current_page")
+        return "scan"
+    if AdvisorQuoteIsJsActionOp(opName)
+        return "action"
+    if AdvisorQuoteRunnerAllowedStatusOp(opName)
+        return "status_read"
+    if RegExMatch(opName, "i)(^detect_state$|_status$|_snapshot$|^is_|_exists$|_listed$|^list_|^find_|^any_)")
+        return "status_read"
+    return "unknown"
+}
+
+AdvisorQuoteJsMetricWaitConditionName(op, args) {
+    if (String(op ?? "") != "wait_condition")
+        return ""
+    if IsObject(args) && args.Has("name")
+        return AdvisorQuoteJsMetricSafeToken(args["name"], "")
+    return ""
+}
+
+AdvisorQuoteJsMetricSafeToken(value, fallback := "") {
+    text := Trim(String(value ?? ""))
+    if (text = "")
+        text := fallback
+    text := RegExReplace(text, "[^A-Za-z0-9_.:-]+", "-")
+    text := RegExReplace(text, "^-+|-+$", "")
+    if (text = "")
+        text := fallback
+    if (StrLen(text) > 80)
+        text := SubStr(text, 1, 80)
+    return text
+}
+
+AdvisorQuoteWriteJsMetricsFiles() {
+    global logsRoot, advisorQuoteJsMetrics
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        json := AdvisorQuoteBuildJsMetricsJson()
+        latestPath := logsRoot "\advisor_js_injection_metrics_latest.json"
+        AdvisorQuoteWriteUtf8Atomic(latestPath, json)
+
+        runId := AdvisorQuoteJsMetricSafeToken(advisorQuoteJsMetrics["runId"], "run")
+        runDir := logsRoot "\advisor_js_injection_metrics"
+        perRunPath := runDir "\advisor_js_injection_metrics_" runId ".json"
+        AdvisorQuoteWriteUtf8Atomic(perRunPath, json)
+    } catch as err {
+    }
+}
+
+AdvisorQuoteBuildJsMetricsJson() {
+    global advisorQuoteJsMetrics, advisorQuoteJsMetricOps
+    AdvisorQuoteEnsureJsMetricsCollector()
+    updatedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+    json := "{`n"
+        . '  "schema": "' AdvisorQuoteJsonEscape(advisorQuoteJsMetrics["schema"]) '",`n'
+        . '  "runId": "' AdvisorQuoteJsonEscape(advisorQuoteJsMetrics["runId"]) '",`n'
+        . '  "startedAt": "' AdvisorQuoteJsonEscape(advisorQuoteJsMetrics["startedAt"]) '",`n'
+        . '  "updatedAt": "' AdvisorQuoteJsonEscape(updatedAt) '",`n'
+        . '  "totals": ' AdvisorQuoteBuildJsMetricTotalsJson() ",`n"
+        . '  "ops": ['
+
+    index := 0
+    for _, record in advisorQuoteJsMetricOps {
+        index += 1
+        json .= (index = 1) ? "`n" : ",`n"
+        json .= AdvisorQuoteBuildJsMetricRecordJson(record, "    ")
+    }
+    if (index > 0)
+        json .= "`n"
+    json .= "  ],`n"
+        . '  "hotOps": ['
+    hotOps := AdvisorQuoteBuildJsMetricHotOps(5)
+    for index, record in hotOps {
+        json .= (index = 1) ? "`n" : ",`n"
+        json .= AdvisorQuoteBuildJsMetricRecordJson(record, "    ")
+    }
+    if (hotOps.Length > 0)
+        json .= "`n"
+    json .= "  ]`n}"
+    return json
+}
+
+AdvisorQuoteBuildJsMetricTotalsJson() {
+    global advisorQuoteJsMetrics, advisorQuoteJsMetricOps
+    submittedBytes := Integer(advisorQuoteJsMetrics["submittedLengthTotal"])
+    mib := submittedBytes / 1048576.0
+    return "{"
+        . '"attemptCount": ' Integer(advisorQuoteJsMetrics["attemptCount"]) ", "
+        . '"submittedCount": ' Integer(advisorQuoteJsMetrics["submittedCount"]) ", "
+        . '"renderedLengthTotal": ' Integer(advisorQuoteJsMetrics["renderedLengthTotal"]) ", "
+        . '"submittedLengthTotal": ' submittedBytes ", "
+        . '"submittedMiB": "' Format("{:.2f}", mib) '", '
+        . '"renderedLengthMax": ' Integer(advisorQuoteJsMetrics["renderedLengthMax"]) ", "
+        . '"bridgeOpenedCount": ' Integer(advisorQuoteJsMetrics["bridgeOpenedCount"]) ", "
+        . '"bridgeReusedCount": ' Integer(advisorQuoteJsMetrics["bridgeReusedCount"]) ", "
+        . '"bridgeFailedCount": ' Integer(advisorQuoteJsMetrics["bridgeFailedCount"]) ", "
+        . '"emptyResultCount": ' Integer(advisorQuoteJsMetrics["emptyResultCount"]) ", "
+        . '"retryCount": ' Integer(advisorQuoteJsMetrics["retryCount"]) ", "
+        . '"opGroupCount": ' Integer(advisorQuoteJsMetricOps.Count) ", "
+        . '"residentRunnerEnabled": ' (AdvisorQuoteResidentRunnerEnabled() ? "true" : "false")
+        . "}"
+}
+
+AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
+    return indent "{"
+        . '"state": "' AdvisorQuoteJsonEscape(record["state"]) '", '
+        . '"op": "' AdvisorQuoteJsonEscape(record["op"]) '", '
+        . '"category": "' AdvisorQuoteJsonEscape(record["category"]) '", '
+        . '"waitConditionName": "' AdvisorQuoteJsonEscape(record["waitConditionName"]) '", '
+        . '"attemptCount": ' Integer(record["attemptCount"]) ", "
+        . '"submittedCount": ' Integer(record["submittedCount"]) ", "
+        . '"renderedLengthTotal": ' Integer(record["renderedLengthTotal"]) ", "
+        . '"submittedLengthTotal": ' Integer(record["submittedLengthTotal"]) ", "
+        . '"renderedLengthMax": ' Integer(record["renderedLengthMax"]) ", "
+        . '"bridgeOpenedCount": ' Integer(record["bridgeOpenedCount"]) ", "
+        . '"bridgeReusedCount": ' Integer(record["bridgeReusedCount"]) ", "
+        . '"bridgeFailedCount": ' Integer(record["bridgeFailedCount"]) ", "
+        . '"emptyResultCount": ' Integer(record["emptyResultCount"]) ", "
+        . '"retryCount": ' Integer(record["retryCount"])
+        . "}"
+}
+
+AdvisorQuoteBuildJsMetricHotOps(limit := 5) {
+    global advisorQuoteJsMetricOps
+    selected := Map()
+    hotOps := []
+    maxItems := Max(1, Integer(limit))
+
+    Loop maxItems {
+        bestKey := ""
+        bestScore := -1
+        for key, record in advisorQuoteJsMetricOps {
+            if selected.Has(key)
+                continue
+            score := Integer(record["submittedLengthTotal"])
+            if (score > bestScore) {
+                bestScore := score
+                bestKey := key
+            }
+        }
+        if (bestKey = "")
+            break
+        selected[bestKey] := true
+        hotOps.Push(advisorQuoteJsMetricOps[bestKey])
+    }
+    return hotOps
+}
+
+AdvisorQuoteLogJsMetricsSummary(reason := "run-end") {
+    global advisorQuoteJsMetrics
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        AdvisorQuoteWriteJsMetricsFiles()
+        submittedBytes := Integer(advisorQuoteJsMetrics["submittedLengthTotal"])
+        AdvisorQuoteAppendLog(
+            "ADVISOR_JS_METRICS_SUMMARY",
+            AdvisorQuoteGetLastStep(),
+            "runId=" AdvisorQuoteJsMetricSafeToken(advisorQuoteJsMetrics["runId"], "run")
+                . ", reason=" AdvisorQuoteJsMetricSafeToken(reason, "run-end")
+                . ", attempts=" Integer(advisorQuoteJsMetrics["attemptCount"])
+                . ", submitted=" Integer(advisorQuoteJsMetrics["submittedCount"])
+                . ", submittedBytes=" submittedBytes
+                . ", submittedMiB=" Format("{:.2f}", submittedBytes / 1048576.0)
+                . ", bridgeOpened=" Integer(advisorQuoteJsMetrics["bridgeOpenedCount"])
+                . ", bridgeReused=" Integer(advisorQuoteJsMetrics["bridgeReusedCount"])
+                . ", bridgeFailed=" Integer(advisorQuoteJsMetrics["bridgeFailedCount"])
+                . ", emptyResults=" Integer(advisorQuoteJsMetrics["emptyResultCount"])
+                . ", retries=" Integer(advisorQuoteJsMetrics["retryCount"])
+                . ", residentRunnerEnabled=" (AdvisorQuoteResidentRunnerEnabled() ? "1" : "0")
+        )
+        AdvisorQuoteLogJsMetricsHotOps(3)
+        AdvisorQuoteLogJsMetricsEmptyResults(5)
+    } catch as err {
+    }
+}
+
+AdvisorQuoteLogJsMetricsHotOps(limit := 3) {
+    hotOps := AdvisorQuoteBuildJsMetricHotOps(limit)
+    for index, record in hotOps {
+        if (Integer(record["submittedLengthTotal"]) <= 0)
+            continue
+        AdvisorQuoteAppendLog(
+            "ADVISOR_JS_METRICS_HOT_OP",
+            record["state"],
+            "rank=" index
+                . ", op=" record["op"]
+                . ", category=" record["category"]
+                . ", waitConditionName=" record["waitConditionName"]
+                . ", submittedBytes=" Integer(record["submittedLengthTotal"])
+                . ", attempts=" Integer(record["attemptCount"])
+                . ", emptyResults=" Integer(record["emptyResultCount"])
+        )
+    }
+}
+
+AdvisorQuoteLogJsMetricsEmptyResults(limit := 5) {
+    global advisorQuoteJsMetricOps
+    emitted := 0
+    for _, record in advisorQuoteJsMetricOps {
+        emptyCount := Integer(record["emptyResultCount"])
+        if (emptyCount <= 0)
+            continue
+        emitted += 1
+        AdvisorQuoteAppendLog(
+            "ADVISOR_JS_METRICS_EMPTY_RESULT",
+            record["state"],
+            "op=" record["op"]
+                . ", category=" record["category"]
+                . ", waitConditionName=" record["waitConditionName"]
+                . ", emptyResults=" emptyCount
+                . ", attempts=" Integer(record["attemptCount"])
+        )
+        if (emitted >= Integer(limit))
+            break
+    }
+}
+
 AdvisorQuoteIsJsActionOp(op) {
     actionOps := [
         "click_by_id",
@@ -7762,6 +8113,7 @@ AdvisorQuoteInitTrace(profile) {
     global advisorQuoteProductTileAutoSelectedOnOverview, advisorQuoteProductOverviewSaved, advisorQuoteGatherAutoCommitted, advisorQuoteProductTileRecoveryAttempted
     AdvisorQuoteResetConsoleBridge()
     AdvisorQuoteInitScanBundle()
+    AdvisorQuoteResetJsMetricsCollector()
     advisorQuoteProductOverviewAutoPending := false
     advisorQuoteProductOverviewAutoVerified := false
     advisorQuoteProductTileAutoSelectedOnOverview := false
