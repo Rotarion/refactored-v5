@@ -693,7 +693,17 @@ function ascVehicleRow({ text, slug, added = false, add = false, remove = false 
   return row;
 }
 
-function ascDriversVehiclesDoc({ marital = 'Single', spouseOptions = [], drivers = [], vehicles = [], saveDisabled = false } = {}) {
+function spouseDriverQuestionDoc({ yesChecked = false, noChecked = false } = {}) {
+  const question = new FakeElement('div', {
+    className: 'question',
+    text: 'Will your spouse be a driver on your policy?'
+  });
+  question.appendChild(createRadio('spouseDriverYes', 'agreement.agreementParticipant.spouse.driverInd', 'true', { checked: yesChecked }));
+  question.appendChild(createRadio('spouseDriverNo', 'agreement.agreementParticipant.spouse.driverInd', 'false', { checked: noChecked }));
+  return question;
+}
+
+function ascDriversVehiclesDoc({ marital = 'Single', spouseOptions = [], drivers = [], vehicles = [], saveDisabled = false, spouseDriverQuestion = false } = {}) {
   const maritalName = 'agreement.agreementParticipant.party.maritalStatusEntCd';
   const spouseSelect = createSelect('maritalStatusWithSpouse_spouseName', [
     { value: '', text: 'Select One', selected: true },
@@ -706,6 +716,7 @@ function ascDriversVehiclesDoc({ marital = 'Single', spouseOptions = [], drivers
     createSelect('propertyOwnershipEntCd_option', [{ value: '0001_0120', text: 'Own Home', selected: true }]),
     createInput('ageFirstLicensed_ageFirstLicensed', '16'),
     createInput('emailAddress.emailAddress', 'test.driver@example.com', { type: 'email' }),
+    ...(spouseDriverQuestion ? [spouseDriverQuestionDoc()] : []),
     ...drivers,
     ...vehicles,
     createButton('profile-summary-submitBtn', 'Save and Continue', { disabled: saveDisabled })
@@ -3516,7 +3527,7 @@ function createIncidentActionDoc(hasReason, hasContinue) {
 
 function testAscReconciliationContracts() {
   const ascHref = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/';
-  const singleDoc = ascDriversVehiclesDoc({
+  const singleDisabledDoc = ascDriversVehiclesDoc({
     marital: 'Married',
     spouseOptions: [
       { value: 'driver-a', text: 'Test Older Driver' },
@@ -3528,7 +3539,7 @@ function testAscReconciliationContracts() {
       ascDriverRow({ name: 'Test Near Candidate', age: 37, slug: 'test-near-candidate', remove: true })
     ]
   });
-  const singleStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), singleDoc, ascHref), [
+  const singleStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), singleDisabledDoc, ascHref), [
     'result', 'ascProductRouteId', 'spouseDropdownPresent', 'saveButtonPresent'
   ]);
   assert.strictEqual(singleStatus.result, 'FOUND');
@@ -3536,11 +3547,50 @@ function testAscReconciliationContracts() {
   const singleResolved = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
     leadMaritalStatus: 'Single',
     primaryName: 'Test Primary Driver',
-    maxSpouseAgeDifference: '14'
-  }, singleDoc, ascHref), ['result', 'selectedMaritalStatus', 'spouseSelectionMethod', 'selectedSpouseValue']);
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '0'
+  }, singleDisabledDoc, ascHref), ['result', 'selectedMaritalStatus', 'spouseSelectionMethod', 'selectedSpouseValue']);
   assert.ok(['SINGLE_CONFIRMED', 'SINGLE_SET'].includes(singleResolved.result));
   assert.strictEqual(singleResolved.spouseSelectionMethod, 'skipped-lead-single');
   assert.strictEqual(singleResolved.selectedSpouseValue, '');
+
+  const singleOverrideDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseDriverQuestion: true,
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Older Driver' },
+      { value: 'driver-b', text: 'Test Near Candidate' },
+      { value: 'NewDriver', text: 'Add another person' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Older Driver', age: 66, slug: 'test-older-driver', remove: true }),
+      ascDriverRow({ name: 'Test Near Candidate', age: 37, slug: 'test-near-candidate', add: true })
+    ]
+  });
+  const singleOverride = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Single',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '1'
+  }, singleOverrideDoc, ascHref), [
+    'result', 'selectedMaritalStatus', 'selectedSpouseText', 'selectedAgeDiff',
+    'spouseSelectionMethod', 'spouseOverrideApplied', 'spouseCandidateWithinWindowCount',
+    'spouseDriverQuestionPresent', 'spouseDriverYesSelected'
+  ]);
+  assert.strictEqual(singleOverride.result, 'SELECTED', JSON.stringify(singleOverride));
+  assert.strictEqual(singleOverride.selectedMaritalStatus, 'Married');
+  assert.strictEqual(singleOverride.selectedSpouseText, 'Test Near Candidate');
+  assert.strictEqual(singleOverride.selectedAgeDiff, '3');
+  assert.strictEqual(singleOverride.spouseSelectionMethod, 'age-window');
+  assert.strictEqual(singleOverride.spouseOverrideApplied, '1');
+  assert.strictEqual(singleOverride.spouseCandidateWithinWindowCount, '1');
+  assert.strictEqual(singleOverride.spouseDriverQuestionPresent, '1');
+  assert.strictEqual(singleOverride.spouseDriverYesSelected, '1');
+  assert.strictEqual(singleOverrideDoc.getElementById('maritalStatusEntCd_0001').checked, true);
+  assert.strictEqual(singleOverrideDoc.getElementById('spouseDriverYes').checked, true);
+  assert.strictEqual(singleOverrideDoc.getElementById('test-near-candidate-addToQuote').clickCalls, 0);
+  assert.strictEqual(singleOverrideDoc.getElementById('test-older-driver-remove').clickCalls, 0);
 
   const marriedDoc = ascDriversVehiclesDoc({
     marital: 'Single',
@@ -3618,6 +3668,81 @@ function testAscReconciliationContracts() {
     maxSpouseAgeDifference: '14'
   }, noSafeDoc, ascHref), ['result']);
   assert.strictEqual(noSafe.result, 'NO_SAFE_SPOUSE');
+
+  const unknownOverrideDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [{ value: 'driver-b', text: 'Test Near Candidate' }],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Near Candidate', age: 41, slug: 'test-near-candidate', add: true })
+    ]
+  });
+  const unknownOverride = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: '',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '1'
+  }, unknownOverrideDoc, ascHref), ['result', 'selectedSpouseText', 'spouseOverrideApplied']);
+  assert.strictEqual(unknownOverride.result, 'SELECTED');
+  assert.strictEqual(unknownOverride.selectedSpouseText, 'Test Near Candidate');
+  assert.strictEqual(unknownOverride.spouseOverrideApplied, '1');
+
+  const singleAmbiguousOverrideDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [
+      { value: 'driver-a', text: 'Test Candidate One' },
+      { value: 'driver-b', text: 'Test Candidate Two' }
+    ],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Candidate One', age: 38, slug: 'test-candidate-one', add: true }),
+      ascDriverRow({ name: 'Test Candidate Two', age: 37, slug: 'test-candidate-two', add: true })
+    ]
+  });
+  const singleAmbiguousOverride = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Single',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '1'
+  }, singleAmbiguousOverrideDoc, ascHref), ['result', 'failedFields', 'spouseCandidateWithinWindowCount']);
+  assert.strictEqual(singleAmbiguousOverride.result, 'AMBIGUOUS');
+  assert.strictEqual(singleAmbiguousOverride.spouseCandidateWithinWindowCount, '2');
+
+  const missingOptionOverrideDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    spouseOptions: [{ value: 'driver-a', text: 'Test Older Driver' }],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Near Candidate', age: 37, slug: 'test-near-candidate', add: true })
+    ]
+  });
+  const missingOptionOverride = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Single',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '1'
+  }, missingOptionOverrideDoc, ascHref), ['result', 'failedFields', 'evidence']);
+  assert.strictEqual(missingOptionOverride.result, 'FAILED');
+  assert.ok(missingOptionOverride.failedFields.includes('spouseDropdown'));
+  assert.strictEqual(missingOptionOverride.evidence, 'ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND');
+
+  const missingAgeOverrideDoc = ascDriversVehiclesDoc({
+    marital: 'Married',
+    spouseOptions: [{ value: 'driver-a', text: 'Test Age Missing' }],
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Age Missing', age: '', slug: 'test-age-missing', add: true })
+    ]
+  });
+  const missingAgeOverride = assertKeyBlock(runOperator('asc_resolve_participant_marital_and_spouse', {
+    leadMaritalStatus: 'Single',
+    primaryName: 'Test Primary Driver',
+    maxSpouseAgeDifference: '14',
+    ascSpouseOverrideSingleEnabled: '1'
+  }, missingAgeOverrideDoc, ascHref), ['result', 'spouseSelectionMethod', 'selectedSpouseValue']);
+  assert.ok(['SINGLE_CONFIRMED', 'SINGLE_SET'].includes(missingAgeOverride.result));
+  assert.strictEqual(missingAgeOverride.spouseSelectionMethod, 'override-no-candidate');
+  assert.strictEqual(missingAgeOverride.selectedSpouseValue, '');
 
   let driverDoc = ascDriversVehiclesDoc({
     marital: 'Single',

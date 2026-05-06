@@ -119,7 +119,7 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
   - email: `input#emailAddress.emailAddress`
   - phone: `input#phoneNumber_phoneNumber`
 - Defaults: lead gender, military No, moving violations No, defensive driving No when shown, own home unless the parsed address classifies as renter, age first licensed `16`.
-- Married leads select an exact spouse match first, then a unique safe spouse candidate. Single leads skip spouse selection.
+- Married leads select an exact spouse match first, then a unique safe spouse candidate. Single or unknown leads may select Married only when the ASC spouse override is enabled and exactly one Advisor-surfaced driver candidate is within the configured age window and present in the spouse dropdown; otherwise they keep Single/no spouse. Same last name alone is not enough.
 
 ## Remove Driver Modal
 

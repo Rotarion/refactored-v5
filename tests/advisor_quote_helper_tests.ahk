@@ -2,6 +2,13 @@
 
 global dobDefaultDay := 16
 global tagSymbol := "+"
+global advisorQuoteHelperTestsHeadless := false
+for _, arg in A_Args {
+    if (arg = "--headless" || arg = "headless") {
+        advisorQuoteHelperTestsHeadless := true
+        break
+    }
+}
 
 #Include ..\domain\lead_normalizer.ahk
 #Include ..\domain\advisor_quote_db.ahk
@@ -315,9 +322,75 @@ ascResolvedSingleLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
     TestAscParticipantStatus("Single")
 )
-AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "spousePolicy"), "single-wins", "Explicit Single should keep conservative spouse policy")
+AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "spousePolicy"), "override-enabled", "Explicit Single should allow override policy while no candidate qualifies")
 AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "spouseStatus"), "not_applicable", "Explicit Single should not add spouse")
 AssertEqual(AdvisorQuoteStatusValue(ascResolvedSingleLedger, "nextAction"), "save", "Resolved ledger with enabled save should save")
+
+ascSingleOverrideLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=37|added=0|add=1|remove=0||Test Older Driver|age=66|added=0|add=0|remove=1", "2", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Near Candidate||driver-b:Test Older Driver")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spousePolicy"), "override-single-by-unique-age-window", "Single lead should allow unique Advisor candidate inside age window to override")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseStatus"), "needs_select", "Single override candidate should require spouse dropdown selection")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "selectedSpouseName"), "Test Near Candidate", "Single override should select the near-age candidate")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseOverrideApplied"), "1", "Single override should trace override application")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseCandidateWithinWindowCount"), "1", "Single override should trace one in-window candidate")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "nextAction"), "resolve_spouse_marital_panel", "Single override should route to spouse marital resolver before row actions")
+
+ascSingleOverrideSelectedLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=37|added=1|add=0|remove=0||Test Older Driver|age=66|added=0|add=0|remove=1", "1", "2"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Married", "Test Near Candidate", "driver-a:Test Near Candidate||driver-b:Test Older Driver")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideSelectedLedger, "nextAction"), "remove_extra_driver", "Selected override spouse should be expected, leaving only out-of-window extras removable")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideSelectedLedger, "nextActionTarget"), "Test Older Driver", "Out-of-window candidate should remain an extra driver")
+
+ascSingleNoWindowLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Older Driver|age=66|added=0|add=0|remove=1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Older Driver")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSingleNoWindowLedger, "spouseStatus"), "not_applicable", "No in-window Single candidate should keep no-spouse policy")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleNoWindowLedger, "nextAction"), "remove_extra_driver", "Out-of-window candidate should follow normal extra-driver policy")
+
+ascSingleAmbiguousOverrideLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Candidate One|age=38|added=0|add=1|remove=0||Test Candidate Two|age=37|added=0|add=1|remove=0", "2", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Candidate One||driver-b:Test Candidate Two")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSingleAmbiguousOverrideLedger, "nextAction"), "fail", "Multiple in-window Single override candidates should fail safe")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascSingleAmbiguousOverrideLedger, "reason"), "ASC_SPOUSE_CANDIDATE_AMBIGUOUS") = 1, "Ambiguous Single override failure should be explicit")
+
+ascOverrideDisabledLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=37|added=0|add=0|remove=1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Near Candidate"),
+    TestAscDbWithSpousePolicy("false")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascOverrideDisabledLedger, "spousePolicy"), "single-wins", "Override disabled should preserve Single wins")
+AssertEqual(AdvisorQuoteStatusValue(ascOverrideDisabledLedger, "nextAction"), "remove_extra_driver", "Override disabled should treat near candidate as extra")
+
+ascUnknownProfile := TestAscProfile("", "", [TestVehicle("2019", "HONDA", "CRV")])
+ascUnknownOverrideLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascUnknownProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=39|added=0|add=1|remove=0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Near Candidate")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascUnknownOverrideLedger, "spousePolicy"), "override-single-by-unique-age-window", "Unknown marital status should allow unique age-window override")
+AssertEqual(AdvisorQuoteStatusValue(ascUnknownOverrideLedger, "selectedSpouseName"), "Test Near Candidate", "Unknown override should select unique candidate")
 
 ascMarriedExactProfile := TestAscProfile("Married", "Test Exact Spouse", [TestVehicle("2019", "HONDA", "CRV")])
 ascMarriedExactLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
@@ -329,6 +402,16 @@ ascMarriedExactLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
 )
 AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactLedger, "nextAction"), "add_spouse_driver", "Married exact spouse row should be added when selected")
 AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactLedger, "selectedSpouseName"), "Test Exact Spouse", "Ledger should preserve selected exact spouse")
+
+ascMarriedExactMissingAgeLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascMarriedExactProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Exact Spouse|age=|added=0|add=1|remove=0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Married", "", "driver-a:Test Exact Spouse")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactMissingAgeLedger, "spouseStatus"), "needs_select", "Exact spouse name should work even when row age is missing")
+AssertEqual(AdvisorQuoteStatusValue(ascMarriedExactMissingAgeLedger, "selectedSpouseName"), "Test Exact Spouse", "Exact spouse should select by name before age policy")
 
 ascMarriedWindowProfile := TestAscProfile("Married", "", [TestVehicle("2019", "HONDA", "CRV")])
 ascMarriedWindowLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
@@ -349,7 +432,38 @@ ascMarriedAmbiguousLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     TestAscParticipantStatus("Married", "", "driver-a:Test Candidate One||driver-b:Test Candidate Two")
 )
 AssertEqual(AdvisorQuoteStatusValue(ascMarriedAmbiguousLedger, "nextAction"), "fail", "Married multiple age-window candidates should fail safe")
-AssertTrue(InStr(AdvisorQuoteStatusValue(ascMarriedAmbiguousLedger, "reason"), "ASC_SPOUSE_AMBIGUOUS") = 1, "Ambiguous spouse failure should be explicit")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascMarriedAmbiguousLedger, "reason"), "ASC_SPOUSE_CANDIDATE_AMBIGUOUS") = 1, "Ambiguous spouse failure should be explicit")
+
+ascMissingSpouseOptionLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Near Candidate|age=37|added=0|add=1|remove=0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Other Candidate")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMissingSpouseOptionLedger, "nextAction"), "fail", "Unique age-window candidate missing from spouse dropdown should fail safe")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascMissingSpouseOptionLedger, "reason"), "ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND") = 1, "Missing spouse dropdown option failure should be explicit")
+
+ascMissingAgeCandidateLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|add=0|remove=0||Test Age Missing|age=|added=0|add=0|remove=1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Test Age Missing")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascMissingAgeCandidateLedger, "spouseStatus"), "not_applicable", "Missing-age candidate should not qualify for Single override")
+AssertEqual(AdvisorQuoteStatusValue(ascMissingAgeCandidateLedger, "nextAction"), "remove_extra_driver", "Missing-age non-exact candidate should remain a removable extra")
+
+ascSameLastNameProfile := TestAscProfile("Single", "", [TestVehicle("2019", "HONDA", "CRV")], "Alex Stone")
+ascSameLastNameOnlyLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSameLastNameProfile,
+    TestAscSnapshot("1", "1"),
+    TestAscDriverStatus("Alex Stone|age=40|added=1|add=0|remove=0||Jordan Stone|age=70|added=0|add=0|remove=1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=1|vin=1", "0", "1"),
+    TestAscParticipantStatus("Single", "", "driver-a:Jordan Stone")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascSameLastNameOnlyLedger, "spouseStatus"), "not_applicable", "Same last name alone should not qualify outside the age window")
+AssertEqual(AdvisorQuoteStatusValue(ascSameLastNameOnlyLedger, "nextAction"), "remove_extra_driver", "Same-last-name outside-window candidate should remain removable")
 
 ascExtraDriverLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     ascSingleLedgerProfile,
@@ -598,15 +712,23 @@ TestVehicle(year, make, model, vin := "") {
     return vehicle
 }
 
-TestAscProfile(maritalStatus, spouseName := "", vehicles := "") {
+TestAscProfile(maritalStatus, spouseName := "", vehicles := "", primaryName := "Test Primary Driver") {
     raw := "Marital Status: " maritalStatus
     if (Trim(String(spouseName)) != "")
         raw .= "`nSpouse: " spouseName
     return Map(
         "raw", raw,
-        "person", Map("fullName", "Test Primary Driver"),
+        "person", Map("fullName", primaryName),
         "vehicles", IsObject(vehicles) ? vehicles : []
     )
+}
+
+TestAscDbWithSpousePolicy(overrideEnabled := "true", ageWindow := 14, preferClosest := "true") {
+    db := GetAdvisorQuoteWorkflowDb()
+    db["defaults"]["ascSpouseOverrideSingleEnabled"] := overrideEnabled
+    db["defaults"]["ascSpouseAgeWindowYears"] := ageWindow
+    db["defaults"]["ascSpousePreferClosestAge"] := preferClosest
+    return db
 }
 
 TestAscSnapshot(mainSavePresent := "1", mainSaveEnabled := "0", activeModalType := "NONE", activePanelType := "NONE", blockerCode := "", unresolvedDriverCount := "0", unresolvedVehicleCount := "0", addedVehicleCount := "0") {
@@ -663,17 +785,26 @@ TestAscVehicleStatus(vehicleSummaries, unresolvedVehicleCount := "0", addedVehic
 
 AssertEqual(actual, expected, message) {
     if (actual != expected)
-        throw Error(message . "`nExpected: " expected "`nActual: " actual)
+        AdvisorQuoteHelperTestFail(message . "`nExpected: " expected "`nActual: " actual)
 }
 
 AssertTrue(condition, message) {
     if !condition
-        throw Error(message)
+        AdvisorQuoteHelperTestFail(message)
 }
 
 AssertFalse(condition, message) {
     if condition
-        throw Error(message)
+        AdvisorQuoteHelperTestFail(message)
+}
+
+AdvisorQuoteHelperTestFail(message) {
+    global advisorQuoteHelperTestsHeadless
+    if advisorQuoteHelperTestsHeadless {
+        FileAppend(String(message) "`n", "*")
+        ExitApp(1)
+    }
+    throw Error(message)
 }
 
 LabelListContains(labels, wanted) {

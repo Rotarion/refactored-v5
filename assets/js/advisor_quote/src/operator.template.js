@@ -1331,10 +1331,23 @@ copy(String((() => {
     .replace(/[^A-Z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  const truthyArg = (value) => /^(1|true|yes|y)$/i.test(safe(value).trim());
+  const personNameTokens = (value) => normalizePersonName(value).split(/\s+/).filter(Boolean);
   const personNameMatches = (actual, expected) => {
     const a = normalizePersonName(actual);
     const e = normalizePersonName(expected);
     return !!a && !!e && (a === e || a.includes(e) || e.includes(a));
+  };
+  const personNameStrongMatches = (actual, expected) => {
+    const a = normalizePersonName(actual);
+    const e = normalizePersonName(expected);
+    if (!a || !e) return false;
+    if (a === e) return true;
+    const aTokens = personNameTokens(a);
+    const eTokens = personNameTokens(e);
+    if (aTokens.length < 2 || eTokens.length < 2) return false;
+    if (a.includes(e) || e.includes(a)) return true;
+    return aTokens[0] === eTokens[0] && aTokens[aTokens.length - 1] === eTokens[eTokens.length - 1];
   };
   const parseAgeFromText = (text) => {
     const match = safe(text).match(/\bAge\s*(\d{1,3})\b/i);
@@ -1435,7 +1448,7 @@ copy(String((() => {
     const selectedSpouseName = safe(source.selectedSpouseName);
     const expectedNames = parsePersonListArg(source.expectedDriverNames);
     if (safe(source.primaryName)) expectedNames.unshift(safe(source.primaryName));
-    if (leadMarital === 'MARRIED' && selectedSpouseName) expectedNames.push(selectedSpouseName);
+    if (selectedSpouseName) expectedNames.push(selectedSpouseName);
     const expectedUnique = [];
     expectedNames.forEach((name) => {
       if (name && !expectedUnique.some((existing) => personNameMatches(existing, name))) expectedUnique.push(name);
@@ -1508,17 +1521,115 @@ copy(String((() => {
       evidence: compact(rows.map((row) => row.name).join('||'), 240)
     });
   };
-  const nonPlaceholderOption = (opt) => opt && !opt.disabled && safe(opt.value) && safe(opt.value) !== 'NewDriver' && !/select one|choose/i.test(safe(opt.text || opt.innerText));
+  const nonPlaceholderOption = (opt) => {
+    const text = safe(opt && (opt.text || opt.innerText));
+    const value = safe(opt && opt.value);
+    return !!opt
+      && !opt.disabled
+      && !!value
+      && value !== 'NewDriver'
+      && !/select one|choose|add another person/i.test(text);
+  };
+  const spouseDriverQuestionText = 'Will your spouse be a driver on your policy';
+  const findAscSpouseDriverYesRadio = () => {
+    const radios = Array.from(document.querySelectorAll('input[type=radio]'));
+    return radios.find((radio) => {
+      const context = `${safe(radio.id)} ${safe(radio.name)} ${safe(radio.value)} ${readInputLabel(radio)} ${getText(radio.closest('div,fieldset,section') || radio.parentElement)}`;
+      const label = readInputLabel(radio);
+      const value = normUpper(radio.value);
+      const yesAnswer = answerTextMatches(label, 'Yes') || answerTextMatches(safe(radio.value), 'Yes') || value === 'TRUE' || value === '1';
+      return /spouse/i.test(context) && /driver/i.test(context) && yesAnswer;
+    }) || null;
+  };
+  const setAscSpouseDriverYes = () => {
+    const before = readSemanticAnswerState(spouseDriverQuestionText);
+    const radio = findAscSpouseDriverYesRadio();
+    if (!radio && !before.source)
+      return { present: '0', selected: 'SKIP', method: 'question-not-shown' };
+    if ((radio && radio.checked) || (before.selected && before.value === 'YES'))
+      return { present: '1', selected: '1', method: 'already-selected' };
+    let clicked = false;
+    if (radio) {
+      const target = getInputClickTarget(radio) || radio;
+      clicked = clickCenterEl(target);
+      if (clicked) {
+        Array.from(document.querySelectorAll('input[type=radio]'))
+          .filter((candidate) => safe(candidate.name) === safe(radio.name))
+          .forEach((candidate) => { candidate.checked = candidate === radio; });
+        radio.dispatchEvent(new Event('input', { bubbles: true }));
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } else {
+      const target = findSemanticAnswerTarget(spouseDriverQuestionText, 'Yes');
+      clicked = !!target && clickCenterEl(target);
+    }
+    const after = readSemanticAnswerState(spouseDriverQuestionText);
+    const verified = (radio && radio.checked) || (after.selected && after.value === 'YES');
+    return { present: '1', selected: verified ? '1' : '0', method: clicked ? 'selected-yes' : 'yes-target-missing' };
+  };
   const ascResolveParticipantMaritalAndSpouse = (source = {}) => {
     if (!isAscProductRoute()) {
-      return lineResult({ result: 'ERROR', method: 'wrong-page', selectedMaritalStatus: '', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'ascProductRoute', evidence: '' });
+      return lineResult({ result: 'ERROR', method: 'wrong-page', selectedMaritalStatus: '', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', spouseCandidateCount: '0', spouseCandidateWithinWindowCount: '0', spouseOverrideApplied: '0', spouseOverrideReason: '', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'ascProductRoute', evidence: '' });
     }
     const leadMarital = normUpper(source.leadMaritalStatus);
-    const leadSpouseName = safe(source.leadSpouseName);
+    const leadSpouseName = safe(source.selectedSpouseName || source.leadSpouseName);
     const maxAgeDiff = Number(source.maxSpouseAgeDifference || 14);
-    const spouseSelect = findAscSpouseSelect();
-    if (leadMarital === 'SINGLE') {
+    const overrideEnabled = truthyArg(source.ascSpouseOverrideSingleEnabled);
+    const leadSingleOrUnknown = leadMarital === 'SINGLE' || leadMarital === '';
+    const forceMarriedSpouseSelection = truthyArg(source.forceMarriedSpouseSelection) || !!leadSpouseName;
+    const driverRows = collectAscDriverRows();
+    const primaryRow = driverRows.find((row) => personNameStrongMatches(row.name, source.primaryName)) || driverRows.find((row) => personNameMatches(row.name, source.primaryName));
+    const primaryAge = Number(source.primaryAge || (primaryRow && primaryRow.age) || (driverRows[0] && driverRows[0].age) || 0);
+    const candidateRows = driverRows.filter((row) => {
+      if (!row || !row.name) return false;
+      if (primaryRow && row === primaryRow) return false;
+      if (source.primaryName && personNameStrongMatches(row.name, source.primaryName)) return false;
+      return true;
+    });
+    const rowCandidates = candidateRows.map((row) => {
+      const age = Number(row.age || 0);
+      return {
+        row,
+        text: row.name,
+        age,
+        ageDiff: primaryAge && age ? Math.abs(primaryAge - age) : 999
+      };
+    });
+    const inWindowRows = rowCandidates.filter((candidate) => primaryAge && candidate.age && candidate.ageDiff <= maxAgeDiff);
+    const candidateSummary = compact(rowCandidates.map((c) => `${c.text}:age=${c.age || ''}:ageDiff=${c.ageDiff === 999 ? '' : c.ageDiff}`).join('||'), 240);
+    if (!forceMarriedSpouseSelection && overrideEnabled && leadSingleOrUnknown && !inWindowRows.length) {
       const single = setAscMaritalStatus('Single');
+      const spouseSelect = findAscSpouseSelect();
+      const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
+      return lineResult({
+        result: single.method === 'already-selected' ? 'SINGLE_CONFIRMED' : (single.ok ? 'SINGLE_SET' : 'FAILED'),
+        method: single.method,
+        selectedMaritalStatus: single.state.text || 'Single',
+        selectedSpouseText: spouseState.text,
+        selectedSpouseValue: spouseState.value,
+        selectedAgeDiff: '',
+        candidateCount: String(rowCandidates.length),
+        spouseCandidateCount: String(rowCandidates.length),
+        spouseCandidateWithinWindowCount: '0',
+        spouseOverrideApplied: '0',
+        spouseOverrideReason: 'no-qualifying-spouse-candidate',
+        spouseCandidateSelectedText: '',
+        spouseCandidateSelectedAge: '',
+        spouseDriverQuestionPresent: '0',
+        spouseDriverYesSelected: 'SKIP',
+        candidates: candidateSummary,
+        rejectedCandidates: 'outside-age-window-or-missing-age',
+        spouseSelectionMethod: 'override-no-candidate',
+        failedFields: single.ok ? '' : 'maritalStatus',
+        evidence: 'ASC_PARTICIPANT_SPOUSE_OVERRIDE_NO_CANDIDATE'
+      });
+    }
+    if (!forceMarriedSpouseSelection && overrideEnabled && leadSingleOrUnknown && inWindowRows.length > 1) {
+      return lineResult({ result: 'AMBIGUOUS', method: 'spouse-age-ambiguous', selectedMaritalStatus: readAscMaritalStatus().text, selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(rowCandidates.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: 'multiple-candidates-within-age-window', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(inWindowRows.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'age-window', failedFields: 'spouse', evidence: '' });
+    }
+    if (leadMarital === 'SINGLE' && !overrideEnabled && !forceMarriedSpouseSelection) {
+      const single = setAscMaritalStatus('Single');
+      const spouseSelect = findAscSpouseSelect();
       const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
       return lineResult({
         result: single.method === 'already-selected' ? 'SINGLE_CONFIRMED' : (single.ok ? 'SINGLE_SET' : 'FAILED'),
@@ -1528,6 +1639,14 @@ copy(String((() => {
         selectedSpouseValue: spouseState.value,
         selectedAgeDiff: '',
         candidateCount: spouseSelect ? String(Math.max(0, (spouseSelect.options || []).length - 1)) : '0',
+        spouseCandidateCount: String(rowCandidates.length),
+        spouseCandidateWithinWindowCount: String(inWindowRows.length),
+        spouseOverrideApplied: '0',
+        spouseOverrideReason: 'override-disabled',
+        spouseCandidateSelectedText: '',
+        spouseCandidateSelectedAge: '',
+        spouseDriverQuestionPresent: '0',
+        spouseDriverYesSelected: 'SKIP',
         candidates: '',
         rejectedCandidates: spouseSelect ? 'skipped-lead-single' : '',
         spouseSelectionMethod: 'skipped-lead-single',
@@ -1535,7 +1654,7 @@ copy(String((() => {
         evidence: 'ASC_PARTICIPANT_LEAD_SINGLE_SPOUSE_SKIPPED'
       });
     }
-    if (leadMarital !== 'MARRIED' && !leadSpouseName) {
+    if (leadMarital !== 'MARRIED' && !leadSpouseName && !(overrideEnabled && leadSingleOrUnknown)) {
       const current = readAscMaritalStatus();
       return lineResult({
         result: 'NO_DROPDOWN',
@@ -1545,6 +1664,14 @@ copy(String((() => {
         selectedSpouseValue: '',
         selectedAgeDiff: '',
         candidateCount: '0',
+        spouseCandidateCount: String(rowCandidates.length),
+        spouseCandidateWithinWindowCount: String(inWindowRows.length),
+        spouseOverrideApplied: '0',
+        spouseOverrideReason: '',
+        spouseCandidateSelectedText: '',
+        spouseCandidateSelectedAge: '',
+        spouseDriverQuestionPresent: '0',
+        spouseDriverYesSelected: 'SKIP',
         candidates: '',
         rejectedCandidates: '',
         spouseSelectionMethod: 'not-requested',
@@ -1554,57 +1681,76 @@ copy(String((() => {
     }
     const married = setAscMaritalStatus('Married');
     if (!married.ok)
-      return lineResult({ result: 'FAILED', method: married.method, selectedMaritalStatus: married.state.text, selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'maritalStatus', evidence: '' });
+      return lineResult({ result: 'FAILED', method: married.method, selectedMaritalStatus: married.state.text, selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: '', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'maritalStatus', evidence: '' });
+    const spouseSelect = findAscSpouseSelect();
     if (!spouseSelect)
-      return lineResult({ result: 'NO_DROPDOWN', method: 'married-no-spouse-dropdown', selectedMaritalStatus: married.state.text || 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', candidates: '', rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'spouseDropdown', evidence: '' });
-    const driverRows = collectAscDriverRows();
-    const primaryRow = driverRows.find((row) => personNameMatches(row.name, source.primaryName));
-    const primaryAge = Number(source.primaryAge || (primaryRow && primaryRow.age) || (driverRows[0] && driverRows[0].age) || 0);
+      return lineResult({ result: 'NO_DROPDOWN', method: 'married-no-spouse-dropdown', selectedMaritalStatus: married.state.text || 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: '0', spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: '', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: candidateSummary, rejectedCandidates: '', spouseSelectionMethod: '', failedFields: 'spouseDropdown', evidence: '' });
     const options = Array.from(spouseSelect.options || [])
       .filter(nonPlaceholderOption)
       .map((opt) => {
         const text = safe(opt.text || opt.innerText);
-        const row = driverRows.find((driver) => personNameMatches(driver.name, text));
+        const row = driverRows.find((driver) => personNameStrongMatches(driver.name, text));
         const age = Number((row && row.age) || parseAgeFromText(text) || parseAgeNearPersonName(text) || 0);
         return { opt, text, value: safe(opt.value), age, ageDiff: primaryAge && age ? Math.abs(primaryAge - age) : 999 };
       });
     let picked = null;
     let method = '';
     if (leadSpouseName) {
-      const matches = options.filter((candidate) => personNameMatches(candidate.text, leadSpouseName));
+      const matches = options.filter((candidate) => personNameStrongMatches(candidate.text, leadSpouseName));
       if (matches.length === 1) {
         picked = matches[0];
-        method = 'name-match';
+        method = source.selectedSpouseName ? 'policy-selected-name-match' : 'name-match';
       } else if (matches.length > 1) {
-        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-name-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(options.map((c) => c.text).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'name-match', failedFields: 'spouse', evidence: '' });
+        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-name-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: 'multiple-dropdown-name-matches', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(options.map((c) => c.text).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'name-match', failedFields: 'spouse', evidence: '' });
       }
+      if (!picked)
+        return lineResult({ result: 'FAILED', method: 'spouse-dropdown-option-not-found', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: 'ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND', spouseCandidateSelectedText: leadSpouseName, spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(options.map((c) => c.text).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'name-match', failedFields: 'spouseDropdown', evidence: 'ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND' });
+    }
+    if (!picked && overrideEnabled && leadSingleOrUnknown && inWindowRows.length === 1) {
+      const rowCandidate = inWindowRows[0];
+      const matches = options.filter((candidate) => personNameStrongMatches(candidate.text, rowCandidate.text));
+      if (!matches.length)
+        return lineResult({ result: 'FAILED', method: 'spouse-dropdown-option-not-found', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: String(rowCandidate.ageDiff), candidateCount: String(options.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: '1', spouseOverrideApplied: '0', spouseOverrideReason: 'ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND', spouseCandidateSelectedText: rowCandidate.text, spouseCandidateSelectedAge: String(rowCandidate.age || ''), spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(options.map((c) => c.text).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'age-window', failedFields: 'spouseDropdown', evidence: 'ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND' });
     }
     if (!picked) {
-      const inWindow = options.filter((candidate) => candidate.ageDiff <= maxAgeDiff);
+      const inWindow = options.filter((candidate) => candidate.ageDiff <= maxAgeDiff && rowCandidates.some((rowCandidate) => rowCandidate.age && personNameStrongMatches(candidate.text, rowCandidate.text)));
       if (inWindow.length === 1) {
         picked = inWindow[0];
         method = 'age-window';
       } else if (inWindow.length > 1) {
-        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-age-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(inWindow.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'age-window', failedFields: 'spouse', evidence: '' });
+        return lineResult({ result: 'AMBIGUOUS', method: 'spouse-age-ambiguous', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindow.length), spouseOverrideApplied: '0', spouseOverrideReason: 'multiple-candidates-within-age-window', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(inWindow.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: '', spouseSelectionMethod: 'age-window', failedFields: 'spouse', evidence: '' });
       }
     }
     if (!picked)
-      return lineResult({ result: 'NO_SAFE_SPOUSE', method: 'no-safe-spouse', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), candidates: compact(options.map((c) => `${c.text}:ageDiff=${c.ageDiff}`).join('||'), 240), rejectedCandidates: 'outside-age-window', spouseSelectionMethod: '', failedFields: 'spouse', evidence: '' });
+      return lineResult({ result: 'NO_SAFE_SPOUSE', method: 'no-safe-spouse', selectedMaritalStatus: 'Married', selectedSpouseText: '', selectedSpouseValue: '', selectedAgeDiff: '', candidateCount: String(options.length), spouseCandidateCount: String(rowCandidates.length), spouseCandidateWithinWindowCount: String(inWindowRows.length), spouseOverrideApplied: '0', spouseOverrideReason: '', spouseCandidateSelectedText: '', spouseCandidateSelectedAge: '', spouseDriverQuestionPresent: '0', spouseDriverYesSelected: '0', candidates: compact(options.map((c) => `${c.text}:ageDiff=${c.ageDiff === 999 ? '' : c.ageDiff}`).join('||'), 240), rejectedCandidates: 'outside-age-window', spouseSelectionMethod: '', failedFields: 'spouse', evidence: '' });
     const already = safe(spouseSelect.value) === picked.value;
     const applied = already || setSelectValue(spouseSelect, picked.value, false);
     const after = readSelectState(spouseSelect);
+    const spouseDriver = applied ? setAscSpouseDriverYes() : { present: '0', selected: '0', method: 'spouse-not-selected' };
+    const spouseDriverOk = spouseDriver.present !== '1' || spouseDriver.selected === '1';
+    const selectedOk = applied && safe(spouseSelect.value) === picked.value && spouseDriverOk;
+    const pickedRow = rowCandidates.find((rowCandidate) => personNameStrongMatches(rowCandidate.text, picked.text)) || {};
+    const overrideApplied = overrideEnabled && leadSingleOrUnknown ? '1' : '0';
     return lineResult({
-      result: applied && safe(spouseSelect.value) === picked.value ? (already ? 'ALREADY_SELECTED' : 'SELECTED') : 'FAILED',
+      result: selectedOk ? (already ? 'ALREADY_SELECTED' : 'SELECTED') : 'FAILED',
       method,
       selectedMaritalStatus: 'Married',
       selectedSpouseText: after.text,
       selectedSpouseValue: after.value,
       selectedAgeDiff: String(picked.ageDiff === 999 ? '' : picked.ageDiff),
       candidateCount: String(options.length),
+      spouseCandidateCount: String(rowCandidates.length),
+      spouseCandidateWithinWindowCount: String(inWindowRows.length),
+      spouseOverrideApplied: overrideApplied,
+      spouseOverrideReason: overrideApplied === '1' ? 'unique-advisor-candidate-within-age-window' : '',
+      spouseCandidateSelectedText: after.text,
+      spouseCandidateSelectedAge: String(picked.age || pickedRow.age || ''),
+      spouseDriverQuestionPresent: spouseDriver.present,
+      spouseDriverYesSelected: spouseDriver.selected,
       candidates: compact(options.map((c) => `${c.text}:ageDiff=${c.ageDiff === 999 ? '' : c.ageDiff}`).join('||'), 240),
       rejectedCandidates: '',
       spouseSelectionMethod: method,
-      failedFields: applied ? '' : 'spouse',
+      failedFields: selectedOk ? '' : (applied ? 'spouseDriver' : 'spouse'),
       evidence: 'spouse-selected'
     });
   };
@@ -6461,8 +6607,20 @@ copy(String((() => {
       const marriedRadio = document.getElementById('maritalStatusEntCd_0001');
       const leadMaritalStatus = normUpper(args.leadMaritalStatus);
       let spouseSelection = { applied: 'SKIP', method: 'not-needed' };
-      if (spouseSelect && marriedRadio) {
-        const valid = Array.from(spouseSelect.options || []).map((o) => safe(o.value)).filter((v) => v && v !== 'NewDriver');
+      if (safe(args.leadMaritalStatus) || safe(args.leadSpouseName) || truthyArg(args.ascSpouseOverrideSingleEnabled)) {
+        const rawSpouse = ascResolveParticipantMaritalAndSpouse(args);
+        const spouseStatus = String(rawSpouse || '').split(/\n/).reduce((acc, line) => {
+          const index = line.indexOf('=');
+          if (index >= 0) acc[line.slice(0, index)] = line.slice(index + 1);
+          return acc;
+        }, {});
+        const okResults = ['SINGLE_CONFIRMED', 'SINGLE_SET', 'SELECTED', 'ALREADY_SELECTED', 'NO_DROPDOWN'];
+        spouseSelection = {
+          applied: okResults.includes(safe(spouseStatus.result)) ? '1' : '0',
+          method: safe(spouseStatus.spouseSelectionMethod || spouseStatus.method || 'policy-resolver')
+        };
+      } else if (spouseSelect && marriedRadio) {
+        const valid = Array.from(spouseSelect.options || []).filter(nonPlaceholderOption).map((o) => safe(o.value));
         if (leadMaritalStatus === 'SINGLE') {
           spouseSelection = { applied: 'SKIP', method: 'skipped-lead-single' };
         } else if (valid.length === 1) {

@@ -2704,7 +2704,7 @@ AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName := "") {
     primary := AdvisorQuoteProfileFullName(profile)
     if (primary != "")
         names.Push(primary)
-    if (AdvisorQuoteLeadMaritalStatus(profile) = "Married" && Trim(String(selectedSpouseName)) != "")
+    if (Trim(String(selectedSpouseName)) != "")
         names.Push(Trim(String(selectedSpouseName)))
     return JoinArray(names, "||")
 }
@@ -4720,14 +4720,22 @@ AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
 }
 
-AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db) {
+AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db, ledger := "") {
     person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
+    selectedSpouseName := IsObject(ledger) ? AdvisorQuoteStatusValue(ledger, "selectedSpouseName") : ""
+    spouseOverrideApplied := IsObject(ledger) ? AdvisorQuoteStatusValue(ledger, "spouseOverrideApplied") : "0"
     args := Map(
         "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
         "primaryName", AdvisorQuoteProfileFullName(profile),
         "primaryAge", "",
         "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
-        "maxSpouseAgeDifference", "14",
+        "selectedSpouseName", selectedSpouseName,
+        "forceMarriedSpouseSelection", (selectedSpouseName != "") ? "1" : "0",
+        "ascSpouseOverrideSingleEnabled", AdvisorQuoteAscSpouseOverrideSingleEnabled(db) ? "1" : "0",
+        "ascSpouseAgeWindowYears", AdvisorQuoteAscSpouseAgeWindowYears(db),
+        "ascSpousePreferClosestAge", AdvisorQuoteAscSpousePreferClosestAge(db) ? "1" : "0",
+        "spouseOverrideApplied", spouseOverrideApplied,
+        "maxSpouseAgeDifference", AdvisorQuoteAscSpouseAgeWindowYears(db),
         "expectedPropertyOwnership", AdvisorQuoteResolveParticipantPropertyOwnership(profile, db)
     )
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_resolve_participant_marital_and_spouse", args))
@@ -4739,6 +4747,13 @@ AdvisorQuoteBuildAscMaritalStatusDetail(status) {
         . ", selectedSpouseText=" AdvisorQuoteStatusValue(status, "selectedSpouseText")
         . ", selectedAgeDiff=" AdvisorQuoteStatusValue(status, "selectedAgeDiff")
         . ", candidateCount=" AdvisorQuoteStatusValue(status, "candidateCount")
+        . ", spouseCandidateCount=" AdvisorQuoteStatusValue(status, "spouseCandidateCount")
+        . ", spouseCandidateWithinWindowCount=" AdvisorQuoteStatusValue(status, "spouseCandidateWithinWindowCount")
+        . ", spouseOverrideApplied=" AdvisorQuoteStatusValue(status, "spouseOverrideApplied")
+        . ", spouseOverrideReason=" AdvisorQuoteStatusValue(status, "spouseOverrideReason")
+        . ", spouseCandidateSelectedText=" AdvisorQuoteStatusValue(status, "spouseCandidateSelectedText")
+        . ", spouseCandidateSelectedAge=" AdvisorQuoteStatusValue(status, "spouseCandidateSelectedAge")
+        . ", spouseDriverYesSelected=" AdvisorQuoteStatusValue(status, "spouseDriverYesSelected")
         . ", spouseSelectionMethod=" AdvisorQuoteStatusValue(status, "spouseSelectionMethod")
         . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
@@ -4839,14 +4854,14 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
                 }
                 if !AdvisorQuoteHandleAscVehicleModalLedger(profile, db, snapshot, &failureReason, &failureScan)
                     return false
-            Case "resolve_participant_policy":
+            Case "resolve_participant_policy", "resolve_spouse_marital_panel":
                 inlineSaveCount += 1
                 if (inlineSaveCount > 2) {
                     failureReason := "ASC_LEDGER_LOOP_GUARD_HIT: participant policy resolution repeated."
                     failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-participant-policy-guard")
                     return false
                 }
-                maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db)
+                maritalStatus := AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db, ledger)
                 AdvisorQuoteAppendLog("ASC_PARTICIPANT_MARITAL_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus))
                 maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
                 if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"]) {
@@ -4936,8 +4951,8 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
     return false
 }
 
-AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "", vehicleStatus := "", participantStatus := "") {
-    db := GetAdvisorQuoteWorkflowDb()
+AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "", vehicleStatus := "", participantStatus := "", dbOverride := "") {
+    db := IsObject(dbOverride) ? dbOverride : GetAdvisorQuoteWorkflowDb()
     ledger := Map(
         "result", "OK",
         "routeFamily", AdvisorQuoteStatusValue(snapshot, "routeFamily"),
@@ -4949,6 +4964,15 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
         "spousePolicy", AdvisorQuoteAscSpousePolicyName(profile, db),
         "spouseStatus", "not_applicable",
         "selectedSpouseName", "",
+        "spouseOverrideApplied", "0",
+        "spouseOverrideReason", "",
+        "spouseCandidateCount", "0",
+        "spouseCandidateWithinWindowCount", "0",
+        "spouseCandidateSelectedText", "",
+        "spouseCandidateSelectedAge", "",
+        "ascSpouseOverrideSingleEnabled", AdvisorQuoteAscSpouseOverrideSingleEnabled(db) ? "1" : "0",
+        "ascSpouseAgeWindowYears", String(AdvisorQuoteAscSpouseAgeWindowYears(db)),
+        "ascSpousePreferClosestAge", AdvisorQuoteAscSpousePreferClosestAge(db) ? "1" : "0",
         "extraDriverCount", "0",
         "extraDriversToRemove", "",
         "unresolvedDriverCount", AdvisorQuoteStatusValue(snapshot, "unresolvedDriverCount"),
@@ -5005,15 +5029,23 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
     ledger["spousePolicy"] := spouseEval["policy"]
     ledger["spouseStatus"] := spouseEval["status"]
     ledger["selectedSpouseName"] := spouseEval["selectedSpouseName"]
+    ledger["spouseOverrideApplied"] := spouseEval.Has("overrideApplied") ? spouseEval["overrideApplied"] : "0"
+    ledger["spouseOverrideReason"] := spouseEval.Has("overrideReason") ? spouseEval["overrideReason"] : ""
+    ledger["spouseCandidateCount"] := spouseEval.Has("candidateCount") ? spouseEval["candidateCount"] : "0"
+    ledger["spouseCandidateWithinWindowCount"] := spouseEval.Has("withinWindowCount") ? spouseEval["withinWindowCount"] : "0"
+    ledger["spouseCandidateSelectedText"] := spouseEval.Has("selectedCandidateText") ? spouseEval["selectedCandidateText"] : ""
+    ledger["spouseCandidateSelectedAge"] := spouseEval.Has("selectedCandidateAge") ? spouseEval["selectedCandidateAge"] : ""
     if (spouseEval["reason"] != "")
         ledger["reason"] := spouseEval["reason"]
 
     if (ledger["spouseStatus"] = "ambiguous")
-        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_AMBIGUOUS:" spouseEval["reason"], spouseEval["evidence"])
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_CANDIDATE_AMBIGUOUS:" spouseEval["reason"], spouseEval["evidence"])
     if (ledger["spouseStatus"] = "blocked")
-        return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_BLOCKED:" spouseEval["reason"], spouseEval["evidence"])
-    if AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db)
-        return AdvisorQuoteAscLedgerNext(ledger, "OK", "resolve_participant_policy", "panel", ledger["selectedSpouseName"], "participant-policy-not-resolved", spouseEval["evidence"])
+        return AdvisorQuoteAscLedgerFail(ledger, spouseEval["reason"], spouseEval["evidence"])
+    if AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db) {
+        participantAction := (ledger["spouseOverrideApplied"] = "1") ? "resolve_spouse_marital_panel" : "resolve_participant_policy"
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", participantAction, "panel", ledger["selectedSpouseName"], "participant-policy-not-resolved", spouseEval["evidence"])
+    }
 
     if (ledger["primaryDriverStatus"] = "needs_add")
         return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_primary_driver", "driver", primaryName, "primary-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
@@ -5021,7 +5053,7 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
         return AdvisorQuoteAscLedgerFail(ledger, "ASC_PRIMARY_DRIVER_ROW_" StrUpper(ledger["primaryDriverStatus"]), AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
 
     expectedNames := AdvisorQuoteAscExpectedDriverNames(profile, ledger["selectedSpouseName"])
-    if (leadMarital = "Married" && ledger["spouseStatus"] != "not_applicable") {
+    if (ledger["selectedSpouseName"] != "" && ledger["spouseStatus"] != "not_applicable") {
         spouseRow := AdvisorQuoteAscFindDriverRow(driverRows, ledger["selectedSpouseName"])
         if IsObject(spouseRow) {
             if (AdvisorQuoteStatusValue(spouseRow, "added") = "1")
@@ -5107,6 +5139,15 @@ AdvisorQuoteBuildAscLedgerDetail(ledger) {
         . ", spousePolicy=" AdvisorQuoteStatusValue(ledger, "spousePolicy")
         . ", spouseStatus=" AdvisorQuoteStatusValue(ledger, "spouseStatus")
         . ", selectedSpouseName=" AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+        . ", ascSpouseOverrideSingleEnabled=" AdvisorQuoteStatusValue(ledger, "ascSpouseOverrideSingleEnabled")
+        . ", ascSpouseAgeWindowYears=" AdvisorQuoteStatusValue(ledger, "ascSpouseAgeWindowYears")
+        . ", ascSpousePreferClosestAge=" AdvisorQuoteStatusValue(ledger, "ascSpousePreferClosestAge")
+        . ", spouseOverrideApplied=" AdvisorQuoteStatusValue(ledger, "spouseOverrideApplied")
+        . ", spouseOverrideReason=" AdvisorQuoteStatusValue(ledger, "spouseOverrideReason")
+        . ", spouseCandidateCount=" AdvisorQuoteStatusValue(ledger, "spouseCandidateCount")
+        . ", spouseCandidateWithinWindowCount=" AdvisorQuoteStatusValue(ledger, "spouseCandidateWithinWindowCount")
+        . ", spouseCandidateSelectedText=" AdvisorQuoteStatusValue(ledger, "spouseCandidateSelectedText")
+        . ", spouseCandidateSelectedAge=" AdvisorQuoteStatusValue(ledger, "spouseCandidateSelectedAge")
         . ", extraDriverCount=" AdvisorQuoteStatusValue(ledger, "extraDriverCount")
         . ", extraDriversToRemove=" AdvisorQuoteStatusValue(ledger, "extraDriversToRemove")
         . ", unresolvedDriverCount=" AdvisorQuoteStatusValue(ledger, "unresolvedDriverCount")
@@ -5141,6 +5182,13 @@ AdvisorQuoteAscSpouseAgeWindowYears(db) {
     return RegExMatch(String(value), "^\d+$") ? Integer(value) : 14
 }
 
+AdvisorQuoteAscSpousePreferClosestAge(db) {
+    defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
+    value := defaults.Has("ascSpousePreferClosestAge") ? defaults["ascSpousePreferClosestAge"] : "true"
+    text := StrLower(Trim(String(value)))
+    return text = "true" || text = "1" || text = "yes"
+}
+
 AdvisorQuoteAscRemoveReasonCode(db) {
     defaults := IsObject(db) && db.Has("defaults") ? db["defaults"] : Map()
     if (defaults.Has("ascDriverRemoveReasonCode"))
@@ -5165,63 +5213,103 @@ AdvisorQuoteAscSpousePolicyName(profile, db) {
 AdvisorQuoteAscEvaluateSpouse(profile, participantStatus, driverRows, db) {
     policy := AdvisorQuoteAscSpousePolicyName(profile, db)
     leadMarital := AdvisorQuoteLeadMaritalStatus(profile)
+    leadSingleOrUnknown := leadMarital = "" || leadMarital = "Single"
+    overrideAllowed := AdvisorQuoteAscSpouseOverrideSingleEnabled(db) && leadSingleOrUnknown
     selectedSpouse := AdvisorQuoteStatusValue(participantStatus, "spouseDropdownText")
-    result := Map("policy", policy, "status", "not_applicable", "selectedSpouseName", selectedSpouse, "reason", "", "evidence", AdvisorQuoteStatusValue(participantStatus, "spouseOptions"))
+    options := AdvisorQuoteAscParseSpouseOptions(AdvisorQuoteStatusValue(participantStatus, "spouseOptions"))
+    primaryName := AdvisorQuoteProfileFullName(profile)
+    primaryRow := AdvisorQuoteAscFindDriverRow(driverRows, primaryName)
+    primaryAge := IsObject(primaryRow) ? AdvisorQuoteStatusInteger(primaryRow, "age") : 0
+    ageWindow := AdvisorQuoteAscSpouseAgeWindowYears(db)
+    candidates := AdvisorQuoteAscBuildSpouseCandidates(driverRows, options, primaryName, primaryAge, ageWindow)
+    inWindow := candidates["inWindow"]
+    selectedCandidate := AdvisorQuoteAscFindCandidateByName(inWindow, selectedSpouse)
+    result := Map(
+        "policy", policy,
+        "status", "not_applicable",
+        "selectedSpouseName", selectedSpouse,
+        "reason", "",
+        "evidence", candidates["summary"],
+        "overrideApplied", "0",
+        "overrideReason", "",
+        "candidateCount", String(candidates["candidateCount"]),
+        "withinWindowCount", String(inWindow.Length),
+        "selectedCandidateText", "",
+        "selectedCandidateAge", ""
+    )
+
     if (leadMarital = "Single" && !AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
         return result
-    if (leadMarital != "Married")
+    if (leadMarital != "Married" && !overrideAllowed)
         return result
 
     leadSpouseName := AdvisorQuoteLeadSpouseName(profile)
-    options := AdvisorQuoteAscParseSpouseOptions(AdvisorQuoteStatusValue(participantStatus, "spouseOptions"))
     if (leadSpouseName != "") {
-        if (selectedSpouse != "" && AdvisorQuoteLedgerPersonNameMatches(selectedSpouse, leadSpouseName)) {
+        if (selectedSpouse != "" && AdvisorQuoteAscSpouseNameMatches(selectedSpouse, leadSpouseName)) {
             result["status"] := "candidate_selected"
             result["selectedSpouseName"] := selectedSpouse
+            AdvisorQuoteAscSetSpouseEvalSelection(result, selectedSpouse, AdvisorQuoteAscFindDriverRow(driverRows, selectedSpouse), "exact-spouse-selected")
             return result
         }
         matches := []
         for _, option in options
-            if AdvisorQuoteLedgerPersonNameMatches(option["text"], leadSpouseName)
+            if AdvisorQuoteAscSpouseNameMatches(option["text"], leadSpouseName)
                 matches.Push(option)
         if (matches.Length = 1) {
             result["status"] := "needs_select"
             result["selectedSpouseName"] := matches[1]["text"]
             result["reason"] := "exact-spouse-needs-select"
+            AdvisorQuoteAscSetSpouseEvalSelection(result, matches[1]["text"], AdvisorQuoteAscFindDriverRow(driverRows, matches[1]["text"]), "exact-spouse-name")
             return result
         }
         result["status"] := (matches.Length > 1) ? "ambiguous" : "blocked"
-        result["reason"] := (matches.Length > 1) ? "exact-spouse-ambiguous" : "exact-spouse-not-found"
+        result["reason"] := (matches.Length > 1) ? "exact-spouse-ambiguous" : "ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND:exact-spouse"
         return result
     }
 
-    primaryRow := AdvisorQuoteAscFindDriverRow(driverRows, AdvisorQuoteProfileFullName(profile))
-    primaryAge := IsObject(primaryRow) ? AdvisorQuoteStatusInteger(primaryRow, "age") : 0
-    inWindow := []
-    ageWindow := AdvisorQuoteAscSpouseAgeWindowYears(db)
-    for _, option in options {
-        row := AdvisorQuoteAscFindDriverRow(driverRows, option["text"])
-        age := IsObject(row) ? AdvisorQuoteStatusInteger(row, "age") : 0
-        if (primaryAge > 0 && age > 0 && Abs(primaryAge - age) <= ageWindow)
-            inWindow.Push(option)
-    }
-    if (selectedSpouse != "") {
-        for _, option in inWindow {
-            if AdvisorQuoteLedgerPersonNameMatches(option["text"], selectedSpouse) {
-                result["status"] := "candidate_selected"
-                result["selectedSpouseName"] := selectedSpouse
-                return result
-            }
+    if IsObject(selectedCandidate) {
+        result["status"] := "candidate_selected"
+        result["selectedSpouseName"] := selectedSpouse
+        if overrideAllowed {
+            result["policy"] := "override-single-by-unique-age-window"
+            result["overrideApplied"] := "1"
+            result["overrideReason"] := "selected-spouse-within-age-window"
         }
-    }
-    if (inWindow.Length = 1) {
-        result["status"] := "needs_select"
-        result["selectedSpouseName"] := inWindow[1]["text"]
-        result["reason"] := "unique-age-window-spouse-needs-select"
+        AdvisorQuoteAscSetSpouseEvalSelection(result, selectedCandidate["optionText"], selectedCandidate["row"], selectedCandidate["method"])
         return result
     }
-    result["status"] := (inWindow.Length > 1) ? "ambiguous" : "blocked"
-    result["reason"] := (inWindow.Length > 1) ? "age-window-spouse-ambiguous" : "no-safe-spouse-candidate"
+    if (inWindow.Length = 1) {
+        candidate := inWindow[1]
+        if (candidate["optionText"] = "") {
+            result["status"] := "blocked"
+            result["reason"] := "ASC_SPOUSE_DROPDOWN_OPTION_NOT_FOUND:unique-age-window"
+            AdvisorQuoteAscSetSpouseEvalSelection(result, candidate["name"], candidate["row"], candidate["method"])
+            return result
+        }
+        result["status"] := "needs_select"
+        result["selectedSpouseName"] := candidate["optionText"]
+        result["reason"] := "unique-age-window-spouse-needs-select"
+        if overrideAllowed {
+            result["policy"] := "override-single-by-unique-age-window"
+            result["overrideApplied"] := "1"
+            result["overrideReason"] := "unique-advisor-candidate-within-age-window"
+        }
+        AdvisorQuoteAscSetSpouseEvalSelection(result, candidate["optionText"], candidate["row"], candidate["method"])
+        return result
+    }
+    if (inWindow.Length > 1) {
+        result["status"] := "ambiguous"
+        result["reason"] := "age-window-spouse-ambiguous"
+        return result
+    }
+    if overrideAllowed {
+        result["status"] := "not_applicable"
+        result["reason"] := "no-qualifying-spouse-candidate"
+        result["overrideReason"] := "no-qualifying-spouse-candidate"
+        return result
+    }
+    result["status"] := "blocked"
+    result["reason"] := "ASC_SPOUSE_BLOCKED:no-safe-spouse-candidate"
     return result
 }
 
@@ -5230,11 +5318,14 @@ AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, 
     selectedMarital := AdvisorQuoteStatusValue(participantStatus, "maritalStatusSelected")
     if (leadMarital = "Single" && !AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
         return !AdvisorQuoteAscMaritalTextMatches(selectedMarital, "Single")
-    if (leadMarital = "Married") {
+    selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
+    if (leadMarital = "Married" || selectedSpouseName != "") {
         if !AdvisorQuoteAscMaritalTextMatches(selectedMarital, "Married")
             return true
         return AdvisorQuoteStatusValue(ledger, "spouseStatus") = "needs_select"
     }
+    if ((leadMarital = "" || leadMarital = "Single") && AdvisorQuoteAscSpouseOverrideSingleEnabled(db))
+        return !AdvisorQuoteAscMaritalTextMatches(selectedMarital, "Single")
     return false
 }
 
@@ -5305,11 +5396,86 @@ AdvisorQuoteAscParseSpouseOptions(optionsText) {
             text := SubStr(record, pos + 1)
         }
         text := Trim(text)
-        if (text = "" || text = "NewDriver")
+        normalizedText := AdvisorNormalizeLooseToken(text)
+        normalizedValue := AdvisorNormalizeLooseToken(value)
+        if (text = "" || normalizedText = "" || normalizedText = "NEWDRIVER" || normalizedValue = "NEWDRIVER")
             continue
-        options.Push(Map("value", Trim(value), "text", text))
+        if InStr(normalizedText, "SELECT ONE") || InStr(normalizedText, "CHOOSE") || InStr(normalizedText, "ADD ANOTHER PERSON")
+            continue
+        optionAge := ""
+        if RegExMatch(text, "i)\bAge\s*(\d{1,3})\b", &m)
+            optionAge := m[1]
+        options.Push(Map("value", Trim(value), "text", text, "age", optionAge))
     }
     return options
+}
+
+AdvisorQuoteAscBuildSpouseCandidates(driverRows, spouseOptions, primaryName, primaryAge, ageWindow) {
+    candidateRows := []
+    inWindow := []
+    summaryParts := []
+    if !IsObject(driverRows)
+        driverRows := []
+    for _, row in driverRows {
+        rowName := AdvisorQuoteStatusValue(row, "name")
+        if (rowName = "" || AdvisorQuoteAscSpouseNameMatches(rowName, primaryName))
+            continue
+        rowAge := AdvisorQuoteStatusInteger(row, "age")
+        option := AdvisorQuoteAscFindSpouseOptionForCandidate(spouseOptions, rowName, rowAge)
+        ageDiff := (primaryAge > 0 && rowAge > 0) ? Abs(primaryAge - rowAge) : ""
+        optionText := IsObject(option) ? option["text"] : ""
+        candidateRows.Push(row)
+        summaryParts.Push(rowName ":age=" rowAge ":ageDiff=" ageDiff ":option=" optionText)
+        if (primaryAge > 0 && rowAge > 0 && ageDiff <= ageWindow) {
+            inWindow.Push(Map(
+                "name", rowName,
+                "age", rowAge,
+                "ageDiff", ageDiff,
+                "row", row,
+                "optionText", optionText,
+                "optionValue", IsObject(option) ? option["value"] : "",
+                "method", "age-window"
+            ))
+        }
+    }
+    return Map(
+        "candidateCount", candidateRows.Length,
+        "inWindow", inWindow,
+        "summary", JoinArray(summaryParts, "||")
+    )
+}
+
+AdvisorQuoteAscFindSpouseOptionForCandidate(spouseOptions, candidateName, candidateAge := 0) {
+    matches := []
+    if !IsObject(spouseOptions)
+        return ""
+    for _, option in spouseOptions {
+        optionText := option.Has("text") ? option["text"] : ""
+        if !AdvisorQuoteAscSpouseNameMatches(optionText, candidateName)
+            continue
+        optionAge := option.Has("age") ? Integer("0" option["age"]) : 0
+        if (candidateAge > 0 && optionAge > 0 && candidateAge != optionAge)
+            continue
+        matches.Push(option)
+    }
+    return (matches.Length = 1) ? matches[1] : ""
+}
+
+AdvisorQuoteAscFindCandidateByName(candidates, name) {
+    if (Trim(String(name)) = "" || !IsObject(candidates))
+        return ""
+    for _, candidate in candidates {
+        if AdvisorQuoteAscSpouseNameMatches(candidate["name"], name) || AdvisorQuoteAscSpouseNameMatches(candidate["optionText"], name)
+            return candidate
+    }
+    return ""
+}
+
+AdvisorQuoteAscSetSpouseEvalSelection(result, selectedText, row := "", method := "") {
+    result["selectedCandidateText"] := selectedText
+    result["selectedCandidateAge"] := IsObject(row) ? AdvisorQuoteStatusValue(row, "age") : ""
+    if (method != "")
+        result["overrideReason"] := method
 }
 
 AdvisorQuoteAscExpectedDriverNames(profile, selectedSpouseName := "") {
@@ -5317,7 +5483,7 @@ AdvisorQuoteAscExpectedDriverNames(profile, selectedSpouseName := "") {
     primary := AdvisorQuoteProfileFullName(profile)
     if (primary != "")
         names.Push(primary)
-    if (AdvisorQuoteLeadMaritalStatus(profile) = "Married" && Trim(String(selectedSpouseName)) != "")
+    if (Trim(String(selectedSpouseName)) != "")
         names.Push(Trim(String(selectedSpouseName)))
     return names
 }
@@ -5351,6 +5517,33 @@ AdvisorQuoteLedgerPersonNameMatches(actual, expected) {
     a := AdvisorQuoteNormalizeLedgerPersonName(actual)
     e := AdvisorQuoteNormalizeLedgerPersonName(expected)
     return a != "" && e != "" && (a = e || InStr(a, e) > 0 || InStr(e, a) > 0)
+}
+
+AdvisorQuoteAscNameTokens(value) {
+    tokens := []
+    normalized := AdvisorQuoteNormalizeLedgerPersonName(value)
+    for _, token in StrSplit(normalized, " ") {
+        token := Trim(token)
+        if (token != "")
+            tokens.Push(token)
+    }
+    return tokens
+}
+
+AdvisorQuoteAscSpouseNameMatches(actual, expected) {
+    a := AdvisorQuoteNormalizeLedgerPersonName(actual)
+    e := AdvisorQuoteNormalizeLedgerPersonName(expected)
+    if (a = "" || e = "")
+        return false
+    if (a = e)
+        return true
+    aTokens := AdvisorQuoteAscNameTokens(a)
+    eTokens := AdvisorQuoteAscNameTokens(e)
+    if (aTokens.Length < 2 || eTokens.Length < 2)
+        return false
+    if (InStr(a, e) > 0 || InStr(e, a) > 0)
+        return true
+    return aTokens[1] = eTokens[1] && aTokens[aTokens.Length] = eTokens[eTokens.Length]
 }
 
 AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, result, db, &failureReason := "", &failureScan := "") {
@@ -5920,6 +6113,11 @@ AdvisorQuoteFillParticipantModal(profile, db) {
         "oppositeGenderValue", oppositeGenderValue,
         "leadMaritalStatus", AdvisorQuoteLeadMaritalStatus(profile),
         "leadSpouseName", AdvisorQuoteLeadSpouseName(profile),
+        "primaryName", AdvisorQuoteProfileFullName(profile),
+        "ascSpouseOverrideSingleEnabled", AdvisorQuoteAscSpouseOverrideSingleEnabled(db) ? "1" : "0",
+        "ascSpouseAgeWindowYears", AdvisorQuoteAscSpouseAgeWindowYears(db),
+        "ascSpousePreferClosestAge", AdvisorQuoteAscSpousePreferClosestAge(db) ? "1" : "0",
+        "maxSpouseAgeDifference", AdvisorQuoteAscSpouseAgeWindowYears(db),
         "spouseSelectId", db["texts"]["spouseSelectId"]
     )
     raw := AdvisorQuoteRunOp("fill_participant_modal", args)
