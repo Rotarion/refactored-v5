@@ -2977,6 +2977,25 @@ copy(String((() => {
     if (!text && !value) return false;
     return !['SELECT', 'SELECT ONE', 'PLEASE SELECT', 'CHOOSE', 'CHOOSE ONE'].includes(text);
   };
+  const gatherAddRowSubModelPlaceholderTexts = new Set(['', 'SELECT', 'SELECT ONE', 'PLEASE SELECT', 'CHOOSE', 'CHOOSE ONE', 'UNKNOWN', 'NOT FOUND', 'OTHER', 'MAKE NOT FOUND']);
+  const gatherAddRowSubModelOptionValid = (opt, index = -1) => {
+    if (!opt || opt.disabled || index === 0) return false;
+    const text = normUpper(vehicleOptionText(opt));
+    const value = normUpper(vehicleOptionValue(opt));
+    if (!text && !value) return false;
+    return !gatherAddRowSubModelPlaceholderTexts.has(text) && !gatherAddRowSubModelPlaceholderTexts.has(value);
+  };
+  const gatherAddRowSubModelPlaceholderSelected = (select) => {
+    if (!select) return true;
+    const selected = Array.from(select.options || []).find((opt) => opt.selected) || (select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null);
+    const text = normUpper(vehicleOptionText(selected));
+    const value = normUpper(vehicleOptionValue(selected) || vehicleFieldValue(select));
+    return gatherAddRowSubModelPlaceholderTexts.has(text) || gatherAddRowSubModelPlaceholderTexts.has(value);
+  };
+  const gatherAddRowSubModelValidOptions = (select) => Array.from((select && select.options) || [])
+    .map((option, index) => ({ option, index }))
+    .filter((entry) => gatherAddRowSubModelOptionValid(entry.option, entry.index));
+  const firstValidNonPlaceholderVehicleOption = (select) => gatherAddRowSubModelValidOptions(select)[0] || null;
   const vehicleOptionSummary = (select, max = 12) => Array.from((select && select.options) || [])
     .filter(validVehicleOption)
     .slice(0, max)
@@ -3036,6 +3055,18 @@ copy(String((() => {
       .filter((button) => answerTextMatches([getText(button), safe(button.value), safe(button.getAttribute('aria-label'))].join(' '), wanted));
     return buttons.length === 1 ? buttons[0] : null;
   };
+  const rowScopedButtonState = (container, wantedText) => {
+    const wanted = safe(wantedText);
+    const buttons = Array.from((container && container.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')) || [])
+      .filter(visible)
+      .filter((button) => answerTextMatches([getText(button), safe(button.value), safe(button.getAttribute('aria-label'))].join(' '), wanted));
+    const enabled = buttons.filter((button) => !isDisabledLike(button));
+    return {
+      present: buttons.length === 1,
+      enabled: enabled.length === 1,
+      target: enabled.length === 1 ? enabled[0] : null
+    };
+  };
   const gatherVehicleAddRowState = (source = {}, matchArgs = {}) => {
     const rowIndexArg = safe(source.index).trim();
     const rowIndex = rowIndexArg !== '' && !Number.isNaN(Number(rowIndexArg)) ? Number(rowIndexArg) : findUsableVehicleRowIndex(source.year);
@@ -3062,10 +3093,13 @@ copy(String((() => {
       const rowText = compact(getText(container), 220);
       const lowerText = normLower(rowText);
       const cancelButton = rowScopedButton(container, 'Cancel');
-      const addButton = rowScopedButton(container, 'Add');
+      const addButtonState = rowScopedButtonState(container, 'Add');
+      const addButton = addButtonState.target;
       const vinValue = vehicleFieldValue(row.vin);
       const modelValue = vehicleFieldValue(row.model);
       const subModelValue = vehicleFieldValue(row.subModel);
+      const subModelSelected = Array.from((row.subModel && row.subModel.options) || []).find((opt) => opt.selected) || null;
+      const subModelValidOptions = gatherAddRowSubModelValidOptions(row.subModel);
       const unsafeContext = lowerText.includes('confirmed vehicles')
         || lowerText.includes('potential vehicles')
         || lowerText.includes('edit remove confirmed')
@@ -3091,6 +3125,8 @@ copy(String((() => {
         rowIncomplete,
         meaningfulVin,
         unsafeContext,
+        addButtonPresent: addButtonState.present,
+        addButtonEnabled: addButtonState.enabled,
         safeToCancel,
         reason,
         yearValue: vehicleFieldValue(row.year),
@@ -3098,12 +3134,17 @@ copy(String((() => {
         manufacturerValue: vehicleFieldValue(row.manufacturer),
         modelValue,
         subModelValue,
+        subModelPresent: row.subModel && visible(row.subModel) ? '1' : '0',
+        subModelText: vehicleOptionText(subModelSelected),
+        subModelPlaceholderSelected: gatherAddRowSubModelPlaceholderSelected(row.subModel) ? '1' : '0',
+        subModelOptionCount: String(subModelValidOptions.length),
+        subModelFirstValidOptionPresent: subModelValidOptions.length ? '1' : '0',
         rowTitle: lowerText.includes('add car or truck') ? 'Add Car or Truck' : ''
       });
     }
     const incomplete = candidates.filter((candidate) => candidate.rowIncomplete);
     const safeCandidate = incomplete.find((candidate) => candidate.safeToCancel);
-    return safeCandidate || incomplete[0] || null;
+    return safeCandidate || incomplete[0] || candidates[0] || null;
   };
   const staleAddVehicleRowStatus = (source = {}) => {
     try {
@@ -3119,7 +3160,14 @@ copy(String((() => {
           manufacturerValue: '',
           modelValue: '',
           subModelValue: '',
+          subModelText: '',
+          subModelPresent: '0',
+          subModelPlaceholderSelected: '1',
+          subModelOptionCount: '0',
+          subModelFirstValidOptionPresent: '0',
           addButtonPresent: '0',
+          addButtonEnabled: '0',
+          unsafeContext: '0',
           cancelButtonPresent: '0',
           cancelButtonScoped: '0',
           safeToCancel: '0',
@@ -3138,7 +3186,14 @@ copy(String((() => {
         manufacturerValue: candidate.manufacturerValue,
         modelValue: candidate.modelValue,
         subModelValue: candidate.subModelValue,
-        addButtonPresent: candidate.addButton ? '1' : '0',
+        subModelText: candidate.subModelText,
+        subModelPresent: candidate.subModelPresent,
+        subModelPlaceholderSelected: candidate.subModelPlaceholderSelected,
+        subModelOptionCount: candidate.subModelOptionCount,
+        subModelFirstValidOptionPresent: candidate.subModelFirstValidOptionPresent,
+        addButtonPresent: candidate.addButtonPresent ? '1' : '0',
+        addButtonEnabled: candidate.addButtonEnabled ? '1' : '0',
+        unsafeContext: candidate.unsafeContext ? '1' : '0',
         cancelButtonPresent: candidate.cancelButton ? '1' : '0',
         cancelButtonScoped: candidate.cancelButton ? '1' : '0',
         safeToCancel: candidate.safeToCancel ? '1' : '0',
@@ -3157,7 +3212,14 @@ copy(String((() => {
         manufacturerValue: '',
         modelValue: '',
         subModelValue: '',
+        subModelText: '',
+        subModelPresent: '0',
+        subModelPlaceholderSelected: '1',
+        subModelOptionCount: '0',
+        subModelFirstValidOptionPresent: '0',
         addButtonPresent: '0',
+        addButtonEnabled: '0',
+        unsafeContext: '0',
         cancelButtonPresent: '0',
         cancelButtonScoped: '0',
         safeToCancel: '0',
@@ -3165,6 +3227,143 @@ copy(String((() => {
         evidence: '',
         missing: compact(err && err.message, 160)
       };
+    }
+  };
+  const selectGatherAddRowFirstValidSubModel = (source = {}) => {
+    try {
+      const candidate = findStaleAddVehicleRow(source);
+      if (!candidate || !candidate.row || !candidate.row.subModel) {
+        return linesOut({
+          result: 'NO_ROW',
+          selectedIndex: '',
+          selectedValuePresent: '0',
+          selectedMode: 'first-valid',
+          optionCount: '0',
+          addButtonPresent: '0',
+          addButtonEnabled: '0'
+        });
+      }
+      const options = gatherAddRowSubModelValidOptions(candidate.row.subModel);
+      if (!options.length) {
+        return linesOut({
+          result: 'NO_OPTIONS',
+          selectedIndex: '',
+          selectedValuePresent: '0',
+          selectedMode: 'first-valid',
+          optionCount: '0',
+          addButtonPresent: candidate.addButtonPresent ? '1' : '0',
+          addButtonEnabled: candidate.addButtonEnabled ? '1' : '0'
+        });
+      }
+      const choice = options[0];
+      const selected = applyVehicleDropdownOption(candidate.row.subModel, choice.option);
+      const valuePresent = selected && safe(candidate.row.subModel.value).trim() ? '1' : '0';
+      return linesOut({
+        result: selected && valuePresent === '1' ? 'OK' : 'SELECT_FAILED',
+        selectedIndex: String(choice.index),
+        selectedValuePresent: valuePresent,
+        selectedMode: 'first-valid',
+        optionCount: String(options.length),
+        addButtonPresent: candidate.addButtonPresent ? '1' : '0',
+        addButtonEnabled: candidate.addButtonEnabled ? '1' : '0'
+      });
+    } catch (err) {
+      return linesOut({
+        result: 'ERROR',
+        selectedIndex: '',
+        selectedValuePresent: '0',
+        selectedMode: 'first-valid',
+        optionCount: '0',
+        addButtonPresent: '0',
+        addButtonEnabled: '0'
+      });
+    }
+  };
+  const selectVehicleDropdownFirstValidNonPlaceholder = (source = {}) => {
+    try {
+      const index = Number(source.index);
+      const fieldName = safe(source.fieldName);
+      const select = vehicleField(index, fieldName);
+      const options = gatherAddRowSubModelValidOptions(select);
+      if (!select || !visible(select) || isDisabledLike(select) || select.disabled) {
+        return linesOut({
+          result: 'NO_SELECT',
+          selectedIndex: '',
+          selectedValue: '',
+          selectedValuePresent: '0',
+          selectedMode: 'first-valid-nonplaceholder',
+          optionCount: String(options.length)
+        });
+      }
+      if (!options.length) {
+        return linesOut({
+          result: 'NO_OPTIONS',
+          selectedIndex: '',
+          selectedValue: '',
+          selectedValuePresent: '0',
+          selectedMode: 'first-valid-nonplaceholder',
+          optionCount: '0'
+        });
+      }
+      const choice = firstValidNonPlaceholderVehicleOption(select);
+      const selected = choice && applyVehicleDropdownOption(select, choice.option);
+      const selectedValue = selected ? vehicleOptionValue(choice.option) : '';
+      return linesOut({
+        result: selected && selectedValue ? 'OK' : 'SELECT_FAILED',
+        selectedIndex: choice ? String(choice.index) : '',
+        selectedValue,
+        selectedValuePresent: selectedValue ? '1' : '0',
+        selectedMode: 'first-valid-nonplaceholder',
+        optionCount: String(options.length)
+      });
+    } catch (err) {
+      return linesOut({
+        result: 'ERROR',
+        selectedIndex: '',
+        selectedValue: '',
+        selectedValuePresent: '0',
+        selectedMode: 'first-valid-nonplaceholder',
+        optionCount: '0'
+      });
+    }
+  };
+  const clickGatherAddRowAddButton = (source = {}) => {
+    try {
+      const candidate = findStaleAddVehicleRow(source);
+      if (!candidate) {
+        return linesOut({
+          result: 'NO_ROW',
+          clicked: '0',
+          rowIndex: '',
+          addButtonPresent: '0',
+          addButtonEnabled: '0'
+        });
+      }
+      if (!candidate.addButtonPresent || !candidate.addButtonEnabled || !candidate.addButton) {
+        return linesOut({
+          result: 'DISABLED',
+          clicked: '0',
+          rowIndex: String(candidate.rowIndex),
+          addButtonPresent: candidate.addButtonPresent ? '1' : '0',
+          addButtonEnabled: candidate.addButtonEnabled ? '1' : '0'
+        });
+      }
+      const clicked = clickCenterEl(candidate.addButton);
+      return linesOut({
+        result: clicked ? 'CLICKED' : 'CLICK_FAILED',
+        clicked: clicked ? '1' : '0',
+        rowIndex: String(candidate.rowIndex),
+        addButtonPresent: '1',
+        addButtonEnabled: '1'
+      });
+    } catch (err) {
+      return linesOut({
+        result: 'ERROR',
+        clicked: '0',
+        rowIndex: '',
+        addButtonPresent: '0',
+        addButtonEnabled: '0'
+      });
     }
   };
   const cancelStaleAddVehicleRow = (source = {}) => {
@@ -4861,6 +5060,7 @@ copy(String((() => {
     'click_start_quoting_add_product',
     'set_select_product_defaults',
     'select_vehicle_dropdown_option',
+    'select_vehicle_dropdown_first_valid_nonplaceholder',
     'fill_participant_modal',
     'select_remove_reason',
     'fill_vehicle_modal',
@@ -6229,6 +6429,10 @@ copy(String((() => {
       return applyVehicleDropdownOption(select, selected.option) ? 'OK' : 'NO_OPTION';
     }
 
+    case 'select_vehicle_dropdown_first_valid_nonplaceholder': {
+      return selectVehicleDropdownFirstValidNonPlaceholder(args);
+    }
+
     case 'gather_vehicle_row_status': {
       return linesOut(gatherVehicleRowStatus(args));
     }
@@ -6247,6 +6451,14 @@ copy(String((() => {
 
     case 'cancel_stale_add_vehicle_row': {
       return cancelStaleAddVehicleRow(args);
+    }
+
+    case 'select_gather_add_row_first_valid_submodel': {
+      return selectGatherAddRowFirstValidSubModel(args);
+    }
+
+    case 'click_gather_add_row_add_button': {
+      return clickGatherAddRowAddButton(args);
     }
 
     case 'gather_vehicle_edit_status': {

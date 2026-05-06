@@ -1263,6 +1263,7 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
 
 AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, attemptCount, routedToEditVehicle := "0", afterResult := "") {
     return "rapportSnapshotActiveModalType=" AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        . ", rapportSnapshotActivePanelType=" AdvisorQuoteStatusValue(snapshot, "activePanelType")
         . ", rapportSnapshotBlockerCode=" AdvisorQuoteStatusValue(snapshot, "blockerCode")
         . ", rapportSnapshotEditUpdateEnabled=" AdvisorQuoteStatusValue(snapshot, "editVehicleUpdateEnabled")
         . ", rapportSnapshotRoutedToEditVehicle=" routedToEditVehicle
@@ -1273,6 +1274,221 @@ AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, attemptCount, routedToEdit
         . ", editVehicleYear=" AdvisorQuoteStatusValue(snapshot, "editVehicleYear")
         . ", editVehicleMake=" AdvisorQuoteStatusValue(snapshot, "editVehicleMake")
         . ", editVehicleModel=" AdvisorQuoteStatusValue(snapshot, "editVehicleModel")
+}
+
+AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(snapshot) {
+    activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+    activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+    blockerCode := AdvisorQuoteStatusValue(snapshot, "blockerCode")
+    return blockerCode = "GATHER_STALE_ADD_VEHICLE_ROW_OPEN"
+        || activeModalType = "GATHER_STALE_ADD_VEHICLE_ROW"
+        || activePanelType = "GATHER_STALE_ADD_VEHICLE_ROW"
+}
+
+AdvisorQuoteGatherStaleBlockerActiveScopeSafe(snapshot) {
+    activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
+    activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+    modalSafe := activeModalType = "" || activeModalType = "NONE" || activeModalType = "GATHER_STALE_ADD_VEHICLE_ROW"
+    panelSafe := activePanelType = "" || activePanelType = "NONE" || activePanelType = "GATHER_STALE_ADD_VEHICLE_ROW"
+    return modalSafe && panelSafe
+}
+
+AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(status, snapshot, &unsafeReason := "") {
+    unsafeReason := ""
+    result := AdvisorQuoteStatusValue(status, "result")
+    safeResult := result = "FOUND" || result = "OK" || result = "READY"
+    if !safeResult {
+        unsafeReason := "status-not-ready:" result
+        return false
+    }
+    if !AdvisorQuoteGatherStaleBlockerActiveScopeSafe(snapshot) {
+        unsafeReason := "unknown-active-modal-or-panel"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(snapshot, "editVehiclePanelPresent") = "1"
+        || AdvisorQuoteStatusValue(snapshot, "activeModalType") = "GATHER_EDIT_VEHICLE"
+        || AdvisorQuoteStatusValue(snapshot, "activePanelType") = "GATHER_EDIT_VEHICLE") {
+        unsafeReason := "edit-vehicle-panel-active"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "rowIncomplete") != "1") {
+        unsafeReason := "row-not-incomplete"
+        return false
+    }
+    if (StrLower(AdvisorQuoteStatusValue(status, "rowTitle")) != "add car or truck") {
+        unsafeReason := "not-gather-add-car-truck-row"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "cancelButtonScoped") != "1") {
+        unsafeReason := "cancel-button-not-scoped"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "safeToCancel") != "1") {
+        unsafeReason := "operator-unsafe:" AdvisorQuoteStatusValue(status, "reason")
+        return false
+    }
+    return true
+}
+
+AdvisorQuoteRapportSubModelPlaceholderFallbackEnabled(db) {
+    if !(IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]))
+        return true
+    if !db["defaults"].Has("rapportAllowSubModelPlaceholderFallback")
+        return true
+    value := Trim(String(db["defaults"]["rapportAllowSubModelPlaceholderFallback"]))
+    return !(StrLower(value) = "false" || value = "0" || StrLower(value) = "no")
+}
+
+AdvisorQuoteRapportSubModelFallbackMode(db) {
+    mode := ""
+    if (IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]) && db["defaults"].Has("rapportSubModelFallbackMode"))
+        mode := Trim(String(db["defaults"]["rapportSubModelFallbackMode"]))
+    return mode = "first-valid" ? mode : "first-valid"
+}
+
+AdvisorQuoteRapportModelPlaceholderFallbackEnabled(db) {
+    if !(IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]))
+        return true
+    if !db["defaults"].Has("rapportAllowModelPlaceholderFallback")
+        return true
+    value := Trim(String(db["defaults"]["rapportAllowModelPlaceholderFallback"]))
+    return !(StrLower(value) = "false" || value = "0" || StrLower(value) = "no")
+}
+
+AdvisorQuoteRapportModelFallbackMode(db) {
+    mode := ""
+    if (IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]) && db["defaults"].Has("rapportModelFallbackMode"))
+        mode := Trim(String(db["defaults"]["rapportModelFallbackMode"]))
+    return mode = "first-valid-same-make" ? mode : "first-valid-same-make"
+}
+
+AdvisorQuoteStatusFieldPresent(status, valueKey, presentKey := "") {
+    if (AdvisorQuoteStatusValue(status, valueKey) != "")
+        return true
+    return presentKey != "" && AdvisorQuoteStatusValue(status, presentKey) = "1"
+}
+
+AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(status, snapshot, &unsafeReason := "") {
+    unsafeReason := ""
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result != "FOUND") {
+        unsafeReason := "status-not-readable:" result
+        return false
+    }
+    if !AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(snapshot) {
+        unsafeReason := "stale-add-row-blocker-not-active"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(snapshot, "staleAddRowPresent") != "1") {
+        unsafeReason := "stale-add-row-not-present"
+        return false
+    }
+    if !AdvisorQuoteGatherStaleBlockerActiveScopeSafe(snapshot) {
+        unsafeReason := "unknown-active-modal-or-panel"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(snapshot, "editVehiclePanelPresent") = "1"
+        || AdvisorQuoteStatusValue(snapshot, "activeModalType") = "GATHER_EDIT_VEHICLE"
+        || AdvisorQuoteStatusValue(snapshot, "activePanelType") = "GATHER_EDIT_VEHICLE") {
+        unsafeReason := "edit-vehicle-panel-active"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "unsafeContext") = "1") {
+        unsafeReason := "confirmed-or-potential-vehicle-context"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "rowIncomplete") != "1") {
+        unsafeReason := "row-not-incomplete"
+        return false
+    }
+    if !AdvisorQuoteStatusFieldPresent(status, "yearValue", "yearPresent") {
+        unsafeReason := "year-missing"
+        return false
+    }
+    if !AdvisorQuoteStatusFieldPresent(status, "manufacturerValue", "manufacturerPresent") {
+        unsafeReason := "manufacturer-missing"
+        return false
+    }
+    if !AdvisorQuoteStatusFieldPresent(status, "modelValue", "modelPresent") {
+        unsafeReason := "model-missing"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "subModelPresent") != "1") {
+        unsafeReason := "submodel-missing"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "subModelPlaceholderSelected") != "1") {
+        unsafeReason := "submodel-already-selected"
+        return false
+    }
+    if (AdvisorQuoteStatusInteger(status, "subModelOptionCount") < 1
+        || AdvisorQuoteStatusValue(status, "subModelFirstValidOptionPresent") != "1") {
+        unsafeReason := "submodel-no-options"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "addButtonPresent") != "1") {
+        unsafeReason := "add-button-missing"
+        return false
+    }
+    if (AdvisorQuoteStatusValue(status, "addButtonEnabled") != "1") {
+        unsafeReason := "add-button-disabled"
+        return false
+    }
+    return true
+}
+
+AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(status, snapshot) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", rowTitle=" AdvisorQuoteStatusValue(status, "rowTitle")
+        . ", rowIncomplete=" AdvisorQuoteStatusValue(status, "rowIncomplete")
+        . ", yearPresent=" (AdvisorQuoteStatusValue(status, "yearValue") != "" ? "1" : "0")
+        . ", manufacturerPresent=" (AdvisorQuoteStatusValue(status, "manufacturerValue") != "" ? "1" : "0")
+        . ", modelPresent=" (AdvisorQuoteStatusValue(status, "modelValue") != "" ? "1" : "0")
+        . ", subModelPresent=" AdvisorQuoteStatusValue(status, "subModelPresent")
+        . ", subModelPlaceholderSelected=" AdvisorQuoteStatusValue(status, "subModelPlaceholderSelected")
+        . ", subModelOptionCount=" AdvisorQuoteStatusValue(status, "subModelOptionCount")
+        . ", subModelFirstValidOptionPresent=" AdvisorQuoteStatusValue(status, "subModelFirstValidOptionPresent")
+        . ", addButtonPresent=" AdvisorQuoteStatusValue(status, "addButtonPresent")
+        . ", addButtonEnabled=" AdvisorQuoteStatusValue(status, "addButtonEnabled")
+        . ", cancelButtonPresent=" AdvisorQuoteStatusValue(status, "cancelButtonPresent")
+        . ", cancelButtonScoped=" AdvisorQuoteStatusValue(status, "cancelButtonScoped")
+        . ", unsafeContext=" AdvisorQuoteStatusValue(status, "unsafeContext")
+        . ", safeToCancel=" AdvisorQuoteStatusValue(status, "safeToCancel")
+        . ", reason=" AdvisorQuoteStatusValue(status, "reason")
+        . ", activeModalType=" AdvisorQuoteStatusValue(snapshot, "activeModalType")
+        . ", activePanelType=" AdvisorQuoteStatusValue(snapshot, "activePanelType")
+        . ", blockerCode=" AdvisorQuoteStatusValue(snapshot, "blockerCode")
+        . ", editVehiclePanelPresent=" AdvisorQuoteStatusValue(snapshot, "editVehiclePanelPresent")
+        . ", staleAddRowPresent=" AdvisorQuoteStatusValue(snapshot, "staleAddRowPresent")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteBuildGatherAddRowSubModelSelectDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", selectedIndex=" AdvisorQuoteStatusValue(status, "selectedIndex")
+        . ", selectedValuePresent=" AdvisorQuoteStatusValue(status, "selectedValuePresent")
+        . ", selectedMode=" AdvisorQuoteStatusValue(status, "selectedMode")
+        . ", optionCount=" AdvisorQuoteStatusValue(status, "optionCount")
+        . ", addButtonPresent=" AdvisorQuoteStatusValue(status, "addButtonPresent")
+        . ", addButtonEnabled=" AdvisorQuoteStatusValue(status, "addButtonEnabled")
+}
+
+AdvisorQuoteBuildGatherAddRowAddClickDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", clicked=" AdvisorQuoteStatusValue(status, "clicked")
+        . ", addButtonPresent=" AdvisorQuoteStatusValue(status, "addButtonPresent")
+        . ", addButtonEnabled=" AdvisorQuoteStatusValue(status, "addButtonEnabled")
+}
+
+AdvisorQuoteBuildGatherStaleVehicleCancelSafetyDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", rowIndex=" AdvisorQuoteStatusValue(status, "rowIndex")
+        . ", clicked=" AdvisorQuoteStatusValue(status, "clicked")
+        . ", afterRowPresent=" AdvisorQuoteStatusValue(status, "afterRowPresent")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
+        . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
 }
 
 AdvisorQuoteFindGatherEditVehicleForSnapshot(snapshot, actionableVehicles) {
@@ -1300,6 +1516,7 @@ AdvisorQuoteFindGatherEditVehicleForSnapshot(snapshot, actionableVehicles) {
 AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason := "", &failureScanPath := "") {
     failureReason := ""
     failureScanPath := ""
+    staleCancelRows := Map()
     Loop 2 {
         snapshot := AdvisorQuoteGetGatherRapportSnapshot()
         activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
@@ -1315,6 +1532,211 @@ AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason
             failureReason := "RAPPORT_SNAPSHOT_UNREADABLE: " AdvisorQuoteBuildGatherRapportSnapshotDetail(snapshot)
             failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-snapshot-unreadable")
             return false
+        }
+        if AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(snapshot) {
+            staleStatus := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ADD_ROW_STATUS",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(staleStatus, snapshot)
+            )
+            resumeUnsafeReason := ""
+            if AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(staleStatus, snapshot, &resumeUnsafeReason) {
+                if !AdvisorQuoteRapportSubModelPlaceholderFallbackEnabled(db) {
+                    failureReason := "RAPPORT_ADD_ROW_SUBMODEL_FALLBACK_DISABLED: "
+                        . AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(staleStatus, snapshot)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-submodel-fallback-disabled")
+                    return false
+                }
+
+                selectStatus := AdvisorQuoteSelectGatherAddRowFirstValidSubModel(true)
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_ADD_ROW_SUBMODEL_PLACEHOLDER_SELECTED",
+                    AdvisorQuoteGetLastStep(),
+                    AdvisorQuoteBuildGatherAddRowSubModelSelectDetail(selectStatus)
+                        . ", fallbackMode=" AdvisorQuoteRapportSubModelFallbackMode(db)
+                )
+                if (AdvisorQuoteStatusValue(selectStatus, "result") = "NO_OPTIONS") {
+                    failureReason := "RAPPORT_ADD_ROW_SUBMODEL_NO_OPTIONS: " AdvisorQuoteBuildGatherAddRowSubModelSelectDetail(selectStatus)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-submodel-no-options")
+                    return false
+                }
+                if (AdvisorQuoteStatusValue(selectStatus, "result") != "OK"
+                    || AdvisorQuoteStatusValue(selectStatus, "selectedValuePresent") != "1") {
+                    failureReason := "RAPPORT_ADD_ROW_SUBMODEL_SELECT_FAILED: " AdvisorQuoteBuildGatherAddRowSubModelSelectDetail(selectStatus)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-submodel-select-failed")
+                    return false
+                }
+
+                afterSelectStatus := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_ADD_ROW_AFTER_SUBMODEL_STATUS",
+                    AdvisorQuoteGetLastStep(),
+                    AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(afterSelectStatus, snapshot)
+                )
+                if (AdvisorQuoteStatusValue(afterSelectStatus, "subModelPlaceholderSelected") = "1") {
+                    failureReason := "RAPPORT_ADD_ROW_SUBMODEL_SELECT_FAILED: subModel remained placeholder. "
+                        . AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(afterSelectStatus, snapshot)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-submodel-select-verify-failed")
+                    return false
+                }
+                if (AdvisorQuoteStatusValue(afterSelectStatus, "addButtonPresent") != "1"
+                    || AdvisorQuoteStatusValue(afterSelectStatus, "addButtonEnabled") != "1") {
+                    failureReason := "RAPPORT_ADD_ROW_ADD_BUTTON_DISABLED: "
+                        . AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(afterSelectStatus, snapshot)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-add-button-disabled")
+                    return false
+                }
+
+                addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_ADD_ROW_ADD_CLICKED",
+                    AdvisorQuoteGetLastStep(),
+                    AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus)
+                )
+                if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED"
+                    || AdvisorQuoteStatusValue(addStatus, "clicked") != "1") {
+                    failureReason := "RAPPORT_ADD_ROW_ADD_BUTTON_DISABLED: " AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-add-click-failed")
+                    return false
+                }
+
+                afterSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+                afterResult := AdvisorQuoteStatusValue(afterSnapshot, "result")
+                afterEditOpen := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") = "GATHER_EDIT_VEHICLE"
+                    || AdvisorQuoteStatusValue(afterSnapshot, "activePanelType") = "GATHER_EDIT_VEHICLE"
+                    || AdvisorQuoteStatusValue(afterSnapshot, "editVehiclePanelPresent") = "1"
+                afterRowClosed := AdvisorQuoteStatusValue(afterSnapshot, "staleAddRowPresent") != "1"
+                    || !AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(afterSnapshot)
+                afterCountsChanged := AdvisorQuoteStatusValue(afterSnapshot, "confirmedVehicleCount") != AdvisorQuoteStatusValue(snapshot, "confirmedVehicleCount")
+                    || AdvisorQuoteStatusValue(afterSnapshot, "potentialVehicleCount") != AdvisorQuoteStatusValue(snapshot, "potentialVehicleCount")
+                afterGateChanged := AdvisorQuoteStatusValue(afterSnapshot, "vehicleWarningPresent") != AdvisorQuoteStatusValue(snapshot, "vehicleWarningPresent")
+                    || AdvisorQuoteStatusValue(afterSnapshot, "startQuotingSectionPresent") != AdvisorQuoteStatusValue(snapshot, "startQuotingSectionPresent")
+                    || AdvisorQuoteStatusValue(afterSnapshot, "createQuotesEnabled") != AdvisorQuoteStatusValue(snapshot, "createQuotesEnabled")
+                    || AdvisorQuoteStatusValue(afterSnapshot, "blockerCode") != AdvisorQuoteStatusValue(snapshot, "blockerCode")
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_ADD_ROW_REENTERING_VALIDATION_FLOW",
+                    AdvisorQuoteGetLastStep(),
+                    AdvisorQuoteBuildRapportSnapshotRouteDetail(afterSnapshot, A_Index, afterEditOpen ? "1" : "0", afterResult)
+                        . ", addRowClosed=" (afterRowClosed ? "1" : "0")
+                        . ", countsChanged=" (afterCountsChanged ? "1" : "0")
+                        . ", gateChanged=" (afterGateChanged ? "1" : "0")
+                )
+                if (afterResult != "OK" || !(afterRowClosed || afterEditOpen || afterCountsChanged || afterGateChanged)) {
+                    failureReason := "RAPPORT_ADD_ROW_ADD_VERIFY_FAILED: " AdvisorQuoteBuildGatherRapportSnapshotDetail(afterSnapshot)
+                    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-add-verify-failed")
+                    return false
+                }
+                if afterEditOpen {
+                    vehicle := AdvisorQuoteFindGatherEditVehicleForSnapshot(afterSnapshot, actionableVehicles)
+                    if !IsObject(vehicle) {
+                        failureReason := "GATHER_EDIT_VEHICLE_NO_MATCHING_LEAD_VEHICLE: active Edit Vehicle panel could not be matched to exactly one actionable lead vehicle. " AdvisorQuoteBuildRapportSnapshotRouteDetail(afterSnapshot, A_Index, "1")
+                        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-edit-vehicle-no-matching-lead")
+                        return false
+                    }
+                    editFailureReason := ""
+                    editFailureScanPath := ""
+                    editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &editFailureReason, &editFailureScanPath, "snapshot-gate-after-add-row")
+                    finalSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+                    AdvisorQuoteAppendLog(
+                        "RAPPORT_SNAPSHOT_EDIT_ROUTE_RESULT",
+                        AdvisorQuoteGetLastStep(),
+                        AdvisorQuoteBuildRapportSnapshotRouteDetail(afterSnapshot, A_Index, "1", AdvisorQuoteStatusValue(finalSnapshot, "result"))
+                            . ", routedVehicle=" AdvisorQuoteVehicleLabel(vehicle)
+                            . ", editOutcome=" editOutcome
+                            . ", rapportSnapshotAfterActiveModalType=" AdvisorQuoteStatusValue(finalSnapshot, "activeModalType")
+                            . ", rapportSnapshotAfterBlockerCode=" AdvisorQuoteStatusValue(finalSnapshot, "blockerCode")
+                            . ", rapportSnapshotAfterEditUpdateEnabled=" AdvisorQuoteStatusValue(finalSnapshot, "editVehicleUpdateEnabled")
+                    )
+                    if (editOutcome = "FAILED") {
+                        failureReason := editFailureReason
+                        failureScanPath := editFailureScanPath
+                        if (failureReason = "")
+                            failureReason := "GATHER_EDIT_VEHICLE_SNAPSHOT_ROUTE_FAILED"
+                        if (failureScanPath = "")
+                            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-edit-vehicle-snapshot-route-failed")
+                        return false
+                    }
+                }
+                return true
+            }
+
+            if (resumeUnsafeReason = "submodel-no-options") {
+                failureReason := "RAPPORT_ADD_ROW_SUBMODEL_NO_OPTIONS: " AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(staleStatus, snapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-submodel-no-options")
+                return false
+            }
+            if (resumeUnsafeReason = "add-button-disabled") {
+                failureReason := "RAPPORT_ADD_ROW_ADD_BUTTON_DISABLED: " AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(staleStatus, snapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-add-row-add-button-disabled")
+                return false
+            }
+
+            cancelUnsafeReason := ""
+            rowEmptyForCancel := AdvisorQuoteStatusValue(staleStatus, "yearValue") = ""
+                && AdvisorQuoteStatusValue(staleStatus, "vinValue") = ""
+                && AdvisorQuoteStatusValue(staleStatus, "manufacturerValue") = ""
+                && AdvisorQuoteStatusValue(staleStatus, "modelValue") = ""
+                && AdvisorQuoteStatusValue(staleStatus, "subModelValue") = ""
+            if !(rowEmptyForCancel && AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(staleStatus, snapshot, &cancelUnsafeReason)) {
+                failureReason := "RAPPORT_STALE_ADD_ROW_UNSAFE: " resumeUnsafeReason
+                    . ". " AdvisorQuoteBuildGatherStaleVehicleRowSafetyDetail(staleStatus, snapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-stale-add-row-unsafe")
+                return false
+            }
+
+            staleCancelKey := AdvisorQuoteStatusValue(staleStatus, "rowIndex")
+            if (staleCancelKey != "" && staleCancelRows.Has(staleCancelKey)) {
+                failureReason := "RAPPORT_STALE_ADD_ROW_CANCEL_LOOP_GUARD: repeated rowIndex=" staleCancelKey
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-stale-add-row-cancel-loop-guard")
+                return false
+            }
+            if (staleCancelKey != "")
+                staleCancelRows[staleCancelKey] := true
+            cancelStatus := AdvisorQuoteCancelStaleAddVehicleRow(true)
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ADD_ROW_CANCEL",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildGatherStaleVehicleCancelSafetyDetail(cancelStatus)
+            )
+            if (AdvisorQuoteStatusValue(cancelStatus, "result") != "CANCELLED") {
+                failureReason := "RAPPORT_STALE_ADD_ROW_CANCEL_FAILED: "
+                    . AdvisorQuoteBuildGatherStaleVehicleCancelSafetyDetail(cancelStatus)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-stale-add-row-cancel-failed")
+                return false
+            }
+
+            afterSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+            afterResult := AdvisorQuoteStatusValue(afterSnapshot, "result")
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ADD_ROW_CANCEL_VERIFY",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteBuildRapportSnapshotRouteDetail(afterSnapshot, A_Index, "0", afterResult)
+                    . ", staleAddRowPresent=" AdvisorQuoteStatusValue(afterSnapshot, "staleAddRowPresent")
+            )
+            if (afterResult != "OK") {
+                failureReason := "RAPPORT_STALE_ADD_ROW_CANCEL_VERIFY_UNREADABLE: "
+                    . AdvisorQuoteBuildGatherRapportSnapshotDetail(afterSnapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-stale-add-row-cancel-verify-unreadable")
+                return false
+            }
+            if (AdvisorQuoteStatusValue(afterSnapshot, "staleAddRowPresent") = "1"
+                && AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(afterSnapshot)) {
+                failureReason := "RAPPORT_STALE_ADD_ROW_CANCEL_VERIFY_FAILED: "
+                    . AdvisorQuoteBuildGatherRapportSnapshotDetail(afterSnapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-stale-add-row-cancel-verify-failed")
+                return false
+            }
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ADD_ROW_CANCELLED",
+                AdvisorQuoteGetLastStep(),
+                "attemptCount=" A_Index
+                    . ", afterActiveModalType=" AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
+                    . ", afterActivePanelType=" AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
+                    . ", afterBlockerCode=" AdvisorQuoteStatusValue(afterSnapshot, "blockerCode")
+                    . ", afterStaleAddRowPresent=" AdvisorQuoteStatusValue(afterSnapshot, "staleAddRowPresent")
+            )
+            return true
         }
         if (activeModalType = "" || activeModalType = "NONE")
             return true
@@ -1843,14 +2265,19 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     AdvisorQuoteLogGatherVehiclePolicy(vehiclePolicy)
     actionableVehicles := vehiclePolicy["actionableVehicles"]
     partialYearMakeVehicles := vehiclePolicy["partialYearMakeVehicles"]
+    rapportLedger := AdvisorQuoteRapportVehicleLedgerCreate(profile, db)
 
     if !AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason, &failureScanPath)
         return false
 
-    if (actionableVehicles.Length = 0 && partialYearMakeVehicles.Length = 0) {
-        failureReason := (vehiclePolicy["deferredVinVehicles"].Length > 0)
-            ? "VIN_PRESENT_BUT_YEAR_MISSING_DEFERRED: Gather Data has no actionable year/make/model vehicle."
-            : "NO_ACTIONABLE_LEAD_VEHICLE: Gather Data has no lead vehicle with year, make, and model."
+    if (rapportLedger["rateableCount"] = 0) {
+        failureReason := "NO_RATEABLE_VEHICLES"
+        AdvisorQuoteAppendLog(
+            "RAPPORT_NO_RATEABLE_VEHICLES",
+            AdvisorQuoteGetLastStep(),
+            "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+                . ", vehicleCount=" rapportLedger["items"].Length
+        )
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-actionable-lead-vehicle")
         return false
     }
@@ -1883,8 +2310,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         AdvisorQuoteAppendLog(
             "VEHICLE_NORMALIZED",
             AdvisorQuoteGetLastStep(),
-            "raw=" vehicle["raw"]
-                . ", displayKey=" vehicle["displayKey"]
+            "displayKey=" vehicle["displayKey"]
                 . ", year=" vehicle["year"]
                 . ", make=" vehicle["make"]
                 . ", model=" vehicle["model"]
@@ -1895,24 +2321,17 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         AdvisorQuoteAppendLog("VEHICLE_DB_RESOLVER", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle))
         resolveResult := AdvisorQuoteVehicleDbResolveResult(resolvedVehicle)
         if (resolveResult = "AMBIGUOUS") {
-            deferredRapportVehicles.Push(vehicle)
-            deferredCompleteVehicles.Push(vehicle)
             AdvisorQuoteAppendLog(
-                "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
+                "VEHICLE_DB_CARD_MATCH_AMBIGUOUS",
                 AdvisorQuoteGetLastStep(),
                 "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
             )
-            continue
-        }
-        if (resolveResult != "RESOLVED") {
-            deferredRapportVehicles.Push(vehicle)
-            deferredUnknownVehicles.Push(vehicle)
+        } else if (resolveResult != "RESOLVED") {
             AdvisorQuoteAppendLog(
-                "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
+                "VEHICLE_DB_CARD_MATCH_NOT_RESOLVED",
                 AdvisorQuoteGetLastStep(),
                 "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
             )
-            continue
         }
 
         preflightStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle)
@@ -1944,6 +2363,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             }
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_EXACT", "matched-confirmed-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_ALREADY_CONFIRMED",
                 AdvisorQuoteGetLastStep(),
@@ -1959,6 +2379,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         if (editOutcome = "CONFIRMED") {
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_EXACT", "edit-panel-update")
             continue
         }
         if (editOutcome = "FAILED")
@@ -1973,10 +2394,15 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             )
         }
 
+        if !AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, vehicle, "confirm_potential_vehicle", &failureReason) {
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-loop-guard")
+            return false
+        }
         confirmOutcome := AdvisorQuoteConfirmPotentialVehicle(vehicle, db, &failureReason, &failureScanPath)
         if (confirmOutcome = "CONFIRMED") {
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_POTENTIAL_MATCH", "potential-card")
             continue
         }
         if (confirmOutcome = "FAILED")
@@ -1984,6 +2410,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         if (confirmOutcome = "AMBIGUOUS") {
             deferredRapportVehicles.Push(vehicle)
             deferredCompleteVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "DEFERRED_AMBIGUOUS", "potential-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
                 AdvisorQuoteGetLastStep(),
@@ -1992,27 +2419,57 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             continue
         }
 
-        if vehicleModeAllowsAddComplete {
+        if (resolveResult = "AMBIGUOUS") {
+            deferredRapportVehicles.Push(vehicle)
+            deferredCompleteVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "DEFERRED_AMBIGUOUS", "db-resolver")
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", source=db-resolver"
+            )
+            continue
+        }
+
+        if (vehicleModeAllowsAddComplete && resolveResult = "RESOLVED") {
+            if !AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, vehicle, "add_db_resolved_vehicle", &failureReason) {
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-loop-guard")
+                return false
+            }
             addOutcome := AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureReason, &failureScanPath)
             if (addOutcome = "ADDED") {
                 vehicleSatisfiedCount += 1
                 satisfiedVehicles.Push(vehicle)
                 dbAddedVehicles.Push(vehicle)
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "ADDED_DB_RESOLVED", "db-resolved-model")
                 continue
             }
             if (addOutcome = "FAILED")
                 return false
             deferredRapportVehicles.Push(vehicle)
             deferredCompleteVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "SCRAP_MODEL_UNAVAILABLE", "db-add-deferred")
+            continue
+        }
+
+        if !AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, vehicle, "add_exact_model_vehicle", &failureReason) {
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-loop-guard")
+            return false
+        }
+        if AdvisorQuoteAddVehicleInGatherData(vehicle, db) {
+            vehicleSatisfiedCount += 1
+            satisfiedVehicles.Push(vehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "ADDED_SUBMODEL_PLACEHOLDER", "EXACT_MODEL")
             continue
         }
 
         deferredRapportVehicles.Push(vehicle)
         deferredCompleteVehicles.Push(vehicle)
+        AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "SCRAP_MODEL_UNAVAILABLE", "exact-model-add-failed")
         AdvisorQuoteAppendLog(
             "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", source=potential-card, rapportVehicleMode=" rapportVehicleMode ", noAddRowOpened=1, noDropdownConstruction=1"
+            "vehicle=" vehicle["displayKey"] ", source=exact-model-add, rapportVehicleMode=" rapportVehicleMode
         )
     }
 
@@ -2044,6 +2501,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             vehicleSatisfiedCount += 1
             promotedPartialVehicles.Push(promotedVehicle)
             satisfiedVehicles.Push(promotedVehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "CONFIRMED_EXACT", "partial-promoted-confirmed-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_PARTIAL_ALREADY_CONFIRMED",
                 AdvisorQuoteGetLastStep(),
@@ -2060,6 +2518,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         result := AdvisorQuoteStatusValue(partialStatus, "result")
         if (result = "AMBIGUOUS") {
             deferredPartialVehicles.Push(partialVehicle)
+            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "DEFERRED_AMBIGUOUS", "partial-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_DEFERRED_AMBIGUOUS_DB_CARD_MATCH",
                 AdvisorQuoteGetLastStep(),
@@ -2071,7 +2530,36 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             continue
         }
 
+        if AdvisorQuoteRapportModelPlaceholderFallbackEnabled(db) {
+            if !AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, partialVehicle, "add_model_placeholder_vehicle", &failureReason) {
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-loop-guard")
+                return false
+            }
+            addedPlaceholderVehicle := ""
+            placeholderOutcome := AdvisorQuoteAddPartialYearMakeVehicleWithModelFallback(partialVehicle, db, &addedPlaceholderVehicle, &failureReason, &failureScanPath)
+            switch placeholderOutcome {
+                case "ADDED":
+                    vehicleSatisfiedCount += 1
+                    satisfiedVehicles.Push(addedPlaceholderVehicle)
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "ADDED_MODEL_PLACEHOLDER", "MODEL_PLACEHOLDER_FALLBACK")
+                    continue
+                case "SCRAP_MAKE_UNAVAILABLE":
+                    deferredPartialVehicles.Push(partialVehicle)
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "SCRAP_MAKE_UNAVAILABLE", "make-option-not-found")
+                    continue
+                case "SCRAP_MODEL_UNAVAILABLE":
+                    deferredPartialVehicles.Push(partialVehicle)
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "SCRAP_MODEL_UNAVAILABLE", "model-option-not-found")
+                    continue
+                case "FAILED_UNSAFE":
+                    deferredPartialVehicles.Push(partialVehicle)
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "FAILED_UNSAFE", "model-placeholder-add-failed")
+                    continue
+            }
+        }
+
         deferredPartialVehicles.Push(partialVehicle)
+        AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "SCRAP_MODEL_UNAVAILABLE", "model-placeholder-disabled")
         AdvisorQuoteAppendLog(
             "VEHICLE_PARTIAL_DEFERRED",
             AdvisorQuoteGetLastStep(),
@@ -2084,8 +2572,22 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     }
 
     if (vehicleSatisfiedCount = 0) {
-        failureReason := "NO_SAFE_RAPPORT_VEHICLE_MATCH: no lead vehicle was satisfied by existing Advisor evidence or DB-backed Add Car/Truck. deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles) " deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles) " deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
+        failureReason := "NO_RATEABLE_VEHICLES"
+        AdvisorQuoteAppendLog(
+            "RAPPORT_NO_RATEABLE_VEHICLES",
+            AdvisorQuoteGetLastStep(),
+            "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+                . ", deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles)
+                . ", deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles)
+                . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
+        )
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-safe-rapport-vehicle-match")
+        return false
+    }
+
+    if !AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(rapportLedger) {
+        failureReason := "RAPPORT_VEHICLE_LEDGER_INCOMPLETE: " AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-incomplete")
         return false
     }
 
@@ -2185,6 +2687,42 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
     if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, &failureReason, &failureScanPath)
         return false
+
+    finalRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+    if (AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent") = "1") {
+        failureReason := "RAPPORT_UNSAFE_ADD_ROW_REMAINS_BEFORE_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-unsafe-add-row-before-start-quoting")
+        return false
+    }
+    if (AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent") = "1"
+        && AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled") != "1") {
+        failureReason := "RAPPORT_VEHICLE_WARNING_BLOCKS_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-warning-before-start-quoting")
+        return false
+    }
+    if !AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(
+        rapportLedger,
+        vehicleSatisfiedCount,
+        AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent"),
+        AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent"),
+        AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
+    ) {
+        failureReason := "RAPPORT_VEHICLE_LEDGER_START_QUOTING_BLOCKED: " AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-start-quoting-blocked")
+        return false
+    }
+
+    AdvisorQuoteAppendLog(
+        "RAPPORT_VEHICLE_LEDGER_DONE",
+        AdvisorQuoteGetLastStep(),
+        "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+            . ", satisfiedCount=" AdvisorQuoteRapportVehicleLedgerSatisfiedCount(rapportLedger)
+            . ", confirmedOrAddedVehicleCount=" vehicleSatisfiedCount
+            . ", staleAddRowPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent")
+            . ", vehicleWarningPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent")
+            . ", createQuotesEnabled=" AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
+            . ", startQuotingAllowed=1"
+    )
 
     startQuotingStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
     AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
@@ -2940,6 +3478,191 @@ AdvisorQuoteClassifyAscVehicles(profile) {
     )
 }
 
+AdvisorQuoteRapportVehicleLedgerMaxIterations(rateableVehicleCount) {
+    return (Integer(rateableVehicleCount) * 3) + 4
+}
+
+AdvisorQuoteRapportVehicleTerminalStatus(status) {
+    switch Trim(String(status)) {
+        case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER", "SCRAP_YEAR_MISSING", "SCRAP_MAKE_MISSING", "SCRAP_MAKE_UNAVAILABLE", "SCRAP_MODEL_UNAVAILABLE", "DEFERRED_AMBIGUOUS", "FAILED_UNSAFE":
+            return true
+        default:
+            return false
+    }
+}
+
+AdvisorQuoteRapportVehicleLedgerCreate(profile, db) {
+    vehicles := AdvisorQuoteGetGatherProfileVehicles(profile)
+    items := []
+    rateableCount := 0
+    scrappedCount := 0
+    modelFallbackEnabled := AdvisorQuoteRapportModelPlaceholderFallbackEnabled(db)
+    for index, vehicle in vehicles {
+        year := IsObject(vehicle) && vehicle.Has("year") ? Trim(String(vehicle["year"])) : ""
+        make := IsObject(vehicle) && vehicle.Has("make") ? Trim(String(vehicle["make"])) : ""
+        model := IsObject(vehicle) && vehicle.Has("model") ? Trim(String(vehicle["model"])) : ""
+        status := ""
+        kind := ""
+        if (year = "") {
+            status := "SCRAP_YEAR_MISSING"
+            kind := "scrap"
+            scrappedCount += 1
+        } else if (make = "") {
+            status := "SCRAP_MAKE_MISSING"
+            kind := "scrap"
+            scrappedCount += 1
+        } else if (model = "") {
+            if modelFallbackEnabled {
+                kind := "model-placeholder"
+                rateableCount += 1
+            } else {
+                status := "SCRAP_MODEL_UNAVAILABLE"
+                kind := "scrap"
+                scrappedCount += 1
+            }
+        } else {
+            kind := "exact"
+            rateableCount += 1
+        }
+        items.Push(Map(
+            "index", index,
+            "vehicle", vehicle,
+            "key", AdvisorQuoteVehicleLabel(vehicle),
+            "kind", kind,
+            "status", status,
+            "detail", ""
+        ))
+    }
+    ledger := Map(
+        "items", items,
+        "rateableCount", rateableCount,
+        "scrappedCount", scrappedCount,
+        "iterations", 0,
+        "maxIterations", AdvisorQuoteRapportVehicleLedgerMaxIterations(rateableCount),
+        "actionKeys", Map()
+    )
+    for _, item in items {
+        if (item["status"] = "SCRAP_YEAR_MISSING")
+            AdvisorQuoteAppendLog("RAPPORT_VEHICLE_SCRAPPED_YEAR_MISSING", AdvisorQuoteGetLastStep(), "vehicle=" item["key"])
+        else if (item["status"] = "SCRAP_MAKE_MISSING")
+            AdvisorQuoteAppendLog("RAPPORT_VEHICLE_SCRAPPED_MAKE_MISSING", AdvisorQuoteGetLastStep(), "vehicle=" item["key"])
+        AdvisorQuoteAppendLog("RAPPORT_VEHICLE_LEDGER_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteRapportVehicleLedgerItemDetail(item))
+    }
+    return ledger
+}
+
+AdvisorQuoteRapportVehicleLedgerItemDetail(item) {
+    vehicle := IsObject(item) && item.Has("vehicle") ? item["vehicle"] : ""
+    return "vehicle=" (IsObject(item) && item.Has("key") ? item["key"] : AdvisorQuoteVehicleLabel(vehicle))
+        . ", kind=" (IsObject(item) && item.Has("kind") ? item["kind"] : "")
+        . ", status=" (IsObject(item) && item.Has("status") ? item["status"] : "")
+        . ", detail=" (IsObject(item) && item.Has("detail") ? item["detail"] : "")
+}
+
+AdvisorQuoteRapportVehicleLedgerFindItem(ledger, vehicle) {
+    if !(IsObject(ledger) && ledger.Has("items"))
+        return ""
+    key := AdvisorQuoteVehicleLabel(vehicle)
+    for _, item in ledger["items"] {
+        if (item["key"] = key)
+            return item
+    }
+    return ""
+}
+
+AdvisorQuoteRapportVehicleLedgerSetStatus(ledger, vehicle, status, detail := "") {
+    item := AdvisorQuoteRapportVehicleLedgerFindItem(ledger, vehicle)
+    if !IsObject(item)
+        return
+    item["status"] := status
+    item["detail"] := detail
+    eventType := "RAPPORT_VEHICLE_LEDGER_STATUS"
+    switch status {
+        case "ADDED_DB_RESOLVED":
+            eventType := "RAPPORT_VEHICLE_ADDED_DB_RESOLVED"
+        case "ADDED_MODEL_PLACEHOLDER":
+            eventType := "RAPPORT_VEHICLE_ADDED_MODEL_PLACEHOLDER"
+        case "ADDED_SUBMODEL_PLACEHOLDER":
+            eventType := "RAPPORT_VEHICLE_ADDED_SUBMODEL_PLACEHOLDER"
+        case "SCRAP_YEAR_MISSING":
+            eventType := "RAPPORT_VEHICLE_SCRAPPED_YEAR_MISSING"
+        case "SCRAP_MAKE_MISSING":
+            eventType := "RAPPORT_VEHICLE_SCRAPPED_MAKE_MISSING"
+        case "SCRAP_MAKE_UNAVAILABLE":
+            eventType := "RAPPORT_VEHICLE_SCRAPPED_MAKE_UNAVAILABLE"
+    }
+    AdvisorQuoteAppendLog(eventType, AdvisorQuoteGetLastStep(), AdvisorQuoteRapportVehicleLedgerItemDetail(item))
+    if (eventType != "RAPPORT_VEHICLE_LEDGER_STATUS")
+        AdvisorQuoteAppendLog("RAPPORT_VEHICLE_LEDGER_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteRapportVehicleLedgerItemDetail(item))
+}
+
+AdvisorQuoteRapportVehicleLedgerRecordAction(ledger, vehicle, actionType, &failureReason := "") {
+    failureReason := ""
+    if !IsObject(ledger)
+        return true
+    ledger["iterations"] := AdvisorQuoteStatusInteger(ledger, "iterations") + 1
+    if (ledger["iterations"] > ledger["maxIterations"]) {
+        failureReason := "RAPPORT_VEHICLE_LEDGER_LOOP_GUARD: maxIterations=" ledger["maxIterations"]
+        return false
+    }
+    key := AdvisorQuoteVehicleLabel(vehicle) "|" actionType
+    if ledger["actionKeys"].Has(key) {
+        failureReason := "RAPPORT_VEHICLE_LEDGER_LOOP_GUARD: repeatedAction=" actionType ", vehicle=" AdvisorQuoteVehicleLabel(vehicle)
+        return false
+    }
+    ledger["actionKeys"][key] := true
+    AdvisorQuoteAppendLog(
+        "RAPPORT_VEHICLE_LEDGER_NEXT_ACTION",
+        AdvisorQuoteGetLastStep(),
+        "iteration=" ledger["iterations"]
+            . ", maxIterations=" ledger["maxIterations"]
+            . ", vehicle=" AdvisorQuoteVehicleLabel(vehicle)
+            . ", action=" actionType
+    )
+    return true
+}
+
+AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger) {
+    if !(IsObject(ledger) && ledger.Has("items"))
+        return true
+    for _, item in ledger["items"] {
+        if (item["kind"] = "exact" || item["kind"] = "model-placeholder") {
+            if !AdvisorQuoteRapportVehicleTerminalStatus(item["status"])
+                return false
+        }
+    }
+    return true
+}
+
+AdvisorQuoteRapportVehicleLedgerSatisfiedCount(ledger) {
+    count := 0
+    if !(IsObject(ledger) && ledger.Has("items"))
+        return count
+    for _, item in ledger["items"] {
+        switch item["status"] {
+            case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER":
+                count += 1
+        }
+    }
+    return count
+}
+
+AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled) {
+    return AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger)
+        && Integer(confirmedOrAddedVehicleCount) > 0
+        && Trim(String(staleAddRowPresent)) != "1"
+        && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1")
+}
+
+AdvisorQuoteRapportVehicleLedgerSummary(ledger) {
+    if !(IsObject(ledger) && ledger.Has("items"))
+        return ""
+    parts := []
+    for _, item in ledger["items"]
+        parts.Push(item["key"] ":" item["status"])
+    return JoinArray(parts, " || ")
+}
+
 AdvisorQuoteBuildAscPartialVehiclesArgList(vehicles) {
     result := []
     if !IsObject(vehicles)
@@ -3123,6 +3846,16 @@ AdvisorQuoteGetGatherStaleAddVehicleRowStatus(allExpectedVehiclesSatisfied := fa
 AdvisorQuoteCancelStaleAddVehicleRow(allExpectedVehiclesSatisfied := false) {
     args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("cancel_stale_add_vehicle_row", args))
+}
+
+AdvisorQuoteSelectGatherAddRowFirstValidSubModel(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("select_gather_add_row_first_valid_submodel", args))
+}
+
+AdvisorQuoteClickGatherAddRowAddButton(allExpectedVehiclesSatisfied := false) {
+    args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
+    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("click_gather_add_row_add_button", args))
 }
 
 AdvisorQuoteBuildGatherConfirmedVehiclesStatusDetail(status) {
@@ -3404,6 +4137,22 @@ AdvisorQuoteSelectDbAddSubModelIfRequired(index, vehicle, resolvedVehicle, db) {
     if (subModelOptions.Length = 1)
         return AdvisorQuoteSelectVehicleDropdownOptionResult(index, "SubModel", subModelOptions[1], false, vehicle, optionArgs)
 
+    if AdvisorQuoteRapportSubModelPlaceholderFallbackEnabled(db) {
+        fallbackStatus := AdvisorQuoteSelectVehicleDropdownFirstValidNonPlaceholder(index, "SubModel", vehicle)
+        if (AdvisorQuoteStatusValue(fallbackStatus, "result") = "OK") {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_VEHICLE_ADDED_SUBMODEL_PLACEHOLDER",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" AdvisorQuoteVehicleLabel(vehicle)
+                    . ", fallbackMode=" AdvisorQuoteRapportSubModelFallbackMode(db)
+                    . ", selectedValuePresent=" AdvisorQuoteStatusValue(fallbackStatus, "selectedValuePresent")
+                    . ", optionCount=" AdvisorQuoteStatusValue(fallbackStatus, "optionCount")
+            )
+            return "OK"
+        }
+        return AdvisorQuoteStatusValue(fallbackStatus, "result")
+    }
+
     return "AMBIGUOUS"
 }
 
@@ -3536,12 +4285,12 @@ AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureR
         return "DEFERRED"
     }
 
-    if !AdvisorQuoteClickById(db["selectors"]["confirmVehicleId"], db["timeouts"]["actionMs"]) {
-        if !AdvisorQuoteClickByText("Add", "button,a", db["timeouts"]["actionMs"]) {
-            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
-            AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=add-click-failed")
-            return "DEFERRED"
-        }
+    addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
+    AdvisorQuoteAppendLog("RAPPORT_ADD_ROW_ADD_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus))
+    if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED" || AdvisorQuoteStatusValue(addStatus, "clicked") != "1") {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
+        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=add-click-failed")
+        return "DEFERRED"
     }
 
     postAddStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db, idx)
@@ -3564,6 +4313,122 @@ AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureR
     failureScanPath := (editFailureScanPath != "") ? editFailureScanPath : AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-db-add-did-not-commit")
     AdvisorQuoteAppendLog("VEHICLE_DB_ADD_DID_NOT_COMMIT", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", postAddResult=" AdvisorQuoteStatusValue(postAddStatus, "result") ", editOutcome=" editOutcome)
     return "FAILED"
+}
+
+AdvisorQuoteCloneVehicleWithModel(vehicle, model, statusLabel := "") {
+    clone := Map()
+    if IsObject(vehicle) {
+        for key, value in vehicle
+            clone[key] := value
+    }
+    clone["model"] := Trim(String(model))
+    clone["displayKey"] := Trim(String(clone.Has("year") ? clone["year"] : "") "|" String(clone.Has("make") ? clone["make"] : "") "|" String(model), "|")
+    if (statusLabel != "")
+        clone["rapportLedgerStatus"] := statusLabel
+    return clone
+}
+
+AdvisorQuoteAddPartialYearMakeVehicleWithModelFallback(vehicle, db, &addedVehicle := "", &failureReason := "", &failureScanPath := "") {
+    addedVehicle := ""
+    failureReason := ""
+    failureScanPath := ""
+    if !AdvisorQuoteRapportModelPlaceholderFallbackEnabled(db)
+        return "SCRAP_MODEL_UNAVAILABLE"
+    if !AdvisorQuoteVehicleHasPartialYearMakeFields(vehicle)
+        return "FAILED_UNSAFE"
+
+    AdvisorQuoteAppendLog(
+        "RAPPORT_VEHICLE_LEDGER_NEXT_ACTION",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" AdvisorQuoteVehicleLabel(vehicle)
+            . ", action=add_model_placeholder"
+            . ", fallbackMode=" AdvisorQuoteRapportModelFallbackMode(db)
+    )
+    AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_MODEL_PLACEHOLDER_ROW_STATUS_BEFORE_PREPARE", vehicle)
+    idx := AdvisorQuotePrepareVehicleRow(vehicle["year"])
+    if (idx < 0)
+        return "FAILED_UNSAFE"
+
+    yearCascadeStatus := AdvisorQuoteSetVehicleYearAndWaitManufacturer(idx, vehicle["year"], db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"])
+    AdvisorQuoteLogVehicleYearCascadeStatus(yearCascadeStatus, "VEHICLE_MODEL_PLACEHOLDER_YEAR_CASCADE", vehicle)
+    if (AdvisorQuoteStatusValue(yearCascadeStatus, "yearVerified") != "1")
+        return "FAILED_UNSAFE"
+
+    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Manufacturer", db["timeouts"]["transitionMs"], 2)
+        return "SCRAP_MAKE_UNAVAILABLE"
+
+    makeArgs := Map("allowedMakeLabels", AdvisorVehicleAllowedMakeLabelsText(vehicle["make"], "", vehicle["year"]))
+    makeResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "Manufacturer", vehicle["make"], false, vehicle, makeArgs)
+    if (makeResult = "NO_OPTION")
+        return "SCRAP_MAKE_UNAVAILABLE"
+    if (makeResult != "OK")
+        return "FAILED_UNSAFE"
+
+    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Model", db["timeouts"]["transitionMs"], 2)
+        return "SCRAP_MODEL_UNAVAILABLE"
+
+    modelStatus := AdvisorQuoteSelectVehicleDropdownFirstValidNonPlaceholder(idx, "Model", vehicle)
+    if (AdvisorQuoteStatusValue(modelStatus, "result") = "NO_OPTIONS")
+        return "SCRAP_MODEL_UNAVAILABLE"
+    if (AdvisorQuoteStatusValue(modelStatus, "result") != "OK" || AdvisorQuoteStatusValue(modelStatus, "selectedValuePresent") != "1")
+        return "FAILED_UNSAFE"
+
+    selectedModel := AdvisorQuoteStatusValue(modelStatus, "selectedValue")
+    addedVehicle := AdvisorQuoteCloneVehicleWithModel(vehicle, selectedModel, "MODEL_PLACEHOLDER_FALLBACK")
+    AdvisorQuoteAppendLog(
+        "RAPPORT_VEHICLE_ADDED_MODEL_PLACEHOLDER",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" AdvisorQuoteVehicleLabel(addedVehicle)
+            . ", sourceVehicle=" AdvisorQuoteVehicleLabel(vehicle)
+            . ", fallbackMode=" AdvisorQuoteRapportModelFallbackMode(db)
+            . ", selectedModelPresent=1"
+            . ", optionCount=" AdvisorQuoteStatusValue(modelStatus, "optionCount")
+    )
+
+    AdvisorQuoteWaitForVehicleSelectEnabled(idx, "SubModel", db["timeouts"]["shortMs"], 1)
+    rowStatus := AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"])
+    AdvisorQuoteLogGatherVehicleRowStatus(rowStatus, "VEHICLE_MODEL_PLACEHOLDER_SUBMODEL_STATUS", addedVehicle)
+    if (AdvisorQuoteStatusValue(rowStatus, "hasSubModel") = "1" && AdvisorQuoteStatusValue(rowStatus, "subModelValue") = "") {
+        subModelStatus := AdvisorQuoteSelectVehicleDropdownFirstValidNonPlaceholder(idx, "SubModel", addedVehicle)
+        if (AdvisorQuoteStatusValue(subModelStatus, "result") != "OK")
+            return "FAILED_UNSAFE"
+        AdvisorQuoteAppendLog(
+            "RAPPORT_VEHICLE_ADDED_SUBMODEL_PLACEHOLDER",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" AdvisorQuoteVehicleLabel(addedVehicle)
+                . ", fallbackMode=" AdvisorQuoteRapportSubModelFallbackMode(db)
+                . ", selectedValuePresent=" AdvisorQuoteStatusValue(subModelStatus, "selectedValuePresent")
+                . ", optionCount=" AdvisorQuoteStatusValue(subModelStatus, "optionCount")
+        )
+    }
+
+    readyStatus := AdvisorQuoteGetGatherVehicleAddStatus(addedVehicle, idx)
+    AdvisorQuoteLogGatherVehicleAddStatus(readyStatus, "VEHICLE_MODEL_PLACEHOLDER_READY_STATUS", addedVehicle)
+    if (AdvisorQuoteStatusValue(readyStatus, "rowComplete") != "1")
+        return "FAILED_UNSAFE"
+
+    addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
+    AdvisorQuoteAppendLog("RAPPORT_ADD_ROW_ADD_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus))
+    if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED" || AdvisorQuoteStatusValue(addStatus, "clicked") != "1")
+        return "FAILED_UNSAFE"
+
+    postAddStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(addedVehicle, db, idx)
+    AdvisorQuoteLogGatherVehicleAddStatus(postAddStatus, "VEHICLE_MODEL_PLACEHOLDER_STATUS_FINAL", addedVehicle)
+    if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postAddStatus)
+        return "ADDED"
+
+    editFailureReason := ""
+    editFailureScanPath := ""
+    editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(addedVehicle, db, &editFailureReason, &editFailureScanPath, "model-placeholder-add")
+    if (editOutcome = "CONFIRMED")
+        return "ADDED"
+    if (editOutcome = "FAILED") {
+        failureReason := editFailureReason
+        failureScanPath := editFailureScanPath
+        return "FAILED_UNSAFE"
+    }
+
+    return "FAILED_UNSAFE"
 }
 
 AdvisorQuoteAddVehicleInGatherData(vehicle, db) {
@@ -3614,14 +4479,31 @@ AdvisorQuoteAddVehicleInGatherData(vehicle, db) {
         return false
     }
 
-    if !AdvisorQuoteSelectVehicleDropdownOption(idx, "SubModel", vehicle["trimHint"], true, vehicle)
+    subModelResult := ""
+    if (vehicle.Has("trimHint") && Trim(String(vehicle["trimHint"])) != "")
+        subModelResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "SubModel", vehicle["trimHint"], false, vehicle)
+    else {
+        subModelStatus := AdvisorQuoteSelectVehicleDropdownFirstValidNonPlaceholder(idx, "SubModel", vehicle)
+        subModelResult := AdvisorQuoteStatusValue(subModelStatus, "result")
+        if (subModelResult = "OK") {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_VEHICLE_ADDED_SUBMODEL_PLACEHOLDER",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" AdvisorQuoteVehicleLabel(vehicle)
+                    . ", fallbackMode=" AdvisorQuoteRapportSubModelFallbackMode(db)
+                    . ", selectedValuePresent=" AdvisorQuoteStatusValue(subModelStatus, "selectedValuePresent")
+                    . ", optionCount=" AdvisorQuoteStatusValue(subModelStatus, "optionCount")
+            )
+        }
+    }
+    if (subModelResult != "OK")
         return false
 
-    if !AdvisorQuoteClickById(db["selectors"]["confirmVehicleId"], db["timeouts"]["actionMs"]) {
-        if !AdvisorQuoteClickByText("Add", "button,a", db["timeouts"]["actionMs"]) {
-            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
-            return false
-        }
+    addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
+    AdvisorQuoteAppendLog("RAPPORT_ADD_ROW_ADD_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus))
+    if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED" || AdvisorQuoteStatusValue(addStatus, "clicked") != "1") {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
+        return false
     }
 
     waitArgs := AdvisorQuoteBuildVehicleJsArgs(vehicle)
@@ -3682,6 +4564,26 @@ AdvisorQuoteSelectVehicleDropdownOptionResult(index, fieldName, wantedText, allo
 AdvisorQuoteSelectVehicleDropdownOption(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "") {
     result := AdvisorQuoteSelectVehicleDropdownOptionResult(index, fieldName, wantedText, allowFirstNonEmpty, vehicle)
     return result = "OK"
+}
+
+AdvisorQuoteSelectVehicleDropdownFirstValidNonPlaceholder(index, fieldName, vehicle := "") {
+    args := Map(
+        "index", index,
+        "fieldName", fieldName
+    )
+    status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("select_vehicle_dropdown_first_valid_nonplaceholder", args))
+    vehicleKey := IsObject(vehicle) && vehicle.Has("displayKey") ? vehicle["displayKey"] : ""
+    AdvisorQuoteAppendLog(
+        "VEHICLE_DROPDOWN_FIRST_VALID_SELECT",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicleKey
+            . ", field=" fieldName
+            . ", result=" AdvisorQuoteStatusValue(status, "result")
+            . ", selectedValue=" AdvisorQuoteStatusValue(status, "selectedValue")
+            . ", selectedMode=" AdvisorQuoteStatusValue(status, "selectedMode")
+            . ", optionCount=" AdvisorQuoteStatusValue(status, "optionCount")
+    )
+    return status
 }
 
 AdvisorQuoteGetGatherVehicleRowStatus(index := "", year := "") {

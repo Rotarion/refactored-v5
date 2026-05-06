@@ -2024,6 +2024,7 @@ function appendStaleVehicleRow(doc, {
   model = '',
   subModel = '',
   modelOptions = null,
+  subModelOptions = null,
   cancelCloses = true,
   includeCancel = true,
   includeAdd = true
@@ -2052,7 +2053,7 @@ function appendStaleVehicleRow(doc, {
       { value: '', text: 'Select One', selected: !model },
       { value: 'CUBE', text: 'CUBE', selected: model === 'CUBE' }
     ], { disabled: !make }),
-    createSelect(`ConsumerData.Assets.Vehicles[${index}].SubModel`, [
+    createSelect(`ConsumerData.Assets.Vehicles[${index}].SubModel`, subModelOptions || [
       { value: '', text: 'Select One', selected: !subModel },
       { value: 'BASE', text: 'Base', selected: subModel === 'BASE' }
     ], { disabled: !model })
@@ -2706,6 +2707,51 @@ function testVehicleContracts() {
   assert.strictEqual(staleFilledStatus.yearValue, '2010');
   assert.strictEqual(staleFilledStatus.manufacturerValue, 'NISSAN');
   assert.strictEqual(staleFilledStatus.modelValue, '');
+  const staleSubModelFallbackDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  appendStaleVehicleRow(staleSubModelFallbackDoc, {
+    year: '2010',
+    make: 'NISSAN',
+    model: 'CUBE',
+    subModelOptions: [
+      { value: '', text: 'Select One', selected: true },
+      { value: 'UNKNOWN', text: 'Unknown' },
+      { value: 'OTHER', text: 'Other' },
+      { value: 'EXL', text: 'EX-L AWD' },
+      { value: 'BASE', text: 'Base' }
+    ]
+  });
+  const staleSubModelBefore = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleSubModelFallbackDoc), ['result', 'subModelPlaceholderSelected', 'subModelOptionCount', 'subModelFirstValidOptionPresent', 'addButtonPresent', 'addButtonEnabled']);
+  assert.strictEqual(staleSubModelBefore.result, 'FOUND');
+  assert.strictEqual(staleSubModelBefore.subModelPlaceholderSelected, '1');
+  assert.strictEqual(staleSubModelBefore.subModelOptionCount, '2');
+  assert.strictEqual(staleSubModelBefore.subModelFirstValidOptionPresent, '1');
+  assert.strictEqual(staleSubModelBefore.addButtonPresent, '1');
+  assert.strictEqual(staleSubModelBefore.addButtonEnabled, '1');
+  const subModelSelect = assertKeyBlock(runOperator('select_gather_add_row_first_valid_submodel', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleSubModelFallbackDoc), ['result', 'selectedIndex', 'selectedValuePresent', 'selectedMode', 'optionCount', 'addButtonPresent', 'addButtonEnabled']);
+  assert.strictEqual(subModelSelect.result, 'OK');
+  assert.strictEqual(subModelSelect.selectedIndex, '3');
+  assert.strictEqual(subModelSelect.selectedValuePresent, '1');
+  assert.strictEqual(subModelSelect.selectedMode, 'first-valid');
+  assert.strictEqual(subModelSelect.optionCount, '2');
+  assert.strictEqual(staleSubModelFallbackDoc.getElementById('ConsumerData.Assets.Vehicles[5].SubModel').value, 'EXL');
+  const staleSubModelAfter = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleSubModelFallbackDoc), ['subModelPlaceholderSelected', 'subModelValue', 'addButtonPresent', 'addButtonEnabled']);
+  assert.strictEqual(staleSubModelAfter.subModelPlaceholderSelected, '0');
+  assert.strictEqual(staleSubModelAfter.subModelValue, 'EXL');
+  assert.strictEqual(staleSubModelAfter.addButtonPresent, '1');
+  assert.strictEqual(staleSubModelAfter.addButtonEnabled, '1');
+  const subModelAddClick = assertKeyBlock(runOperator('click_gather_add_row_add_button', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleSubModelFallbackDoc), ['result', 'clicked', 'addButtonPresent', 'addButtonEnabled']);
+  assert.strictEqual(subModelAddClick.result, 'CLICKED');
+  assert.strictEqual(subModelAddClick.clicked, '1');
   const staleUnsafeDoc = confirmedVehicleCardsDoc([
     '2019 Honda CR-V FAKECRV1*******01 Edit Remove CONFIRMED'
   ]);
@@ -3116,6 +3162,26 @@ function testVehicleContracts() {
   const subModelDoc = new FakeDocument(createVehicleInputRow(0, ''));
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'SubModel', wantedText: '', allowFirstNonEmpty: true }, subModelDoc), 'OK');
   assert.strictEqual(subModelDoc.getElementById('ConsumerData.Assets.Vehicles[0].SubModel').value, 'EXL');
+  const firstValidModelDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'UNKNOWN', text: 'Unknown' },
+      { value: 'OTHER', text: 'Other' },
+      { value: 'MAKENOTFOUND', text: 'Make Not Found' },
+      { value: 'COROLLA', text: 'Corolla' },
+      { value: 'CAMRY', text: 'Camry' }
+    ])
+  ]);
+  const firstValidModel = assertKeyBlock(runOperator('select_vehicle_dropdown_first_valid_nonplaceholder', {
+    index: '0',
+    fieldName: 'Model'
+  }, firstValidModelDoc), ['result', 'selectedIndex', 'selectedValue', 'selectedValuePresent', 'optionCount']);
+  assert.strictEqual(firstValidModel.result, 'OK');
+  assert.strictEqual(firstValidModel.selectedIndex, '4');
+  assert.strictEqual(firstValidModel.selectedValue, 'COROLLA');
+  assert.strictEqual(firstValidModel.selectedValuePresent, '1');
+  assert.strictEqual(firstValidModel.optionCount, '2');
+  assert.strictEqual(firstValidModelDoc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'COROLLA');
 
   assert.strictEqual(runOperator('vehicle_marked_added', { year: '2022', make: 'Tesla', model: 'Model 3' }, addedVehicleDoc), '1');
   assert.strictEqual(runOperator('vehicle_marked_added', { year: '2022', make: 'Tesla', model: 'Model 3' }, new FakeDocument()), '0');

@@ -551,6 +551,33 @@ AssertEqual(vinDeferredPolicy["actionableVehicles"].Length, 0, "VIN-only missing
 AssertEqual(vinDeferredPolicy["deferredVinVehicles"].Length, 1, "VIN-present missing-year lead should defer for later VIN-aware handling")
 AssertEqual(vinDeferredPolicy["blockingMissingVehicleData"].Length, 0, "VIN-deferred vehicle should not be classified as generic missing data")
 
+rapportLedgerDb := GetAdvisorQuoteWorkflowDb()
+rapportLedgerProfile := Map("vehicles", [
+    TestVehicle("2020", "TOYOTA", "COROLLA"),
+    TestVehicle("2010", "NISSAN", ""),
+    TestVehicle("", "HONDA", "CIVIC")
+])
+rapportLedger := AdvisorQuoteRapportVehicleLedgerCreate(rapportLedgerProfile, rapportLedgerDb)
+AssertEqual(rapportLedger["rateableCount"], 2, "Complete and year/make-only vehicles should be rateable when model fallback is enabled")
+AssertEqual(AdvisorQuoteRapportVehicleLedgerFindItem(rapportLedger, TestVehicle("", "HONDA", "CIVIC"))["status"], "SCRAP_YEAR_MISSING", "No-year vehicle should be scrapped by ledger without scrapping another rateable vehicle")
+AssertFalse(AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(rapportLedger), "Ledger should not be done while rateable vehicles are unresolved")
+ledgerGuardReason := ""
+AssertTrue(AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, TestVehicle("2020", "TOYOTA", "COROLLA"), "add_db_resolved_vehicle", &ledgerGuardReason), "First ledger action should be allowed")
+AssertFalse(AdvisorQuoteRapportVehicleLedgerRecordAction(rapportLedger, TestVehicle("2020", "TOYOTA", "COROLLA"), "add_db_resolved_vehicle", &ledgerGuardReason), "Repeated identical vehicle action should be guarded")
+AssertTrue(InStr(ledgerGuardReason, "RAPPORT_VEHICLE_LEDGER_LOOP_GUARD") = 1, "Repeated ledger action should return loop guard reason")
+AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, TestVehicle("2020", "TOYOTA", "COROLLA"), "ADDED_DB_RESOLVED", "test")
+AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, TestVehicle("2010", "NISSAN", ""), "ADDED_MODEL_PLACEHOLDER", "test")
+AssertTrue(AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(rapportLedger), "Ledger should be done after all rateable vehicles are terminal")
+AssertTrue(AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(rapportLedger, 2, "0", "0", "1"), "Start Quoting should be allowed when ledger is done with confirmed/added vehicle and no blocker")
+AssertFalse(AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(rapportLedger, 2, "1", "0", "1"), "Open stale row should block Start Quoting")
+
+allMissingYearLedger := AdvisorQuoteRapportVehicleLedgerCreate(Map("vehicles", [
+    TestVehicle("", "TOYOTA", "PRIUS"),
+    TestVehicle("", "HONDA", "CIVIC")
+]), rapportLedgerDb)
+AssertEqual(allMissingYearLedger["rateableCount"], 0, "All missing-year vehicles should produce no rateable RAPPORT vehicles")
+AssertFalse(AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(allMissingYearLedger, 0, "0", "0", "1"), "No-rateable-vehicle ledger should not allow Start Quoting")
+
 confirmedVehicleStatus := Map(
     "result", "ADDED",
     "confirmedVehicleMatched", "1",
@@ -632,6 +659,85 @@ safeConfirmedStatus := Map(
 )
 safeReason := ""
 AssertTrue(AdvisorQuoteGatherConfirmedVehiclesSafe(safeConfirmedStatus, Map(), &safeReason), "Ignored missing-year vehicles should not block final reconciliation when expected actionable vehicles match")
+
+staleRapportSnapshot := Map(
+    "result", "OK",
+    "activeModalType", "GATHER_STALE_ADD_VEHICLE_ROW",
+    "activePanelType", "GATHER_STALE_ADD_VEHICLE_ROW",
+    "blockerCode", "GATHER_STALE_ADD_VEHICLE_ROW_OPEN",
+    "editVehiclePanelPresent", "0",
+    "staleAddRowPresent", "1"
+)
+staleReadyStatus := Map(
+    "result", "FOUND",
+    "rowIndex", "5",
+    "rowTitle", "Add Car or Truck",
+    "rowIncomplete", "1",
+    "yearValue", "",
+    "vinValue", "",
+    "manufacturerValue", "",
+    "modelValue", "",
+    "subModelValue", "",
+    "subModelPresent", "1",
+    "subModelPlaceholderSelected", "1",
+    "subModelOptionCount", "1",
+    "subModelFirstValidOptionPresent", "1",
+    "addButtonPresent", "1",
+    "addButtonEnabled", "1",
+    "unsafeContext", "0",
+    "cancelButtonPresent", "1",
+    "cancelButtonScoped", "1",
+    "safeToCancel", "1",
+    "reason", "safe",
+    "missing", ""
+)
+staleUnsafeReason := ""
+AssertTrue(AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(staleRapportSnapshot), "RAPPORT stale Add Car/Truck snapshot should be recognized as a handled blocker")
+AssertTrue(AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(staleReadyStatus, staleRapportSnapshot, &staleUnsafeReason), "Scoped incomplete Gather Add Car/Truck row should be safe to cancel")
+AssertEqual(staleUnsafeReason, "", "Safe stale row should not report an unsafe reason")
+
+staleEditPanelSnapshot := staleRapportSnapshot.Clone()
+staleEditPanelSnapshot["editVehiclePanelPresent"] := "1"
+AssertFalse(AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(staleReadyStatus, staleEditPanelSnapshot, &staleUnsafeReason), "Stale row cancel must not run while Gather Edit Vehicle is active")
+AssertEqual(staleUnsafeReason, "edit-vehicle-panel-active", "Edit panel stale-row guard should be explicit")
+
+staleUnknownPanelSnapshot := staleRapportSnapshot.Clone()
+staleUnknownPanelSnapshot["activePanelType"] := "UNKNOWN_INLINE_PANEL"
+AssertFalse(AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(staleReadyStatus, staleUnknownPanelSnapshot, &staleUnsafeReason), "Unknown active panel should block stale-row cancel")
+AssertEqual(staleUnsafeReason, "unknown-active-modal-or-panel", "Unknown panel stale-row guard should be explicit")
+
+staleDecoyStatus := staleReadyStatus.Clone()
+staleDecoyStatus["rowTitle"] := ""
+AssertFalse(AdvisorQuoteGatherStaleAddRowStatusSafeForCancel(staleDecoyStatus, staleRapportSnapshot, &staleUnsafeReason), "Stale cancel must prove the row is the Gather Add Car/Truck row")
+AssertEqual(staleUnsafeReason, "not-gather-add-car-truck-row", "Decoy stale-row guard should be explicit")
+
+staleResumeStatus := staleReadyStatus.Clone()
+staleResumeStatus["yearValue"] := "2010"
+staleResumeStatus["manufacturerValue"] := "NISSAN"
+staleResumeStatus["modelValue"] := "CUBE"
+AssertTrue(AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(staleResumeStatus, staleRapportSnapshot, &staleUnsafeReason), "Populated Add Car/Truck row missing only Sub-Model should be resumeable")
+AssertTrue(AdvisorQuoteRapportSubModelPlaceholderFallbackEnabled(GetAdvisorQuoteWorkflowDb()), "Sub-Model placeholder fallback should default enabled")
+AssertEqual(AdvisorQuoteRapportSubModelFallbackMode(GetAdvisorQuoteWorkflowDb()), "first-valid", "Sub-Model placeholder fallback mode should default first-valid")
+
+staleResumeBlankTitleStatus := staleResumeStatus.Clone()
+staleResumeBlankTitleStatus["rowTitle"] := ""
+AssertTrue(AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(staleResumeBlankTitleStatus, staleRapportSnapshot, &staleUnsafeReason), "Structural stale Add row evidence should be resumeable even when rowTitle is blank")
+AssertEqual(staleUnsafeReason, "", "Blank rowTitle should not produce not-gather-add-car-truck-row for resumeable stale Add row")
+
+staleResumePresentOnlyStatus := staleResumeBlankTitleStatus.Clone()
+staleResumePresentOnlyStatus["yearValue"] := ""
+staleResumePresentOnlyStatus["manufacturerValue"] := ""
+staleResumePresentOnlyStatus["modelValue"] := ""
+staleResumePresentOnlyStatus["yearPresent"] := "1"
+staleResumePresentOnlyStatus["manufacturerPresent"] := "1"
+staleResumePresentOnlyStatus["modelPresent"] := "1"
+AssertTrue(AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(staleResumePresentOnlyStatus, staleRapportSnapshot, &staleUnsafeReason), "Live diagnostic present flags should satisfy resumeable stale Add row field evidence")
+
+staleNoSubModelOptions := staleResumeStatus.Clone()
+staleNoSubModelOptions["subModelOptionCount"] := "0"
+staleNoSubModelOptions["subModelFirstValidOptionPresent"] := "0"
+AssertFalse(AdvisorQuoteGatherStaleAddRowStatusResumeableForSubModelFallback(staleNoSubModelOptions, staleRapportSnapshot, &staleUnsafeReason), "Resumeable stale Add row should require a valid Sub-Model option")
+AssertEqual(staleUnsafeReason, "submodel-no-options", "No Sub-Model options failure should be explicit")
 
 startQuotingDb := GetAdvisorQuoteWorkflowDb()
 startQuotingDisabledWithScopedAdd := Map(

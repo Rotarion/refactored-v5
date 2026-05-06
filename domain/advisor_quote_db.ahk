@@ -52,7 +52,11 @@ GetAdvisorQuoteWorkflowDb() {
         "ascDriverRemoveReasonText", "This driver has their own car insurance",
         "incidentReasonText", "Accident caused by being hit by animal or road debris",
         "vehicleFinanceYearThreshold", 2015,
-        "rapportVehicleMode", "match-existing-then-add-complete"
+        "rapportVehicleMode", "match-existing-then-add-complete",
+        "rapportAllowModelPlaceholderFallback", true,
+        "rapportModelFallbackMode", "first-valid-same-make",
+        "rapportAllowSubModelPlaceholderFallback", true,
+        "rapportSubModelFallbackMode", "first-valid"
     )
 
     timeouts := Map(
