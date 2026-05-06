@@ -13,6 +13,9 @@ global advisorQuoteProductTileRecoveryAttempted := false
 global advisorQuoteResidentRunnerFeatureEnabled := false
 global advisorQuoteResidentRunnerReadOnlyOnly := true
 global advisorQuoteResidentRunnerUseTinyBridge := true
+global advisorQuoteUseRunnerForReadOnlyPolling := true
+global advisorQuoteReadOnlyRunnerBootstrapped := false
+global advisorQuoteReadOnlyRunnerPilotLogged := false
 global advisorQuoteJsMetrics := 0
 global advisorQuoteJsMetricOps := Map()
 
@@ -7392,6 +7395,481 @@ AdvisorQuoteRunnerAllowedStatusOp(opName) {
     return AdvisorQuoteIsStateInList(String(opName), AdvisorQuoteRunnerStatusAllowlist())
 }
 
+AdvisorQuoteReadOnlyRunnerWaitAllowlist() {
+    return [
+        "gather_data",
+        "is_rapport"
+    ]
+}
+
+AdvisorQuoteReadOnlyRunnerStatusAllowlist() {
+    return [
+        "detect_state",
+        "gather_rapport_snapshot",
+        "gather_start_quoting_status",
+        "gather_confirmed_vehicles_status",
+        "product_overview_tile_status",
+        "customer_summary_overview_status"
+    ]
+}
+
+AdvisorQuoteReadOnlyRunnerPilotEnvValue() {
+    try {
+        return Trim(String(EnvGet("ADVISOR_QUOTE_READONLY_RUNNER_PILOT")))
+    } catch as err {
+        return ""
+    }
+}
+
+AdvisorQuoteReadOnlyRunnerPilotEnvEnabled() {
+    return AdvisorQuoteReadOnlyRunnerPilotEnvValue() = "1"
+}
+
+AdvisorQuoteReadOnlyRunnerPilotEnabled() {
+    global advisorQuoteUseRunnerForReadOnlyPolling
+    return advisorQuoteUseRunnerForReadOnlyPolling = true
+}
+
+AdvisorQuoteMaybeLogReadOnlyRunnerPilotEnabled(step := "") {
+    global advisorQuoteReadOnlyRunnerPilotLogged
+    if (advisorQuoteReadOnlyRunnerPilotLogged = true)
+        return
+    if !AdvisorQuoteReadOnlyRunnerPilotEnabled()
+        return
+    advisorQuoteReadOnlyRunnerPilotLogged := true
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_READONLY_PILOT_ENABLED",
+        step = "" ? AdvisorQuoteGetLastStep() : step,
+        "advisorQuoteUseRunnerForReadOnlyPolling=1"
+    )
+}
+
+AdvisorQuoteReadOnlyRunnerAllowedWaitCondition(name) {
+    return AdvisorQuoteIsStateInList(String(name), AdvisorQuoteReadOnlyRunnerWaitAllowlist())
+}
+
+AdvisorQuoteReadOnlyRunnerAllowedStatusOp(opName) {
+    return AdvisorQuoteIsStateInList(String(opName), AdvisorQuoteReadOnlyRunnerStatusAllowlist())
+}
+
+AdvisorQuoteReadOnlyRunnerConditionName(args) {
+    if IsObject(args) && args.Has("name")
+        return Trim(String(args["name"]))
+    if IsObject(args) && args.Has("conditionName")
+        return Trim(String(args["conditionName"]))
+    return ""
+}
+
+AdvisorQuoteReadOnlyRunnerCandidate(op, args := Map()) {
+    opName := Trim(String(op ?? ""))
+    if (opName = "wait_condition")
+        return AdvisorQuoteReadOnlyRunnerAllowedWaitCondition(AdvisorQuoteReadOnlyRunnerConditionName(args))
+    return AdvisorQuoteReadOnlyRunnerAllowedStatusOp(opName)
+}
+
+AdvisorQuoteRunnerValueTruthy(value) {
+    text := StrLower(Trim(String(value ?? "")))
+    return !(text = "" || text = "0" || text = "false" || text = "no" || text = "off")
+}
+
+AdvisorQuoteReadOnlyRunnerArgsRequestMutation(args) {
+    if !IsObject(args)
+        return false
+    readOnly := args.Has("readOnly") ? StrLower(Trim(String(args["readOnly"]))) : ""
+    if (readOnly != "" && !(readOnly = "1" || readOnly = "true" || readOnly = "yes" || readOnly = "on"))
+        return true
+    mutationKeys := [
+        "mutate",
+        "mutation",
+        "mutating",
+        "click",
+        "fill",
+        "set",
+        "select",
+        "save",
+        "confirm",
+        "remove",
+        "add",
+        "reconcile",
+        "resolve",
+        "handle",
+        "submit",
+        "continue",
+        "update",
+        "delete"
+    ]
+    for key, value in args {
+        keyName := StrLower(Trim(String(key)))
+        if AdvisorQuoteIsStateInList(keyName, mutationKeys) && AdvisorQuoteRunnerValueTruthy(value)
+            return true
+    }
+    return false
+}
+
+AdvisorQuoteReadOnlyRunnerMutationNameLike(op) {
+    opName := Trim(String(op ?? ""))
+    lowered := StrLower(opName)
+    mutationTokens := [
+        "click",
+        "fill",
+        "set",
+        "select",
+        "save",
+        "confirm",
+        "remove",
+        "add",
+        "reconcile",
+        "resolve",
+        "handle",
+        "submit",
+        "continue",
+        "update",
+        "delete"
+    ]
+    for token in StrSplit(lowered, "_") {
+        if AdvisorQuoteIsStateInList(token, mutationTokens)
+            return true
+    }
+    return false
+}
+
+AdvisorQuoteReadOnlyRunnerMutationLike(op, args := Map()) {
+    if AdvisorQuoteReadOnlyRunnerMutationNameLike(op)
+        return true
+    return AdvisorQuoteReadOnlyRunnerArgsRequestMutation(args)
+}
+
+AdvisorQuoteReadOnlyRunnerAdvisorContext(state) {
+    stateName := AdvisorQuoteJsMetricSafeToken(state, "")
+    if (stateName = "" || stateName = "INIT" || stateName = "UNKNOWN")
+        return true
+    return !AdvisorQuoteIsStateInList(stateName, ["GATEWAY", "NO_CONTEXT"])
+}
+
+AdvisorQuoteReadOnlyRunnerGate(op, args := Map(), state := "") {
+    global advisorQuoteResidentRunnerReadOnlyOnly
+    opName := Trim(String(op ?? ""))
+    candidate := AdvisorQuoteReadOnlyRunnerCandidate(opName, args)
+    candidateValue := candidate ? "1" : "0"
+    pilotEnabled := AdvisorQuoteReadOnlyRunnerPilotEnabled()
+    if !pilotEnabled
+        return Map("ok", "0", "reason", "read-only-runner-disabled", "candidate", candidateValue, "pilotEnabled", "0")
+    if (advisorQuoteResidentRunnerReadOnlyOnly != true)
+        return Map("ok", "0", "reason", "read-only-guard-disabled", "candidate", candidateValue, "pilotEnabled", "1")
+    if AdvisorQuoteReadOnlyRunnerMutationLike(opName, args)
+        return Map("ok", "0", "reason", "mutation-like-op", "candidate", candidateValue, "pilotEnabled", "1", "hardRefused", "1")
+    if !candidate
+        return Map("ok", "0", "reason", "not-allowlisted", "candidate", "0", "pilotEnabled", "1")
+    if !AdvisorQuoteReadOnlyRunnerAdvisorContext(state)
+        return Map("ok", "0", "reason", "not-advisor-context", "candidate", "1", "pilotEnabled", "1")
+    if (opName = "wait_condition")
+        return Map("ok", "1", "reason", "", "candidate", "1", "pilotEnabled", "1", "kind", "wait_poll", "conditionName", AdvisorQuoteReadOnlyRunnerConditionName(args))
+    return Map("ok", "1", "reason", "", "candidate", "1", "pilotEnabled", "1", "kind", "status_read", "conditionName", "")
+}
+
+AdvisorQuoteCanUseRunnerForOp(op, args := Map(), state := "") {
+    gate := AdvisorQuoteReadOnlyRunnerGate(op, args, state)
+    return AdvisorQuoteStatusValue(gate, "ok") = "1"
+}
+
+AdvisorQuoteJsMetricTotalValue(key) {
+    global advisorQuoteJsMetrics
+    AdvisorQuoteEnsureJsMetricsCollector()
+    return (IsObject(advisorQuoteJsMetrics) && advisorQuoteJsMetrics.Has(key)) ? Integer(advisorQuoteJsMetrics[key]) : 0
+}
+
+AdvisorQuoteRunReadOnlyRunnerPilotSelfTest() {
+    global advisorQuoteUseRunnerForReadOnlyPolling, advisorQuoteResidentRunnerFeatureEnabled
+    step := "RUNNER_PILOT_SELFTEST"
+    opName := "detect_state"
+    args := Map()
+    AdvisorQuoteEnsureJsMetricsCollector()
+
+    envValue := AdvisorQuoteReadOnlyRunnerPilotEnvValue()
+    envVisible := envValue = "1"
+    pilotResolved := AdvisorQuoteReadOnlyRunnerPilotEnabled()
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_PILOT_ENV_STATUS",
+        step,
+        "envName=ADVISOR_QUOTE_READONLY_RUNNER_PILOT"
+            . ", envVisible=" (envVisible ? "1" : "0")
+            . ", envValue=" (envValue = "" ? "EMPTY" : AdvisorQuoteJsMetricSafeToken(envValue, "set"))
+            . ", advisorQuoteUseRunnerForReadOnlyPolling=" (advisorQuoteUseRunnerForReadOnlyPolling = true ? "1" : "0")
+            . ", pilotResolved=" (pilotResolved ? "1" : "0")
+            . ", residentRunnerFeatureEnabled=" (advisorQuoteResidentRunnerFeatureEnabled = true ? "1" : "0")
+            . ", readOnlyPilotRequiresMutatingFeature=0"
+    )
+
+    gate := AdvisorQuoteReadOnlyRunnerGate(opName, args, step)
+    gateAllowed := AdvisorQuoteStatusValue(gate, "ok") = "1"
+    gateReason := AdvisorQuoteStatusValue(gate, "reason")
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_PILOT_GATE_STATUS",
+        step,
+        "op=" opName
+            . ", allowed=" (gateAllowed ? "1" : "0")
+            . ", reason=" gateReason
+            . ", candidate=" AdvisorQuoteStatusValue(gate, "candidate")
+            . ", pilotEnabled=" AdvisorQuoteStatusValue(gate, "pilotEnabled")
+            . ", readOnlyPilotRequiresMutatingFeature=0"
+    )
+
+    beforeTinyAttempts := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeAttemptCount")
+    beforeTinySuccesses := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeSuccessCount")
+    beforeTinyFallbacks := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeFallbackCount")
+    if !gateAllowed {
+        AdvisorQuoteWriteJsMetricsFiles()
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RUNNER_PILOT_SELFTEST_RESULT",
+            step,
+            "result=GATE_REFUSED"
+                . ", op=" opName
+                . ", envVisible=" (envVisible ? "1" : "0")
+                . ", pilotResolved=" (pilotResolved ? "1" : "0")
+                . ", fallbackReason=" gateReason
+                . ", runnerTinyAttemptDelta=0"
+        )
+        return Map(
+            "result", "GATE_REFUSED",
+            "op", opName,
+            "envVisible", envVisible ? "1" : "0",
+            "pilotResolved", pilotResolved ? "1" : "0",
+            "gateAllowed", "0",
+            "fallbackReason", gateReason,
+            "runnerTinyAttemptDelta", "0"
+        )
+    }
+
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_PILOT_SELFTEST_ATTEMPT",
+        step,
+        "op=" opName ", gateAllowed=1, envVisible=" (envVisible ? "1" : "0")
+    )
+    runnerResult := AdvisorQuoteRunReadOnlyOpViaRunner(opName, args, step)
+    afterTinyAttempts := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeAttemptCount")
+    afterTinySuccesses := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeSuccessCount")
+    afterTinyFallbacks := AdvisorQuoteJsMetricTotalValue("runnerTinyBridgeFallbackCount")
+    attemptDelta := afterTinyAttempts - beforeTinyAttempts
+    successDelta := afterTinySuccesses - beforeTinySuccesses
+    fallbackDelta := afterTinyFallbacks - beforeTinyFallbacks
+    used := AdvisorQuoteStatusValue(runnerResult, "used") = "1"
+    runnerStatus := AdvisorQuoteStatusValue(runnerResult, "result")
+    fallbackReason := AdvisorQuoteStatusValue(runnerResult, "fallbackReason")
+    if (fallbackReason = "" && !used)
+        fallbackReason := runnerStatus = "" ? "EMPTY" : runnerStatus
+    AdvisorQuoteWriteJsMetricsFiles()
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_PILOT_SELFTEST_RESULT",
+        step,
+        "result=" (used ? "OK" : "FALLBACK")
+            . ", op=" opName
+            . ", runnerResult=" runnerStatus
+            . ", used=" (used ? "1" : "0")
+            . ", fallbackReason=" fallbackReason
+            . ", runnerTinyAttemptDelta=" attemptDelta
+            . ", runnerTinySuccessDelta=" successDelta
+            . ", runnerTinyFallbackDelta=" fallbackDelta
+    )
+    return Map(
+        "result", used ? "OK" : "FALLBACK",
+        "op", opName,
+        "envVisible", envVisible ? "1" : "0",
+        "pilotResolved", pilotResolved ? "1" : "0",
+        "gateAllowed", "1",
+        "runnerResult", runnerStatus,
+        "used", used ? "1" : "0",
+        "fallbackReason", fallbackReason,
+        "runnerTinyAttemptDelta", String(attemptDelta),
+        "runnerTinySuccessDelta", String(successDelta),
+        "runnerTinyFallbackDelta", String(fallbackDelta)
+    )
+}
+
+AdvisorQuoteReadOnlyRunnerCommand(command, args := Map(), eventName := "") {
+    if (eventName = "")
+        eventName := "ADVISOR_RUNNER_READONLY_" StrUpper(command)
+    if StopRequested() {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_READONLY_FALLBACK", AdvisorQuoteGetLastStep(), "command=" command ", fallbackReason=stop-requested")
+        return Map("result", "STOP_REQUESTED", "command", command)
+    }
+    global advisorQuoteResidentRunnerUseTinyBridge
+    if (command != "bootstrap" && advisorQuoteResidentRunnerUseTinyBridge = true)
+        return AdvisorQuoteRunnerTinyCommand(command, args, eventName)
+    return AdvisorQuoteRunnerFullCommand(command, args, eventName)
+}
+
+AdvisorQuoteEnsureReadOnlyResidentRunner() {
+    global advisorQuoteReadOnlyRunnerBootstrapped
+    if (advisorQuoteReadOnlyRunnerBootstrapped = true)
+        return true
+    status := AdvisorQuoteReadOnlyRunnerCommand("bootstrap", Map("replaceStale", "1"), "ADVISOR_RUNNER_READONLY_BOOTSTRAP")
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "STALE_REPLACED")
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_READONLY_REBOOTSTRAP", AdvisorQuoteGetLastStep(), "result=STALE_REPLACED, runnerId=" AdvisorQuoteStatusValue(status, "runnerId"))
+    advisorQuoteReadOnlyRunnerBootstrapped := result = "OK" || result = "ALREADY_BOOTSTRAPPED" || result = "STALE_REPLACED"
+    return advisorQuoteReadOnlyRunnerBootstrapped
+}
+
+AdvisorQuoteBuildReadOnlyRunnerArgs(op, args := Map()) {
+    opName := Trim(String(op ?? ""))
+    runnerArgs := AdvisorQuoteMergeArgs(args, Map(
+        "conditionArgs", args,
+        "readOnly", "1",
+        "timeoutMs", "1",
+        "pollMs", "0",
+        "maxSteps", "1",
+        "requireKnownRoute", "1",
+        "expectedHost", "advisorpro"
+    ))
+    if (opName = "wait_condition") {
+        conditionName := AdvisorQuoteReadOnlyRunnerConditionName(args)
+        runnerArgs["conditionName"] := conditionName
+        runnerArgs["allowedConditions"] := conditionName
+    } else {
+        runnerArgs["statusOp"] := opName
+        runnerArgs["allowedStatusOps"] := opName
+        runnerArgs["returnPayloadLines"] := "1"
+    }
+    return runnerArgs
+}
+
+AdvisorQuoteRunnerTinyPayloadLength(command, args := Map()) {
+    try {
+        return StrLen(AdvisorQuoteBuildTinyRunnerCommandJs(AdvisorQuoteRunnerBuildCommandArgs(command, args)))
+    } catch as err {
+        return 0
+    }
+}
+
+AdvisorQuoteReadOnlyRunnerPayload(op, status) {
+    opName := Trim(String(op ?? ""))
+    if (opName = "wait_condition")
+        return AdvisorQuoteStatusValue(status, "lastValue")
+
+    countText := AdvisorQuoteStatusValue(status, "payloadLineCount")
+    if RegExMatch(countText, "^\d+$") {
+        lineCount := Integer(countText)
+        if (lineCount > 0) {
+            lines := []
+            Loop lineCount {
+                key := "payloadLine" A_Index
+                if IsObject(status) && status.Has(key)
+                    lines.Push(String(status[key]))
+            }
+            if (lines.Length > 0)
+                return JoinArray(lines, "`n")
+        }
+    }
+    return AdvisorQuoteStatusValue(status, "lastValue")
+}
+
+AdvisorQuoteReadOnlyRunnerPayloadValid(op, payload) {
+    opName := Trim(String(op ?? ""))
+    text := Trim(String(payload ?? ""))
+    if (text = "")
+        return false
+    if (opName = "wait_condition")
+        return text = "0" || text = "1"
+    if (opName = "detect_state")
+        return RegExMatch(text, "^[A-Z0-9_]+$") ? true : false
+    parsed := AdvisorQuoteParseKeyValueLines(text)
+    return IsObject(parsed) && parsed.Count > 0
+}
+
+AdvisorQuoteReadOnlyRunnerTraceDetail(op, args, suffix := "") {
+    opName := AdvisorQuoteJsMetricSafeToken(op, "unknown")
+    conditionName := (opName = "wait_condition") ? AdvisorQuoteJsMetricSafeToken(AdvisorQuoteReadOnlyRunnerConditionName(args), "") : ""
+    detail := "op=" opName
+        . ", category=" AdvisorQuoteJsMetricCategory(opName)
+        . ", waitConditionName=" conditionName
+    if (suffix != "")
+        detail .= ", " suffix
+    return detail
+}
+
+AdvisorQuoteRunReadOnlyOpViaRunner(op, args := Map(), state := "") {
+    global advisorQuoteResidentRunnerUseTinyBridge, advisorQuoteReadOnlyRunnerBootstrapped
+    opName := Trim(String(op ?? ""))
+    step := (Trim(String(state ?? "")) != "") ? state : AdvisorQuoteGetLastStep()
+    AdvisorQuoteMaybeLogReadOnlyRunnerPilotEnabled(step)
+    gate := AdvisorQuoteReadOnlyRunnerGate(opName, args, step)
+    reason := AdvisorQuoteStatusValue(gate, "reason")
+
+    if (AdvisorQuoteStatusValue(gate, "ok") != "1") {
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_READONLY_GATE_REFUSED", step, AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "reason=" reason))
+        if (reason = "mutation-like-op") {
+            AdvisorQuoteAppendLog("ADVISOR_RUNNER_READONLY_REFUSED", step, AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "reason=mutation-like-op"))
+        }
+        return AdvisorQuoteRunnerNotUsed(reason)
+    }
+
+    runnerArgs := AdvisorQuoteBuildReadOnlyRunnerArgs(opName, args)
+    tinyBridge := advisorQuoteResidentRunnerUseTinyBridge = true
+    tinyPayloadLength := tinyBridge ? AdvisorQuoteRunnerTinyPayloadLength("runReadOnlyPoll", runnerArgs) : 0
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_READONLY_GATE_ALLOWED",
+        step,
+        AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "gate=pilot, tinyBridge=" (tinyBridge ? "1" : "0"))
+    )
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_READONLY_ATTEMPT",
+        step,
+        AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "tinyBridge=" (tinyBridge ? "1" : "0") ", tinyPayloadLength=" tinyPayloadLength)
+    )
+
+    if tinyBridge
+        AdvisorQuoteRecordRunnerTinyBridgeMetric(opName, args, tinyPayloadLength, "attempt", "", false)
+
+    if !AdvisorQuoteEnsureReadOnlyResidentRunner() {
+        if tinyBridge
+            AdvisorQuoteRecordRunnerTinyBridgeMetric(opName, args, tinyPayloadLength, "fallback", "bootstrap-failed", true)
+        AdvisorQuoteAppendLog("ADVISOR_RUNNER_READONLY_FALLBACK", step, AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "fallbackReason=bootstrap-failed"))
+        return AdvisorQuoteRunnerNotUsed("bootstrap-failed")
+    }
+
+    status := AdvisorQuoteReadOnlyRunnerCommand("runReadOnlyPoll", runnerArgs, "ADVISOR_RUNNER_READONLY_RESULT")
+    result := AdvisorQuoteStatusValue(status, "result")
+    matched := AdvisorQuoteStatusValue(status, "matched")
+    blockedReason := AdvisorQuoteStatusValue(status, "blockedReason")
+    payload := AdvisorQuoteReadOnlyRunnerPayload(opName, status)
+    payloadLength := StrLen(String(payload ?? ""))
+
+    if (opName = "wait_condition" && result = "MAX_STEPS")
+        payload := "0"
+
+    usable := false
+    if (opName = "wait_condition") {
+        usable := (result = "OK" && matched = "1") || result = "MAX_STEPS"
+    } else {
+        usable := result = "OK" && matched = "1" && AdvisorQuoteReadOnlyRunnerPayloadValid(opName, payload)
+    }
+
+    if usable {
+        if tinyBridge
+            AdvisorQuoteRecordRunnerTinyBridgeMetric(opName, args, tinyPayloadLength, "success", "", true)
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RUNNER_READONLY_OK",
+            step,
+            AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "result=" result ", matched=" matched ", payloadLength=" payloadLength)
+        )
+        return AdvisorQuoteRunnerUsedResult(payload, status)
+    }
+
+    fallbackReason := result = "" ? "EMPTY" : result
+    if (result = "OK")
+        fallbackReason := "invalid-payload"
+    if AdvisorQuoteIsStateInList(result, ["MISSING", "STALE", "STALE_BUILD"])
+        advisorQuoteReadOnlyRunnerBootstrapped := false
+    if tinyBridge
+        AdvisorQuoteRecordRunnerTinyBridgeMetric(opName, args, tinyPayloadLength, "fallback", fallbackReason, true)
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RUNNER_READONLY_FALLBACK",
+        step,
+        AdvisorQuoteReadOnlyRunnerTraceDetail(opName, args, "result=" result ", blockedReason=" blockedReason ", fallbackReason=" fallbackReason)
+    )
+    return AdvisorQuoteRunnerNotUsed(fallbackReason, status)
+}
+
 AdvisorQuoteRunnerWaitCondition(name, args, timeoutMs := "", pollMs := "") {
     global advisorQuoteResidentRunnerReadOnlyOnly
     if !AdvisorQuoteResidentRunnerEnabled()
@@ -7481,6 +7959,11 @@ AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
 AdvisorQuoteRunJsOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
     global advisorQuoteConsoleBridgeOpen
     attempts := Max(1, Integer(retries))
+
+    runnerAttempt := AdvisorQuoteRunReadOnlyOpViaRunner(op, args, AdvisorQuoteGetLastStep())
+    if (AdvisorQuoteStatusValue(runnerAttempt, "used") = "1")
+        return runnerAttempt["value"]
+
     rendered := AdvisorQuoteRenderOpJs(op, args)
     if (rendered = "")
         return ""
@@ -7704,7 +8187,12 @@ AdvisorQuoteResetJsMetricsCollector(writeNow := true) {
         "bridgeReusedCount", 0,
         "bridgeFailedCount", 0,
         "emptyResultCount", 0,
-        "retryCount", 0
+        "retryCount", 0,
+        "runnerTinyBridgeAttemptCount", 0,
+        "runnerTinyBridgeSuccessCount", 0,
+        "runnerTinyBridgeFallbackCount", 0,
+        "runnerTinyPayloadLengthTotal", 0,
+        "runnerTinyPayloadLengthMax", 0
     )
     advisorQuoteJsMetricOps := Map()
     if writeNow
@@ -7717,39 +8205,48 @@ AdvisorQuoteEnsureJsMetricsCollector() {
         AdvisorQuoteResetJsMetricsCollector()
 }
 
+AdvisorQuoteEnsureJsMetricRecord(op, args) {
+    global advisorQuoteJsMetricOps
+    state := AdvisorQuoteJsMetricSafeToken(AdvisorQuoteGetLastStep(), "UNKNOWN")
+    opName := AdvisorQuoteJsMetricSafeToken(op, "unknown")
+    category := AdvisorQuoteJsMetricCategory(opName)
+    waitConditionName := AdvisorQuoteJsMetricWaitConditionName(opName, args)
+    key := state "|" category "|" opName "|" waitConditionName
+
+    if !advisorQuoteJsMetricOps.Has(key) {
+        advisorQuoteJsMetricOps[key] := Map(
+            "state", state,
+            "op", opName,
+            "category", category,
+            "waitConditionName", waitConditionName,
+            "attemptCount", 0,
+            "submittedCount", 0,
+            "renderedLengthTotal", 0,
+            "submittedLengthTotal", 0,
+            "renderedLengthMax", 0,
+            "bridgeOpenedCount", 0,
+            "bridgeReusedCount", 0,
+            "bridgeFailedCount", 0,
+            "emptyResultCount", 0,
+            "retryCount", 0,
+            "runnerTinyBridgeAttemptCount", 0,
+            "runnerTinyBridgeSuccessCount", 0,
+            "runnerTinyBridgeFallbackCount", 0,
+            "runnerTinyPayloadLengthTotal", 0,
+            "runnerTinyPayloadLengthMax", 0
+        )
+    }
+    return advisorQuoteJsMetricOps[key]
+}
+
 AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength, bridgeOpened, bridgeReused, bridgeFailed, submitted, emptyResult, writeNow := true) {
-    global advisorQuoteJsMetrics, advisorQuoteJsMetricOps
+    global advisorQuoteJsMetrics
 
     try {
         AdvisorQuoteEnsureJsMetricsCollector()
-        state := AdvisorQuoteJsMetricSafeToken(AdvisorQuoteGetLastStep(), "UNKNOWN")
-        opName := AdvisorQuoteJsMetricSafeToken(op, "unknown")
-        category := AdvisorQuoteJsMetricCategory(opName)
-        waitConditionName := AdvisorQuoteJsMetricWaitConditionName(opName, args)
-        key := state "|" category "|" opName "|" waitConditionName
-
-        if !advisorQuoteJsMetricOps.Has(key) {
-            advisorQuoteJsMetricOps[key] := Map(
-                "state", state,
-                "op", opName,
-                "category", category,
-                "waitConditionName", waitConditionName,
-                "attemptCount", 0,
-                "submittedCount", 0,
-                "renderedLengthTotal", 0,
-                "submittedLengthTotal", 0,
-                "renderedLengthMax", 0,
-                "bridgeOpenedCount", 0,
-                "bridgeReusedCount", 0,
-                "bridgeFailedCount", 0,
-                "emptyResultCount", 0,
-                "retryCount", 0
-            )
-        }
-
         length := Max(0, Integer(renderedLength))
         retryAttempt := Integer(attempt) > 1
-        record := advisorQuoteJsMetricOps[key]
+        record := AdvisorQuoteEnsureJsMetricRecord(op, args)
 
         AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "attemptCount")
         AdvisorQuoteMetricIncrement(record, "attemptCount")
@@ -7783,6 +8280,36 @@ AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength,
         if retryAttempt {
             AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "retryCount")
             AdvisorQuoteMetricIncrement(record, "retryCount")
+        }
+
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
+AdvisorQuoteRecordRunnerTinyBridgeMetric(op, args, payloadLength, outcome, fallbackReason := "", writeNow := true) {
+    global advisorQuoteJsMetrics
+
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        length := Max(0, Integer(payloadLength))
+        outcomeName := AdvisorQuoteJsMetricSafeToken(outcome, "attempt")
+        record := AdvisorQuoteEnsureJsMetricRecord(op, args)
+
+        if (outcomeName = "attempt") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "runnerTinyBridgeAttemptCount")
+            AdvisorQuoteMetricIncrement(record, "runnerTinyBridgeAttemptCount")
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "runnerTinyPayloadLengthTotal", length)
+            AdvisorQuoteMetricIncrement(record, "runnerTinyPayloadLengthTotal", length)
+            AdvisorQuoteMetricMax(advisorQuoteJsMetrics, "runnerTinyPayloadLengthMax", length)
+            AdvisorQuoteMetricMax(record, "runnerTinyPayloadLengthMax", length)
+        } else if (outcomeName = "success") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "runnerTinyBridgeSuccessCount")
+            AdvisorQuoteMetricIncrement(record, "runnerTinyBridgeSuccessCount")
+        } else if (outcomeName = "fallback") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "runnerTinyBridgeFallbackCount")
+            AdvisorQuoteMetricIncrement(record, "runnerTinyBridgeFallbackCount")
         }
 
         if writeNow
@@ -7894,6 +8421,9 @@ AdvisorQuoteBuildJsMetricTotalsJson() {
     return "{"
         . '"attemptCount": ' Integer(advisorQuoteJsMetrics["attemptCount"]) ", "
         . '"submittedCount": ' Integer(advisorQuoteJsMetrics["submittedCount"]) ", "
+        . '"fullOperatorInjectionAttemptCount": ' Integer(advisorQuoteJsMetrics["attemptCount"]) ", "
+        . '"fullOperatorInjectionSubmittedCount": ' Integer(advisorQuoteJsMetrics["submittedCount"]) ", "
+        . '"fullOperatorInjectionSubmittedLengthTotal": ' submittedBytes ", "
         . '"renderedLengthTotal": ' Integer(advisorQuoteJsMetrics["renderedLengthTotal"]) ", "
         . '"submittedLengthTotal": ' submittedBytes ", "
         . '"submittedMiB": "' Format("{:.2f}", mib) '", '
@@ -7903,6 +8433,11 @@ AdvisorQuoteBuildJsMetricTotalsJson() {
         . '"bridgeFailedCount": ' Integer(advisorQuoteJsMetrics["bridgeFailedCount"]) ", "
         . '"emptyResultCount": ' Integer(advisorQuoteJsMetrics["emptyResultCount"]) ", "
         . '"retryCount": ' Integer(advisorQuoteJsMetrics["retryCount"]) ", "
+        . '"runnerTinyBridgeAttemptCount": ' Integer(advisorQuoteJsMetrics["runnerTinyBridgeAttemptCount"]) ", "
+        . '"runnerTinyBridgeSuccessCount": ' Integer(advisorQuoteJsMetrics["runnerTinyBridgeSuccessCount"]) ", "
+        . '"runnerTinyBridgeFallbackCount": ' Integer(advisorQuoteJsMetrics["runnerTinyBridgeFallbackCount"]) ", "
+        . '"runnerTinyPayloadLengthTotal": ' Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthTotal"]) ", "
+        . '"runnerTinyPayloadLengthMax": ' Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthMax"]) ", "
         . '"opGroupCount": ' Integer(advisorQuoteJsMetricOps.Count) ", "
         . '"residentRunnerEnabled": ' (AdvisorQuoteResidentRunnerEnabled() ? "true" : "false")
         . "}"
@@ -7916,6 +8451,9 @@ AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
         . '"waitConditionName": "' AdvisorQuoteJsonEscape(record["waitConditionName"]) '", '
         . '"attemptCount": ' Integer(record["attemptCount"]) ", "
         . '"submittedCount": ' Integer(record["submittedCount"]) ", "
+        . '"fullOperatorInjectionAttemptCount": ' Integer(record["attemptCount"]) ", "
+        . '"fullOperatorInjectionSubmittedCount": ' Integer(record["submittedCount"]) ", "
+        . '"fullOperatorInjectionSubmittedLengthTotal": ' Integer(record["submittedLengthTotal"]) ", "
         . '"renderedLengthTotal": ' Integer(record["renderedLengthTotal"]) ", "
         . '"submittedLengthTotal": ' Integer(record["submittedLengthTotal"]) ", "
         . '"renderedLengthMax": ' Integer(record["renderedLengthMax"]) ", "
@@ -7923,7 +8461,12 @@ AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
         . '"bridgeReusedCount": ' Integer(record["bridgeReusedCount"]) ", "
         . '"bridgeFailedCount": ' Integer(record["bridgeFailedCount"]) ", "
         . '"emptyResultCount": ' Integer(record["emptyResultCount"]) ", "
-        . '"retryCount": ' Integer(record["retryCount"])
+        . '"retryCount": ' Integer(record["retryCount"]) ", "
+        . '"runnerTinyBridgeAttemptCount": ' Integer(record["runnerTinyBridgeAttemptCount"]) ", "
+        . '"runnerTinyBridgeSuccessCount": ' Integer(record["runnerTinyBridgeSuccessCount"]) ", "
+        . '"runnerTinyBridgeFallbackCount": ' Integer(record["runnerTinyBridgeFallbackCount"]) ", "
+        . '"runnerTinyPayloadLengthTotal": ' Integer(record["runnerTinyPayloadLengthTotal"]) ", "
+        . '"runnerTinyPayloadLengthMax": ' Integer(record["runnerTinyPayloadLengthMax"])
         . "}"
 }
 
@@ -7973,6 +8516,10 @@ AdvisorQuoteLogJsMetricsSummary(reason := "run-end") {
                 . ", bridgeFailed=" Integer(advisorQuoteJsMetrics["bridgeFailedCount"])
                 . ", emptyResults=" Integer(advisorQuoteJsMetrics["emptyResultCount"])
                 . ", retries=" Integer(advisorQuoteJsMetrics["retryCount"])
+                . ", runnerTinyAttempts=" Integer(advisorQuoteJsMetrics["runnerTinyBridgeAttemptCount"])
+                . ", runnerTinySuccesses=" Integer(advisorQuoteJsMetrics["runnerTinyBridgeSuccessCount"])
+                . ", runnerTinyFallbacks=" Integer(advisorQuoteJsMetrics["runnerTinyBridgeFallbackCount"])
+                . ", runnerTinyPayloadBytes=" Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthTotal"])
                 . ", residentRunnerEnabled=" (AdvisorQuoteResidentRunnerEnabled() ? "1" : "0")
         )
         AdvisorQuoteLogJsMetricsHotOps(3)
@@ -7996,6 +8543,9 @@ AdvisorQuoteLogJsMetricsHotOps(limit := 3) {
                 . ", submittedBytes=" Integer(record["submittedLengthTotal"])
                 . ", attempts=" Integer(record["attemptCount"])
                 . ", emptyResults=" Integer(record["emptyResultCount"])
+                . ", runnerTinyAttempts=" Integer(record["runnerTinyBridgeAttemptCount"])
+                . ", runnerTinySuccesses=" Integer(record["runnerTinyBridgeSuccessCount"])
+                . ", runnerTinyFallbacks=" Integer(record["runnerTinyBridgeFallbackCount"])
         )
     }
 }
