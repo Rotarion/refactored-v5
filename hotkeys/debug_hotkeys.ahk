@@ -131,6 +131,22 @@ F1::ExitApp
     )
 }
 
+^!+r:: {
+    BeginAutomationRun()
+    result := AdvisorQuoteRunReadOnlyRunnerPilotSelfTest()
+    MsgBox(
+        "Read-only runner pilot self-test complete."
+            . "`n`nResult: " AdvisorQuoteStatusValue(result, "result")
+            . "`nEnv visible: " AdvisorQuoteStatusValue(result, "envVisible")
+            . "`nPilot resolved: " AdvisorQuoteStatusValue(result, "pilotResolved")
+            . "`nGate allowed: " AdvisorQuoteStatusValue(result, "gateAllowed")
+            . "`nRunner result: " AdvisorQuoteStatusValue(result, "runnerResult")
+            . "`nFallback reason: " AdvisorQuoteStatusValue(result, "fallbackReason")
+            . "`nTiny attempt delta: " AdvisorQuoteStatusValue(result, "runnerTinyAttemptDelta"),
+        "Advisor Runner Pilot Self-Test"
+    )
+}
+
 F8:: {
     global running
     running := !running

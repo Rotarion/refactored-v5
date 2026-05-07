@@ -514,6 +514,14 @@ function assertKeyBlock(raw, requiredKeys) {
   return parsed;
 }
 
+function runnerPayloadFromLines(parsed) {
+  const lineCount = Number(parsed.payloadLineCount || 0);
+  const lines = [];
+  for (let i = 1; i <= lineCount; i += 1)
+    lines.push(parsed[`payloadLine${i}`] || '');
+  return lines.join('\n');
+}
+
 function pageDoc(text, nodes = []) {
   return new FakeDocument([textNode(text), ...nodes]);
 }
@@ -838,6 +846,16 @@ function tinyRunnerCommandScript(args) {
 function runTinyRunnerCommandInContext(args, operatorContext) {
   operatorContext.state.copied = '';
   vm.runInNewContext(tinyRunnerCommandScript(args), operatorContext.context, { timeout: 1000 });
+  return operatorContext.state.copied;
+}
+
+function tinyResidentCommandScript(op, args, requestId = 'smoke-request') {
+  return `copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorQuoteResidentOperator; if (!r || typeof r.run !== 'function') return 'result=MISSING\\nblockedReason=missing-resident-operator\\nreason=no-resident-operator'; return r.run(${JSON.stringify(op)}, ${JSON.stringify(args || {})}, ${JSON.stringify(requestId)}); } catch (e) { return 'result=ERROR\\nblockedReason=js-error\\nmessage=' + String(e && e.message || e); } })()))`;
+}
+
+function runTinyResidentCommandInContext(op, args, operatorContext, requestId = 'smoke-request') {
+  operatorContext.state.copied = '';
+  vm.runInNewContext(tinyResidentCommandScript(op, args, requestId), operatorContext.context, { timeout: 1000 });
   return operatorContext.state.copied;
 }
 
@@ -1275,6 +1293,25 @@ function testResidentRunnerContracts() {
   assert.strictEqual(pollRapport.lastValue, '1');
   assert.strictEqual(safeButton.clickCalls, 0);
 
+  runnerContext.context.document = gatherDataDoc([safeButton]);
+  runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/intel/102/rapport';
+  const tinyRapportSnapshot = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    statusOp: 'gather_rapport_snapshot',
+    readOnly: '1',
+    allowedStatusOps: 'gather_rapport_snapshot',
+    returnPayloadLines: '1',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), [...pollKeys, 'payloadLineCount', 'payloadLine1']);
+  assert.strictEqual(tinyRapportSnapshot.result, 'OK');
+  assert.strictEqual(tinyRapportSnapshot.matched, '1');
+  const tinyRapportPayload = assertKeyBlock(runnerPayloadFromLines(tinyRapportSnapshot), ['result', 'routeFamily']);
+  assert.ok(tinyRapportPayload.result);
+  assert.strictEqual(safeButton.clickCalls, 0);
+
   runnerContext.context.document = productOverviewDoc();
   runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/intel/102/overview';
   const pollProductOverview = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
@@ -1314,6 +1351,30 @@ function testResidentRunnerContracts() {
   }), runnerContext), pollKeys);
   assert.strictEqual(pollDrivers.result, 'OK');
   assert.strictEqual(pollDrivers.matched, '1');
+
+  const ascSnapshotDoc = ascDriversVehiclesDoc({
+    marital: 'Single',
+    drivers: [ascDriverRow({ name: 'Alex Sample', age: 34, slug: 'alex', added: true })],
+    vehicles: [ascVehicleRow({ text: '2020 Toyota Camry', slug: 'camry', added: true })]
+  });
+  runnerContext.context.document = ascSnapshotDoc;
+  runnerContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile';
+  const tinyAscSnapshot = assertKeyBlock(runTinyRunnerCommandInContext(baseArgs({
+    command: 'runReadOnlyPoll',
+    statusOp: 'asc_drivers_vehicles_snapshot',
+    readOnly: '1',
+    allowedStatusOps: 'asc_drivers_vehicles_snapshot',
+    returnPayloadLines: '1',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1',
+    expectedBuildHash: 'hash-a'
+  }), runnerContext), [...pollKeys, 'payloadLineCount', 'payloadLine1']);
+  assert.strictEqual(tinyAscSnapshot.result, 'OK');
+  assert.strictEqual(tinyAscSnapshot.matched, '1');
+  const tinyAscPayload = assertKeyBlock(runnerPayloadFromLines(tinyAscSnapshot), ['result', 'routeFamily', 'driverCount', 'vehicleCount']);
+  assert.ok(tinyAscPayload.result);
+  assert.strictEqual(totalClickCalls(ascSnapshotDoc), 0);
 
   const pollNoMatch = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
     command: 'runReadOnlyPoll',
@@ -1391,10 +1452,129 @@ function testResidentRunnerContracts() {
   assert.strictEqual(unknownRoute.routeFamily, 'UNKNOWN');
   assert.strictEqual(unknownRoute.manualRequired, '1');
 
+  const pollWrongContext = assertKeyBlock(runOperatorInContext('resident_runner_command', baseArgs({
+    command: 'runReadOnlyPoll',
+    statusOp: 'detect_state',
+    readOnly: '1',
+    allowedStatusOps: 'detect_state',
+    expectedHost: 'advisorpro',
+    timeoutMs: '100',
+    pollMs: '0',
+    maxSteps: '1'
+  }), runnerContext), pollKeys);
+  assert.strictEqual(pollWrongContext.result, 'WRONG_CONTEXT');
+  assert.strictEqual(pollWrongContext.blockedReason, 'wrong-context');
+
   const freshContextStatus = assertKeyBlock(runOperator('resident_runner_command', {
     command: 'status'
   }, new FakeDocument()), ['result', 'eventCount']);
   assert.strictEqual(freshContextStatus.result, 'MISSING');
+}
+
+function testResidentOperatorTransportContracts() {
+  const missing = assertKeyBlock(runTinyResidentCommandInContext('detect_state', {}, createOperatorContext(new FakeDocument())), [
+    'result', 'blockedReason', 'reason'
+  ]);
+  assert.strictEqual(missing.result, 'MISSING');
+  assert.strictEqual(missing.blockedReason, 'missing-resident-operator');
+
+  const safeButton = createButton('resident-safe-button', 'Do Not Click');
+  const residentDoc = gatherDataDoc([safeButton]);
+  const residentContext = createOperatorContext(residentDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/rapport');
+  const bootstrapArgs = baseArgs({
+    command: 'bootstrap',
+    version: 'resident-v1',
+    buildHash: 'resident-hash-a',
+    replaceStale: '1'
+  });
+  const bootstrap = assertKeyBlock(runOperatorInContext('resident_operator_bootstrap', bootstrapArgs, residentContext), [
+    'result', 'version', 'buildHash', 'installedAt', 'url', 'routeFamily', 'detectedState', 'readOnlyStatusOpCount', 'readOnlyWaitConditionCount', 'mutationOpCount', 'message'
+  ]);
+  assert.strictEqual(bootstrap.result, 'OK');
+  assert.strictEqual(bootstrap.version, 'resident-v1');
+  assert.strictEqual(bootstrap.buildHash, 'resident-hash-a');
+  assert.ok(residentContext.context.__advisorQuoteResidentOperator);
+  assert.strictEqual(typeof residentContext.context.__advisorQuoteResidentOperator.run, 'function');
+
+  const tinyDetectPayloadLength = tinyResidentCommandScript('detect_state', {
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }).length;
+  assert.ok(tinyDetectPayloadLength < operatorRuntimeSize() / 20);
+
+  const secondBootstrap = assertKeyBlock(runOperatorInContext('resident_operator_bootstrap', bootstrapArgs, residentContext), [
+    'result', 'version', 'buildHash', 'installedAt', 'message'
+  ]);
+  assert.strictEqual(secondBootstrap.result, 'ALREADY_BOOTSTRAPPED');
+
+  const detect = runTinyResidentCommandInContext('detect_state', {
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }, residentContext);
+  assert.strictEqual(detect, runOperatorInContext('detect_state', {}, residentContext));
+
+  const rapportSnapshot = assertKeyBlock(runTinyResidentCommandInContext('gather_rapport_snapshot', baseArgs({
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }), residentContext), ['result', 'routeFamily', 'confirmedVehicleCount']);
+  assert.strictEqual(rapportSnapshot.result, 'OK');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  const waitGather = runTinyResidentCommandInContext('wait_condition', baseArgs({
+    name: 'gather_data',
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }), residentContext);
+  assert.strictEqual(waitGather, '1');
+
+  residentContext.context.document = createProspectFormDoc();
+  residentContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/intel/102/start';
+  const prospect = assertKeyBlock(runTinyResidentCommandInContext('prospect_form_status', baseArgs({
+    selectors: BASE_SELECTORS,
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }), residentContext), ['ready', 'firstName', 'lastName', 'submitPresent']);
+  assert.strictEqual(prospect.ready, '1');
+
+  residentContext.context.document = new FakeDocument();
+  const address = assertKeyBlock(runTinyResidentCommandInContext('address_verification_status', baseArgs({
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }), residentContext), ['result', 'modalPresent', 'continuePresent']);
+  assert.strictEqual(address.result, 'NOT_FOUND');
+
+  const stale = assertKeyBlock(runTinyResidentCommandInContext('detect_state', {
+    __residentExpectedBuildHash: 'resident-hash-b',
+    __residentExpectedHost: 'advisorpro'
+  }, residentContext), ['result', 'blockedReason', 'buildHash']);
+  assert.strictEqual(stale.result, 'STALE_BUILD');
+  assert.strictEqual(stale.blockedReason, 'stale-build');
+
+  residentContext.context.location.href = 'https://example.invalid/';
+  const wrongContext = assertKeyBlock(runTinyResidentCommandInContext('detect_state', {
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }, residentContext), ['result', 'blockedReason', 'routeFamily', 'detectedState']);
+  assert.strictEqual(wrongContext.result, 'WRONG_CONTEXT');
+  assert.strictEqual(wrongContext.blockedReason, 'wrong-context');
+
+  residentContext.context.location.href = 'https://advisorpro.allstate.com/#/apps/intel/102/rapport';
+  residentContext.context.document = pageDoc('Gather Data Vehicles Start Quoting', [safeButton]);
+  const mutationRefused = assertKeyBlock(runTinyResidentCommandInContext('click_by_id', {
+    id: 'resident-safe-button',
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro',
+    __residentMutationEnabled: '0'
+  }, residentContext), ['result', 'blockedReason', 'mutatingRequestRefused']);
+  assert.strictEqual(mutationRefused.result, 'REFUSED');
+  assert.strictEqual(mutationRefused.blockedReason, 'mutation-disabled');
+  assert.strictEqual(mutationRefused.mutatingRequestRefused, '1');
+  assert.strictEqual(safeButton.clickCalls, 0);
+
+  assert.strictEqual(runOperatorInContext('detect_state', {}, residentContext), runTinyResidentCommandInContext('detect_state', {
+    __residentExpectedBuildHash: 'resident-hash-a',
+    __residentExpectedHost: 'advisorpro'
+  }, residentContext));
 }
 
 function testStateDetectionContract() {
@@ -4170,6 +4350,7 @@ function run() {
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
   testResidentRunnerContracts();
+  testResidentOperatorTransportContracts();
   testStateDetectionContract();
   testCustomerSummaryOverviewStatusContract();
   testCustomerSummaryStartHereClickContract();

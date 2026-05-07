@@ -10,6 +10,10 @@ global advisorQuoteProductTileAutoSelectedOnOverview := false
 global advisorQuoteProductOverviewSaved := false
 global advisorQuoteGatherAutoCommitted := false
 global advisorQuoteProductTileRecoveryAttempted := false
+global advisorQuoteUseResidentOperatorTransport := true
+global advisorQuoteResidentTransportReadOnlyEnabled := true
+global advisorQuoteResidentTransportMutationEnabled := false
+global advisorQuoteResidentOperatorBootstrapped := false
 global advisorQuoteResidentRunnerFeatureEnabled := false
 global advisorQuoteResidentRunnerReadOnlyOnly := true
 global advisorQuoteResidentRunnerUseTinyBridge := true
@@ -7172,6 +7176,365 @@ AdvisorQuoteRunOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
     return AdvisorQuoteRunJsOp(op, args, retries, retryDelayMs)
 }
 
+AdvisorQuoteResidentOperatorVersion() {
+    return "phase1"
+}
+
+AdvisorQuoteResidentOperatorBuildHash() {
+    return "advisor-resident-operator-phase1-command-bus"
+}
+
+AdvisorQuoteResidentTransportEnabled() {
+    global advisorQuoteUseResidentOperatorTransport
+    return advisorQuoteUseResidentOperatorTransport = true
+}
+
+AdvisorQuoteResidentReadOnlyTransportEnabled() {
+    global advisorQuoteResidentTransportReadOnlyEnabled
+    return advisorQuoteResidentTransportReadOnlyEnabled = true
+}
+
+AdvisorQuoteResidentMutationTransportEnabled() {
+    global advisorQuoteResidentTransportMutationEnabled
+    return advisorQuoteResidentTransportMutationEnabled = true
+}
+
+AdvisorQuoteResidentReadOnlyStatusAllowlist() {
+    return [
+        "detect_state",
+        "gather_rapport_snapshot",
+        "gather_confirmed_vehicles_status",
+        "gather_start_quoting_status",
+        "gather_vehicle_add_status",
+        "gather_vehicle_row_status",
+        "gather_vehicle_edit_status",
+        "product_overview_tile_status",
+        "customer_summary_overview_status",
+        "address_verification_status",
+        "prospect_form_status"
+    ]
+}
+
+AdvisorQuoteResidentReadOnlyWaitAllowlist() {
+    return [
+        "gather_data",
+        "is_rapport",
+        "duplicate_to_next",
+        "vehicle_select_enabled"
+    ]
+}
+
+AdvisorQuoteResidentMutationCandidateAllowlist() {
+    return [
+        "click_by_id",
+        "click_by_text",
+        "click_customer_summary_start_here",
+        "click_product_overview_tile",
+        "select_vehicle_dropdown_option",
+        "prepare_vehicle_row",
+        "confirm_potential_vehicle",
+        "fill_gather_defaults",
+        "fill_participant_modal"
+    ]
+}
+
+AdvisorQuoteResidentWaitConditionName(args) {
+    if IsObject(args) && args.Has("name")
+        return Trim(String(args["name"]))
+    if IsObject(args) && args.Has("conditionName")
+        return Trim(String(args["conditionName"]))
+    return ""
+}
+
+AdvisorQuoteResidentTransportOpKey(op, args := Map()) {
+    opName := Trim(String(op ?? ""))
+    if (opName = "wait_condition")
+        return "wait_condition:" AdvisorQuoteResidentWaitConditionName(args)
+    return opName
+}
+
+AdvisorQuoteResidentTransportReadOnlyCandidate(op, args := Map()) {
+    opName := Trim(String(op ?? ""))
+    if (opName = "wait_condition")
+        return AdvisorQuoteIsStateInList(AdvisorQuoteResidentWaitConditionName(args), AdvisorQuoteResidentReadOnlyWaitAllowlist())
+    return AdvisorQuoteIsStateInList(opName, AdvisorQuoteResidentReadOnlyStatusAllowlist())
+}
+
+AdvisorQuoteResidentTransportMutationCandidate(op, args := Map()) {
+    opName := Trim(String(op ?? ""))
+    return AdvisorQuoteIsStateInList(opName, AdvisorQuoteResidentMutationCandidateAllowlist())
+}
+
+AdvisorQuoteResidentTransportAdvisorContext(state) {
+    stateName := AdvisorQuoteJsMetricSafeToken(state, "")
+    if (stateName = "" || stateName = "INIT" || stateName = "UNKNOWN")
+        return true
+    return !AdvisorQuoteIsStateInList(stateName, ["GATEWAY", "NO_CONTEXT"])
+}
+
+AdvisorQuoteResidentTransportGate(op, args := Map(), state := "") {
+    opName := Trim(String(op ?? ""))
+    if !AdvisorQuoteResidentTransportEnabled()
+        return Map("ok", "0", "reason", "resident-transport-disabled", "kind", "", "candidate", "0")
+    if StopRequested()
+        return Map("ok", "0", "reason", "stop-requested", "kind", "", "candidate", "0")
+
+    if AdvisorQuoteResidentTransportMutationCandidate(opName, args) {
+        if !AdvisorQuoteResidentMutationTransportEnabled()
+            return Map("ok", "0", "reason", "mutation-disabled", "kind", "mutation", "candidate", "1", "mutationCandidate", "1")
+        return Map("ok", "1", "reason", "", "kind", "mutation", "candidate", "1", "mutationCandidate", "1")
+    }
+
+    if !AdvisorQuoteResidentReadOnlyTransportEnabled()
+        return Map("ok", "0", "reason", "resident-readonly-disabled", "kind", "read_only", "candidate", "0")
+    if !AdvisorQuoteResidentTransportReadOnlyCandidate(opName, args)
+        return Map("ok", "0", "reason", "not-allowlisted", "kind", "read_only", "candidate", "0")
+    if !AdvisorQuoteResidentTransportAdvisorContext(state)
+        return Map("ok", "0", "reason", "not-advisor-context", "kind", "read_only", "candidate", "1")
+    return Map("ok", "1", "reason", "", "kind", "read_only", "candidate", "1", "mutationCandidate", "0")
+}
+
+AdvisorQuoteResidentTraceDetail(op, args := Map(), suffix := "") {
+    opName := AdvisorQuoteJsMetricSafeToken(op, "unknown")
+    detail := "op=" opName
+        . ", opKey=" AdvisorQuoteJsMetricSafeToken(AdvisorQuoteResidentTransportOpKey(opName, args), "unknown")
+        . ", category=" AdvisorQuoteJsMetricCategory(opName)
+    if (opName = "wait_condition")
+        detail .= ", waitConditionName=" AdvisorQuoteJsMetricSafeToken(AdvisorQuoteResidentWaitConditionName(args), "")
+    if (suffix != "")
+        detail .= ", " suffix
+    return detail
+}
+
+AdvisorQuoteResidentRequestId(op) {
+    return "resident-" AdvisorQuoteJsMetricSafeToken(op, "op") "-" A_TickCount
+}
+
+AdvisorQuoteBuildResidentOperatorBootstrapArgs() {
+    return Map(
+        "command", "bootstrap",
+        "version", AdvisorQuoteResidentOperatorVersion(),
+        "buildHash", AdvisorQuoteResidentOperatorBuildHash(),
+        "replaceStale", "1"
+    )
+}
+
+AdvisorQuoteEnsureResidentOperator(step := "") {
+    global advisorQuoteResidentOperatorBootstrapped
+    if (advisorQuoteResidentOperatorBootstrapped = true)
+        return true
+
+    logStep := Trim(String(step ?? "")) != "" ? step : AdvisorQuoteGetLastStep()
+    AdvisorQuoteRecordResidentBootstrapMetric("attempt", "", false)
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RESIDENT_BOOTSTRAP_ATTEMPT",
+        logStep,
+        "version=" AdvisorQuoteResidentOperatorVersion() ", buildHash=" AdvisorQuoteResidentOperatorBuildHash()
+    )
+
+    raw := AdvisorQuoteRunJsOpFullInjection("resident_operator_bootstrap", AdvisorQuoteBuildResidentOperatorBootstrapArgs(), 2, 120)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    result := AdvisorQuoteStatusValue(status, "result")
+    ok := result = "OK" || result = "ALREADY_BOOTSTRAPPED" || result = "STALE_REPLACED"
+    if ok {
+        advisorQuoteResidentOperatorBootstrapped := true
+        AdvisorQuoteRecordResidentBootstrapMetric("success", "", true)
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RESIDENT_BOOTSTRAP_OK",
+            logStep,
+            "result=" result
+                . ", version=" AdvisorQuoteStatusValue(status, "version")
+                . ", buildHash=" AdvisorQuoteStatusValue(status, "buildHash")
+                . ", readOnlyStatusOpCount=" AdvisorQuoteStatusValue(status, "readOnlyStatusOpCount")
+                . ", readOnlyWaitConditionCount=" AdvisorQuoteStatusValue(status, "readOnlyWaitConditionCount")
+                . ", mutationOpCount=" AdvisorQuoteStatusValue(status, "mutationOpCount")
+        )
+        return true
+    }
+
+    advisorQuoteResidentOperatorBootstrapped := false
+    fallbackReason := result = "" ? "empty-result" : AdvisorQuoteResidentFallbackReason(status)
+    AdvisorQuoteRecordResidentBootstrapMetric("fallback", fallbackReason, true)
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RESIDENT_BOOTSTRAP_FAILED",
+        logStep,
+        "result=" (result = "" ? "EMPTY" : result) ", fallbackReason=" fallbackReason
+    )
+    return false
+}
+
+AdvisorQuoteBuildResidentTinyCommandArgs(args := Map()) {
+    return AdvisorQuoteMergeArgs(args, Map(
+        "__residentExpectedBuildHash", AdvisorQuoteResidentOperatorBuildHash(),
+        "__residentExpectedHost", "advisorpro",
+        "__residentMutationEnabled", AdvisorQuoteResidentMutationTransportEnabled() ? "1" : "0"
+    ))
+}
+
+AdvisorQuoteBuildResidentTinyCommandJs(op, args := Map(), requestId := "") {
+    opLiteral := JsLiteral(Trim(String(op ?? "")))
+    argLiteral := JsLiteral(args)
+    requestLiteral := JsLiteral(requestId)
+    return "copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorQuoteResidentOperator; if (!r || typeof r.run !== 'function') return 'result=MISSING\nblockedReason=missing-resident-operator\nreason=no-resident-operator'; return r.run(" opLiteral ", " argLiteral ", " requestLiteral "); } catch (e) { return 'result=ERROR\nblockedReason=js-error\nmessage=' + String(e && e.message || e); } })()))"
+}
+
+AdvisorQuoteExecuteResidentTinyJs(js, timeoutMs := 1500) {
+    if StopRequested()
+        return ""
+    if !AdvisorQuoteEnsureConsoleBridge() {
+        AdvisorQuoteAppendLog("ADVISOR_RESIDENT_OP_FALLBACK", AdvisorQuoteGetLastStep(), "fallbackReason=ensure-console-failed")
+        return ""
+    }
+    result := Trim(String(AdvisorQuoteExecuteBridgeJs(js, true, timeoutMs)))
+    if (result != "") {
+        AdvisorQuoteMarkConsoleBridgeFocused()
+        return result
+    }
+    AdvisorQuoteInvalidateConsoleBridge("resident-tiny-command-empty")
+    return ""
+}
+
+AdvisorQuoteResidentFailureResult(result) {
+    return AdvisorQuoteIsStateInList(String(result ?? ""), ["MISSING", "STALE", "STALE_BUILD", "WRONG_CONTEXT", "REFUSED", "ERROR", "EMPTY", "TIMEOUT", "STOPPED", "STOP_REQUESTED"])
+}
+
+AdvisorQuoteResidentPayloadValid(op, payload) {
+    opName := Trim(String(op ?? ""))
+    text := Trim(String(payload ?? ""))
+    if (text = "")
+        return false
+    parsed := AdvisorQuoteParseKeyValueLines(text)
+    if IsObject(parsed) && parsed.Count > 0 {
+        result := AdvisorQuoteStatusValue(parsed, "result")
+        if AdvisorQuoteResidentFailureResult(result)
+            return false
+        if (opName = "wait_condition")
+            return false
+        return true
+    }
+    if (opName = "wait_condition")
+        return text = "0" || text = "1"
+    if (opName = "detect_state")
+        return RegExMatch(text, "^[A-Z0-9_]+$") ? true : false
+    return false
+}
+
+AdvisorQuoteResidentFallbackReason(status) {
+    if (!IsObject(status) || (status.Count = 0))
+        return "empty-result"
+    result := AdvisorQuoteStatusValue(status, "result")
+    blockedReason := AdvisorQuoteStatusValue(status, "blockedReason")
+    reason := AdvisorQuoteStatusValue(status, "reason")
+    if (result = "MISSING")
+        return "missing-resident-operator"
+    if (result = "STALE" || result = "STALE_BUILD")
+        return "stale-build"
+    if (result = "WRONG_CONTEXT")
+        return "wrong-context"
+    if (result = "REFUSED")
+        return blockedReason != "" ? blockedReason : (reason != "" ? reason : "refused-op")
+    if (result = "ERROR")
+        return blockedReason != "" ? blockedReason : "js-error"
+    if (result = "EMPTY")
+        return "empty-result"
+    if (result = "TIMEOUT")
+        return "timeout"
+    if (result = "STOPPED" || result = "STOP_REQUESTED")
+        return "stop-requested"
+    return "invalid-result-shape"
+}
+
+AdvisorQuoteRunOpViaResidentTransport(op, args := Map(), state := "") {
+    global advisorQuoteResidentOperatorBootstrapped
+    opName := Trim(String(op ?? ""))
+    step := Trim(String(state ?? "")) != "" ? state : AdvisorQuoteGetLastStep()
+    gate := AdvisorQuoteResidentTransportGate(opName, args, step)
+    gateOk := AdvisorQuoteStatusValue(gate, "ok") = "1"
+    gateReason := AdvisorQuoteStatusValue(gate, "reason")
+    kind := AdvisorQuoteStatusValue(gate, "kind")
+
+    if !gateOk {
+        if (gateReason = "mutation-disabled") {
+            AdvisorQuoteRecordResidentMutationMetric(opName, args, "fallback", "mutation-disabled", true)
+            AdvisorQuoteAppendLog(
+                "ADVISOR_RESIDENT_MUTATION_DISABLED",
+                step,
+                AdvisorQuoteResidentTraceDetail(opName, args, "fallbackReason=mutation-disabled")
+            )
+        }
+        return AdvisorQuoteRunnerNotUsed(gateReason)
+    }
+
+    if !AdvisorQuoteEnsureResidentOperator(step) {
+        AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, 0, "fallback", "bootstrap-failed", true)
+        if (kind = "mutation")
+            AdvisorQuoteRecordResidentMutationMetric(opName, args, "fallback", "bootstrap-failed", true)
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RESIDENT_OP_FALLBACK",
+            step,
+            AdvisorQuoteResidentTraceDetail(opName, args, "fallbackReason=bootstrap-failed")
+        )
+        return AdvisorQuoteRunnerNotUsed("bootstrap-failed")
+    }
+
+    residentArgs := AdvisorQuoteBuildResidentTinyCommandArgs(args)
+    requestId := AdvisorQuoteResidentRequestId(opName)
+    js := AdvisorQuoteBuildResidentTinyCommandJs(opName, residentArgs, requestId)
+    payloadLength := StrLen(js)
+    start := A_TickCount
+    AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "attempt", "", false)
+    if (kind = "mutation")
+        AdvisorQuoteRecordResidentMutationMetric(opName, args, "attempt", "", false)
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RESIDENT_OP_ATTEMPT",
+        step,
+        AdvisorQuoteResidentTraceDetail(opName, args, "requestId=" requestId ", payloadLength=" payloadLength ", kind=" kind)
+    )
+
+    raw := AdvisorQuoteExecuteResidentTinyJs(js, 1500)
+    elapsed := A_TickCount - start
+    status := AdvisorQuoteParseKeyValueLines(raw)
+
+    if AdvisorQuoteResidentPayloadValid(opName, raw) {
+        AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "success", "", true)
+        if (kind = "mutation")
+            AdvisorQuoteRecordResidentMutationMetric(opName, args, "success", "", true)
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RESIDENT_OP_OK",
+            step,
+            AdvisorQuoteResidentTraceDetail(opName, args, "requestId=" requestId ", payloadLength=" payloadLength ", resultLength=" StrLen(String(raw ?? "")) ", elapsedMs=" elapsed)
+        )
+        return AdvisorQuoteRunnerUsedResult(raw, Map("result", "OK", "requestId", requestId, "transport", "resident"))
+    }
+
+    fallbackReason := AdvisorQuoteResidentFallbackReason(status)
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (fallbackReason = "stale-build") {
+        advisorQuoteResidentOperatorBootstrapped := false
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RESIDENT_STALE_BUILD",
+            step,
+            AdvisorQuoteResidentTraceDetail(opName, args, "requestId=" requestId ", buildHash=" AdvisorQuoteStatusValue(status, "buildHash"))
+        )
+    } else if (fallbackReason = "wrong-context") {
+        AdvisorQuoteAppendLog(
+            "ADVISOR_RESIDENT_WRONG_CONTEXT",
+            step,
+            AdvisorQuoteResidentTraceDetail(opName, args, "requestId=" requestId ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily") ", detectedState=" AdvisorQuoteStatusValue(status, "detectedState"))
+        )
+    }
+
+    AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "fallback", fallbackReason, true)
+    if (kind = "mutation")
+        AdvisorQuoteRecordResidentMutationMetric(opName, args, "fallback", fallbackReason, true)
+    AdvisorQuoteAppendLog(
+        "ADVISOR_RESIDENT_OP_FALLBACK",
+        step,
+        AdvisorQuoteResidentTraceDetail(opName, args, "requestId=" requestId ", result=" (result = "" ? "EMPTY" : result) ", fallbackReason=" fallbackReason ", elapsedMs=" elapsed)
+    )
+    return AdvisorQuoteRunnerNotUsed(fallbackReason, status)
+}
+
 AdvisorQuoteResidentRunnerEnabled() {
     global advisorQuoteResidentRunnerFeatureEnabled
     return advisorQuoteResidentRunnerFeatureEnabled = true
@@ -7957,12 +8320,16 @@ AdvisorQuoteRunnerReadStatus(opName, args := Map()) {
 }
 
 AdvisorQuoteRunJsOp(op, args := Map(), retries := 1, retryDelayMs := 200) {
+    residentAttempt := AdvisorQuoteRunOpViaResidentTransport(op, args, AdvisorQuoteGetLastStep())
+    if (AdvisorQuoteStatusValue(residentAttempt, "used") = "1")
+        return residentAttempt["value"]
+
+    return AdvisorQuoteRunJsOpFullInjection(op, args, retries, retryDelayMs)
+}
+
+AdvisorQuoteRunJsOpFullInjection(op, args := Map(), retries := 1, retryDelayMs := 200) {
     global advisorQuoteConsoleBridgeOpen
     attempts := Max(1, Integer(retries))
-
-    runnerAttempt := AdvisorQuoteRunReadOnlyOpViaRunner(op, args, AdvisorQuoteGetLastStep())
-    if (AdvisorQuoteStatusValue(runnerAttempt, "used") = "1")
-        return runnerAttempt["value"]
 
     rendered := AdvisorQuoteRenderOpJs(op, args)
     if (rendered = "")
@@ -8180,6 +8547,8 @@ AdvisorQuoteResetJsMetricsCollector(writeNow := true) {
         "startedAt", startedAt,
         "attemptCount", 0,
         "submittedCount", 0,
+        "fullOperatorInjectionAttemptCount", 0,
+        "fullOperatorInjectionSubmittedCount", 0,
         "renderedLengthTotal", 0,
         "submittedLengthTotal", 0,
         "renderedLengthMax", 0,
@@ -8192,7 +8561,18 @@ AdvisorQuoteResetJsMetricsCollector(writeNow := true) {
         "runnerTinyBridgeSuccessCount", 0,
         "runnerTinyBridgeFallbackCount", 0,
         "runnerTinyPayloadLengthTotal", 0,
-        "runnerTinyPayloadLengthMax", 0
+        "runnerTinyPayloadLengthMax", 0,
+        "residentBootstrapAttemptCount", 0,
+        "residentBootstrapSuccessCount", 0,
+        "residentBootstrapFallbackCount", 0,
+        "residentTinyCommandAttemptCount", 0,
+        "residentTinyCommandSuccessCount", 0,
+        "residentTinyCommandFallbackCount", 0,
+        "residentTinyPayloadLengthTotal", 0,
+        "residentTinyPayloadLengthMax", 0,
+        "residentMutationAttemptCount", 0,
+        "residentMutationSuccessCount", 0,
+        "residentMutationFallbackCount", 0
     )
     advisorQuoteJsMetricOps := Map()
     if writeNow
@@ -8203,6 +8583,31 @@ AdvisorQuoteEnsureJsMetricsCollector() {
     global advisorQuoteJsMetrics
     if !IsObject(advisorQuoteJsMetrics) || !advisorQuoteJsMetrics.Has("runId")
         AdvisorQuoteResetJsMetricsCollector()
+    AdvisorQuoteEnsureJsMetricCounterFields(advisorQuoteJsMetrics)
+}
+
+AdvisorQuoteEnsureJsMetricCounterFields(target) {
+    if !IsObject(target)
+        return
+    keys := [
+        "fullOperatorInjectionAttemptCount",
+        "fullOperatorInjectionSubmittedCount",
+        "residentBootstrapAttemptCount",
+        "residentBootstrapSuccessCount",
+        "residentBootstrapFallbackCount",
+        "residentTinyCommandAttemptCount",
+        "residentTinyCommandSuccessCount",
+        "residentTinyCommandFallbackCount",
+        "residentTinyPayloadLengthTotal",
+        "residentTinyPayloadLengthMax",
+        "residentMutationAttemptCount",
+        "residentMutationSuccessCount",
+        "residentMutationFallbackCount"
+    ]
+    for _, key in keys {
+        if !target.Has(key)
+            target[key] := 0
+    }
 }
 
 AdvisorQuoteEnsureJsMetricRecord(op, args) {
@@ -8221,6 +8626,8 @@ AdvisorQuoteEnsureJsMetricRecord(op, args) {
             "waitConditionName", waitConditionName,
             "attemptCount", 0,
             "submittedCount", 0,
+            "fullOperatorInjectionAttemptCount", 0,
+            "fullOperatorInjectionSubmittedCount", 0,
             "renderedLengthTotal", 0,
             "submittedLengthTotal", 0,
             "renderedLengthMax", 0,
@@ -8233,9 +8640,21 @@ AdvisorQuoteEnsureJsMetricRecord(op, args) {
             "runnerTinyBridgeSuccessCount", 0,
             "runnerTinyBridgeFallbackCount", 0,
             "runnerTinyPayloadLengthTotal", 0,
-            "runnerTinyPayloadLengthMax", 0
+            "runnerTinyPayloadLengthMax", 0,
+            "residentBootstrapAttemptCount", 0,
+            "residentBootstrapSuccessCount", 0,
+            "residentBootstrapFallbackCount", 0,
+            "residentTinyCommandAttemptCount", 0,
+            "residentTinyCommandSuccessCount", 0,
+            "residentTinyCommandFallbackCount", 0,
+            "residentTinyPayloadLengthTotal", 0,
+            "residentTinyPayloadLengthMax", 0,
+            "residentMutationAttemptCount", 0,
+            "residentMutationSuccessCount", 0,
+            "residentMutationFallbackCount", 0
         )
     }
+    AdvisorQuoteEnsureJsMetricCounterFields(advisorQuoteJsMetricOps[key])
     return advisorQuoteJsMetricOps[key]
 }
 
@@ -8250,6 +8669,8 @@ AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength,
 
         AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "attemptCount")
         AdvisorQuoteMetricIncrement(record, "attemptCount")
+        AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "fullOperatorInjectionAttemptCount")
+        AdvisorQuoteMetricIncrement(record, "fullOperatorInjectionAttemptCount")
         AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "renderedLengthTotal", length)
         AdvisorQuoteMetricIncrement(record, "renderedLengthTotal", length)
         AdvisorQuoteMetricMax(advisorQuoteJsMetrics, "renderedLengthMax", length)
@@ -8258,6 +8679,8 @@ AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength,
         if submitted {
             AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "submittedCount")
             AdvisorQuoteMetricIncrement(record, "submittedCount")
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "fullOperatorInjectionSubmittedCount")
+            AdvisorQuoteMetricIncrement(record, "fullOperatorInjectionSubmittedCount")
             AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "submittedLengthTotal", length)
             AdvisorQuoteMetricIncrement(record, "submittedLengthTotal", length)
         }
@@ -8318,6 +8741,86 @@ AdvisorQuoteRecordRunnerTinyBridgeMetric(op, args, payloadLength, outcome, fallb
     }
 }
 
+AdvisorQuoteRecordResidentBootstrapMetric(outcome, fallbackReason := "", writeNow := true) {
+    global advisorQuoteJsMetrics
+
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        outcomeName := AdvisorQuoteJsMetricSafeToken(outcome, "attempt")
+        record := AdvisorQuoteEnsureJsMetricRecord("resident_operator_bootstrap", Map())
+
+        if (outcomeName = "attempt") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentBootstrapAttemptCount")
+            AdvisorQuoteMetricIncrement(record, "residentBootstrapAttemptCount")
+        } else if (outcomeName = "success") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentBootstrapSuccessCount")
+            AdvisorQuoteMetricIncrement(record, "residentBootstrapSuccessCount")
+        } else if (outcomeName = "fallback") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentBootstrapFallbackCount")
+            AdvisorQuoteMetricIncrement(record, "residentBootstrapFallbackCount")
+        }
+
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
+AdvisorQuoteRecordResidentTinyCommandMetric(op, args, payloadLength, outcome, fallbackReason := "", writeNow := true) {
+    global advisorQuoteJsMetrics
+
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        length := Max(0, Integer(payloadLength))
+        outcomeName := AdvisorQuoteJsMetricSafeToken(outcome, "attempt")
+        record := AdvisorQuoteEnsureJsMetricRecord(op, args)
+
+        if (outcomeName = "attempt") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentTinyCommandAttemptCount")
+            AdvisorQuoteMetricIncrement(record, "residentTinyCommandAttemptCount")
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentTinyPayloadLengthTotal", length)
+            AdvisorQuoteMetricIncrement(record, "residentTinyPayloadLengthTotal", length)
+            AdvisorQuoteMetricMax(advisorQuoteJsMetrics, "residentTinyPayloadLengthMax", length)
+            AdvisorQuoteMetricMax(record, "residentTinyPayloadLengthMax", length)
+        } else if (outcomeName = "success") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentTinyCommandSuccessCount")
+            AdvisorQuoteMetricIncrement(record, "residentTinyCommandSuccessCount")
+        } else if (outcomeName = "fallback") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentTinyCommandFallbackCount")
+            AdvisorQuoteMetricIncrement(record, "residentTinyCommandFallbackCount")
+        }
+
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
+AdvisorQuoteRecordResidentMutationMetric(op, args, outcome, fallbackReason := "", writeNow := true) {
+    global advisorQuoteJsMetrics
+
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        outcomeName := AdvisorQuoteJsMetricSafeToken(outcome, "fallback")
+        record := AdvisorQuoteEnsureJsMetricRecord(op, args)
+
+        if (outcomeName = "attempt") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentMutationAttemptCount")
+            AdvisorQuoteMetricIncrement(record, "residentMutationAttemptCount")
+        } else if (outcomeName = "success") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentMutationSuccessCount")
+            AdvisorQuoteMetricIncrement(record, "residentMutationSuccessCount")
+        } else if (outcomeName = "fallback") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentMutationFallbackCount")
+            AdvisorQuoteMetricIncrement(record, "residentMutationFallbackCount")
+        }
+
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
 AdvisorQuoteMetricIncrement(target, key, amount := 1) {
     current := (IsObject(target) && target.Has(key)) ? Integer(target[key]) : 0
     target[key] := current + Integer(amount)
@@ -8331,6 +8834,8 @@ AdvisorQuoteMetricMax(target, key, value) {
 
 AdvisorQuoteJsMetricCategory(op) {
     opName := String(op ?? "")
+    if (opName = "resident_operator_bootstrap" || opName = "resident_operator_command")
+        return "resident_bootstrap"
     if (opName = "wait_condition")
         return "wait_poll"
     if (opName = "scan_current_page")
@@ -8421,8 +8926,8 @@ AdvisorQuoteBuildJsMetricTotalsJson() {
     return "{"
         . '"attemptCount": ' Integer(advisorQuoteJsMetrics["attemptCount"]) ", "
         . '"submittedCount": ' Integer(advisorQuoteJsMetrics["submittedCount"]) ", "
-        . '"fullOperatorInjectionAttemptCount": ' Integer(advisorQuoteJsMetrics["attemptCount"]) ", "
-        . '"fullOperatorInjectionSubmittedCount": ' Integer(advisorQuoteJsMetrics["submittedCount"]) ", "
+        . '"fullOperatorInjectionAttemptCount": ' Integer(advisorQuoteJsMetrics["fullOperatorInjectionAttemptCount"]) ", "
+        . '"fullOperatorInjectionSubmittedCount": ' Integer(advisorQuoteJsMetrics["fullOperatorInjectionSubmittedCount"]) ", "
         . '"fullOperatorInjectionSubmittedLengthTotal": ' submittedBytes ", "
         . '"renderedLengthTotal": ' Integer(advisorQuoteJsMetrics["renderedLengthTotal"]) ", "
         . '"submittedLengthTotal": ' submittedBytes ", "
@@ -8438,8 +8943,22 @@ AdvisorQuoteBuildJsMetricTotalsJson() {
         . '"runnerTinyBridgeFallbackCount": ' Integer(advisorQuoteJsMetrics["runnerTinyBridgeFallbackCount"]) ", "
         . '"runnerTinyPayloadLengthTotal": ' Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthTotal"]) ", "
         . '"runnerTinyPayloadLengthMax": ' Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthMax"]) ", "
+        . '"residentBootstrapAttemptCount": ' Integer(advisorQuoteJsMetrics["residentBootstrapAttemptCount"]) ", "
+        . '"residentBootstrapSuccessCount": ' Integer(advisorQuoteJsMetrics["residentBootstrapSuccessCount"]) ", "
+        . '"residentBootstrapFallbackCount": ' Integer(advisorQuoteJsMetrics["residentBootstrapFallbackCount"]) ", "
+        . '"residentTinyCommandAttemptCount": ' Integer(advisorQuoteJsMetrics["residentTinyCommandAttemptCount"]) ", "
+        . '"residentTinyCommandSuccessCount": ' Integer(advisorQuoteJsMetrics["residentTinyCommandSuccessCount"]) ", "
+        . '"residentTinyCommandFallbackCount": ' Integer(advisorQuoteJsMetrics["residentTinyCommandFallbackCount"]) ", "
+        . '"residentTinyPayloadLengthTotal": ' Integer(advisorQuoteJsMetrics["residentTinyPayloadLengthTotal"]) ", "
+        . '"residentTinyPayloadLengthMax": ' Integer(advisorQuoteJsMetrics["residentTinyPayloadLengthMax"]) ", "
+        . '"residentMutationAttemptCount": ' Integer(advisorQuoteJsMetrics["residentMutationAttemptCount"]) ", "
+        . '"residentMutationSuccessCount": ' Integer(advisorQuoteJsMetrics["residentMutationSuccessCount"]) ", "
+        . '"residentMutationFallbackCount": ' Integer(advisorQuoteJsMetrics["residentMutationFallbackCount"]) ", "
         . '"opGroupCount": ' Integer(advisorQuoteJsMetricOps.Count) ", "
-        . '"residentRunnerEnabled": ' (AdvisorQuoteResidentRunnerEnabled() ? "true" : "false")
+        . '"residentRunnerEnabled": ' (AdvisorQuoteResidentRunnerEnabled() ? "true" : "false") ", "
+        . '"residentOperatorTransportEnabled": ' (AdvisorQuoteResidentTransportEnabled() ? "true" : "false") ", "
+        . '"residentOperatorReadOnlyEnabled": ' (AdvisorQuoteResidentReadOnlyTransportEnabled() ? "true" : "false") ", "
+        . '"residentOperatorMutationEnabled": ' (AdvisorQuoteResidentMutationTransportEnabled() ? "true" : "false")
         . "}"
 }
 
@@ -8451,8 +8970,8 @@ AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
         . '"waitConditionName": "' AdvisorQuoteJsonEscape(record["waitConditionName"]) '", '
         . '"attemptCount": ' Integer(record["attemptCount"]) ", "
         . '"submittedCount": ' Integer(record["submittedCount"]) ", "
-        . '"fullOperatorInjectionAttemptCount": ' Integer(record["attemptCount"]) ", "
-        . '"fullOperatorInjectionSubmittedCount": ' Integer(record["submittedCount"]) ", "
+        . '"fullOperatorInjectionAttemptCount": ' Integer(record["fullOperatorInjectionAttemptCount"]) ", "
+        . '"fullOperatorInjectionSubmittedCount": ' Integer(record["fullOperatorInjectionSubmittedCount"]) ", "
         . '"fullOperatorInjectionSubmittedLengthTotal": ' Integer(record["submittedLengthTotal"]) ", "
         . '"renderedLengthTotal": ' Integer(record["renderedLengthTotal"]) ", "
         . '"submittedLengthTotal": ' Integer(record["submittedLengthTotal"]) ", "
@@ -8466,7 +8985,18 @@ AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
         . '"runnerTinyBridgeSuccessCount": ' Integer(record["runnerTinyBridgeSuccessCount"]) ", "
         . '"runnerTinyBridgeFallbackCount": ' Integer(record["runnerTinyBridgeFallbackCount"]) ", "
         . '"runnerTinyPayloadLengthTotal": ' Integer(record["runnerTinyPayloadLengthTotal"]) ", "
-        . '"runnerTinyPayloadLengthMax": ' Integer(record["runnerTinyPayloadLengthMax"])
+        . '"runnerTinyPayloadLengthMax": ' Integer(record["runnerTinyPayloadLengthMax"]) ", "
+        . '"residentBootstrapAttemptCount": ' Integer(record["residentBootstrapAttemptCount"]) ", "
+        . '"residentBootstrapSuccessCount": ' Integer(record["residentBootstrapSuccessCount"]) ", "
+        . '"residentBootstrapFallbackCount": ' Integer(record["residentBootstrapFallbackCount"]) ", "
+        . '"residentTinyCommandAttemptCount": ' Integer(record["residentTinyCommandAttemptCount"]) ", "
+        . '"residentTinyCommandSuccessCount": ' Integer(record["residentTinyCommandSuccessCount"]) ", "
+        . '"residentTinyCommandFallbackCount": ' Integer(record["residentTinyCommandFallbackCount"]) ", "
+        . '"residentTinyPayloadLengthTotal": ' Integer(record["residentTinyPayloadLengthTotal"]) ", "
+        . '"residentTinyPayloadLengthMax": ' Integer(record["residentTinyPayloadLengthMax"]) ", "
+        . '"residentMutationAttemptCount": ' Integer(record["residentMutationAttemptCount"]) ", "
+        . '"residentMutationSuccessCount": ' Integer(record["residentMutationSuccessCount"]) ", "
+        . '"residentMutationFallbackCount": ' Integer(record["residentMutationFallbackCount"])
         . "}"
 }
 
@@ -8520,7 +9050,19 @@ AdvisorQuoteLogJsMetricsSummary(reason := "run-end") {
                 . ", runnerTinySuccesses=" Integer(advisorQuoteJsMetrics["runnerTinyBridgeSuccessCount"])
                 . ", runnerTinyFallbacks=" Integer(advisorQuoteJsMetrics["runnerTinyBridgeFallbackCount"])
                 . ", runnerTinyPayloadBytes=" Integer(advisorQuoteJsMetrics["runnerTinyPayloadLengthTotal"])
+                . ", residentBootstrapAttempts=" Integer(advisorQuoteJsMetrics["residentBootstrapAttemptCount"])
+                . ", residentBootstrapSuccesses=" Integer(advisorQuoteJsMetrics["residentBootstrapSuccessCount"])
+                . ", residentBootstrapFallbacks=" Integer(advisorQuoteJsMetrics["residentBootstrapFallbackCount"])
+                . ", residentTinyAttempts=" Integer(advisorQuoteJsMetrics["residentTinyCommandAttemptCount"])
+                . ", residentTinySuccesses=" Integer(advisorQuoteJsMetrics["residentTinyCommandSuccessCount"])
+                . ", residentTinyFallbacks=" Integer(advisorQuoteJsMetrics["residentTinyCommandFallbackCount"])
+                . ", residentTinyPayloadBytes=" Integer(advisorQuoteJsMetrics["residentTinyPayloadLengthTotal"])
+                . ", residentMutationAttempts=" Integer(advisorQuoteJsMetrics["residentMutationAttemptCount"])
+                . ", residentMutationSuccesses=" Integer(advisorQuoteJsMetrics["residentMutationSuccessCount"])
+                . ", residentMutationFallbacks=" Integer(advisorQuoteJsMetrics["residentMutationFallbackCount"])
                 . ", residentRunnerEnabled=" (AdvisorQuoteResidentRunnerEnabled() ? "1" : "0")
+                . ", residentOperatorTransportEnabled=" (AdvisorQuoteResidentTransportEnabled() ? "1" : "0")
+                . ", residentMutationEnabled=" (AdvisorQuoteResidentMutationTransportEnabled() ? "1" : "0")
         )
         AdvisorQuoteLogJsMetricsHotOps(3)
         AdvisorQuoteLogJsMetricsEmptyResults(5)
@@ -8546,6 +9088,9 @@ AdvisorQuoteLogJsMetricsHotOps(limit := 3) {
                 . ", runnerTinyAttempts=" Integer(record["runnerTinyBridgeAttemptCount"])
                 . ", runnerTinySuccesses=" Integer(record["runnerTinyBridgeSuccessCount"])
                 . ", runnerTinyFallbacks=" Integer(record["runnerTinyBridgeFallbackCount"])
+                . ", residentTinyAttempts=" Integer(record["residentTinyCommandAttemptCount"])
+                . ", residentTinySuccesses=" Integer(record["residentTinyCommandSuccessCount"])
+                . ", residentTinyFallbacks=" Integer(record["residentTinyCommandFallbackCount"])
         )
     }
 }

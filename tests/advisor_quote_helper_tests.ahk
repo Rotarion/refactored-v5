@@ -1,21 +1,39 @@
 #Requires AutoHotkey v2.0
+#SingleInstance Force
 
 global dobDefaultDay := 16
 global tagSymbol := "+"
 global advisorQuoteHelperTestsHeadless := false
+global advisorQuoteHelperResidentTransportOnly := false
 for _, arg in A_Args {
     if (arg = "--headless" || arg = "headless") {
         advisorQuoteHelperTestsHeadless := true
-        break
+    }
+    if (arg = "--resident-transport-only" || arg = "resident-transport-only") {
+        advisorQuoteHelperResidentTransportOnly := true
     }
 }
 
 #Include ..\domain\lead_normalizer.ahk
 #Include ..\domain\advisor_quote_db.ahk
 #Include ..\domain\advisor_vehicle_catalog.ahk
+#Include ..\domain\pricing_rules.ahk
+#Include ..\domain\date_rules.ahk
 #Include ..\domain\lead_parser.ahk
 #Include ..\domain\batch_rules.ahk
+#Include ..\domain\message_templates.ahk
+#Include ..\adapters\clipboard_adapter.ahk
+#Include ..\adapters\browser_focus_adapter.ahk
+#Include ..\adapters\devtools_bridge.ahk
+#Include ..\adapters\quo_adapter.ahk
+#Include ..\adapters\crm_adapter.ahk
+#Include ..\adapters\tag_selector_adapter.ahk
 #Include ..\workflows\advisor_quote_workflow.ahk
+
+if advisorQuoteHelperResidentTransportOnly {
+    AdvisorQuoteRunResidentTransportHelperTests()
+    ExitApp(0)
+}
 
 sample := "PERSONAL LEAD - Test Lead One 04/22/2026 10:00:00 AM 123 Example St Example City FL 32001 (555) 010-0001 test.lead.one@example.com Jan 1985 Female 2021 Nissan Sentra SV"
 profile := BuildAdvisorQuoteLeadProfile(sample)
@@ -791,6 +809,8 @@ legacyCreateQuotesAliasStatus := Map(
 AssertTrue(AdvisorQuoteGatherStartQuotingStatusValid(legacyCreateQuotesAliasStatus, startQuotingDb, &startQuotingReason), "Create Quotes alias fields should still be accepted")
 AssertTrue(AdvisorQuoteStartQuotingScopedAddProductPresent(Map("startQuotingAddProductPresent", "1")), "Future Start Quoting Add product alias should be accepted")
 
+AdvisorQuoteRunResidentTransportHelperTests()
+
 headless := false
 for _, arg in A_Args {
     if (arg = "--headless" || arg = "headless") {
@@ -887,6 +907,56 @@ TestAscVehicleStatus(vehicleSummaries, unresolvedVehicleCount := "0", addedVehic
         "removedVehicleCount", "0",
         "vehicleSummaries", vehicleSummaries
     )
+}
+
+AdvisorQuoteRunResidentTransportHelperTests() {
+    global advisorQuoteUseResidentOperatorTransport, advisorQuoteResidentTransportReadOnlyEnabled, advisorQuoteResidentTransportMutationEnabled
+
+    oldResidentTransportEnabled := advisorQuoteUseResidentOperatorTransport
+    oldResidentReadOnlyEnabled := advisorQuoteResidentTransportReadOnlyEnabled
+    oldResidentMutationEnabled := advisorQuoteResidentTransportMutationEnabled
+    advisorQuoteUseResidentOperatorTransport := true
+    advisorQuoteResidentTransportReadOnlyEnabled := true
+    advisorQuoteResidentTransportMutationEnabled := false
+
+    AssertTrue(AdvisorQuoteResidentTransportEnabled(), "Resident operator transport should default enabled for Phase 1")
+    AssertTrue(AdvisorQuoteResidentReadOnlyTransportEnabled(), "Resident operator read-only transport should default enabled")
+    AssertFalse(AdvisorQuoteResidentMutationTransportEnabled(), "Resident operator mutation transport should default disabled")
+    AssertTrue(AdvisorQuoteResidentTransportReadOnlyCandidate("detect_state", Map()), "detect_state should be a resident read-only candidate")
+    AssertTrue(AdvisorQuoteResidentTransportReadOnlyCandidate("gather_rapport_snapshot", Map()), "gather_rapport_snapshot should be a resident read-only candidate")
+    AssertTrue(AdvisorQuoteResidentTransportReadOnlyCandidate("wait_condition", Map("name", "gather_data")), "gather_data wait should be a resident read-only candidate")
+    AssertTrue(AdvisorQuoteResidentTransportReadOnlyCandidate("wait_condition", Map("name", "vehicle_select_enabled")), "vehicle_select_enabled wait should be a resident read-only candidate")
+    AssertFalse(AdvisorQuoteResidentTransportReadOnlyCandidate("wait_condition", Map("name", "on_product_overview")), "Non-Phase-1 wait should not be a resident read-only candidate")
+    AssertTrue(AdvisorQuoteResidentTransportMutationCandidate("click_by_id", Map("id", "x")), "click_by_id should be scaffolded as a resident mutation candidate")
+    mutationGate := AdvisorQuoteResidentTransportGate("click_by_id", Map("id", "x"), "TEST")
+    AssertEqual(AdvisorQuoteStatusValue(mutationGate, "ok"), "0", "Disabled mutation candidate should not be routed")
+    AssertEqual(AdvisorQuoteStatusValue(mutationGate, "reason"), "mutation-disabled", "Disabled mutation route should report mutation-disabled")
+    AssertEqual(AdvisorQuoteStatusValue(mutationGate, "mutationCandidate"), "1", "Disabled mutation gate should preserve mutation candidate marker")
+    readOnlyGate := AdvisorQuoteResidentTransportGate("prospect_form_status", Map(), "TEST")
+    AssertEqual(AdvisorQuoteStatusValue(readOnlyGate, "ok"), "1", "prospect_form_status should route through resident read-only transport")
+    AssertEqual(AdvisorQuoteStatusValue(readOnlyGate, "kind"), "read_only", "Read-only resident gate should identify read_only kind")
+
+    AdvisorQuoteResetJsMetricsCollector(false)
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("fullOperatorInjectionAttemptCount"), 0, "Full injection attempts should reset to zero")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentTinyCommandAttemptCount"), 0, "Resident tiny attempts should reset to zero")
+    AdvisorQuoteRecordResidentTinyCommandMetric("detect_state", Map(), 321, "attempt", "", false)
+    AdvisorQuoteRecordResidentTinyCommandMetric("detect_state", Map(), 321, "success", "", false)
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentTinyCommandAttemptCount"), 1, "Resident tiny attempt should be counted separately")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentTinyCommandSuccessCount"), 1, "Resident tiny success should be counted separately")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentTinyPayloadLengthTotal"), 321, "Resident tiny payload length should be counted separately")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("fullOperatorInjectionAttemptCount"), 0, "Resident tiny command should not increment full injection attempts")
+    AdvisorQuoteRecordJsInjectionMetric("detect_state", Map(), 1, 1, 1000, false, true, false, true, false, false)
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("fullOperatorInjectionAttemptCount"), 1, "Full injection attempt should increment explicit full counter")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("fullOperatorInjectionSubmittedCount"), 1, "Full injection submit should increment explicit full counter")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentTinyCommandAttemptCount"), 1, "Full injection should not increment resident tiny attempts")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentMutationAttemptCount"), 0, "Mutation attempts should remain zero while mutation transport is disabled")
+    AdvisorQuoteRecordResidentMutationMetric("click_by_id", Map("id", "x"), "fallback", "mutation-disabled", false)
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentMutationAttemptCount"), 0, "Disabled mutation fallback should not count as resident mutation attempt")
+    AssertEqual(AdvisorQuoteJsMetricTotalValue("residentMutationFallbackCount"), 1, "Disabled mutation candidate should count as resident mutation fallback")
+
+    advisorQuoteUseResidentOperatorTransport := oldResidentTransportEnabled
+    advisorQuoteResidentTransportReadOnlyEnabled := oldResidentReadOnlyEnabled
+    advisorQuoteResidentTransportMutationEnabled := oldResidentMutationEnabled
 }
 
 AssertEqual(actual, expected, message) {
