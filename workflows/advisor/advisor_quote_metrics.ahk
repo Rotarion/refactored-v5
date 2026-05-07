@@ -692,6 +692,8 @@ AdvisorQuoteIsJsActionOp(op) {
         "handle_vehicle_edit_modal",
         "ensure_auto_start_quoting_state",
         "set_select_product_defaults",
+        "ensure_select_product_defaults",
+        "click_select_product_continue",
         "asc_resolve_participant_marital_and_spouse",
         "asc_reconcile_driver_rows",
         "asc_reconcile_vehicle_rows",

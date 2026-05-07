@@ -613,11 +613,11 @@ function createProductOverviewTile({
 function selectProductDoc(extraNodes = []) {
   const productSelect = createSelect('SelectProduct.Product', [
     { value: '', text: 'Select One' },
-    { value: 'Auto', text: 'Auto' }
+    { value: 'Auto', text: 'Auto', selected: true }
   ]);
   const ratingSelect = createSelect('SelectProduct.RatingState', [
     { value: '', text: 'Select One' },
-    { value: 'FL', text: 'Florida' }
+    { value: 'FL', text: 'Florida', selected: true }
   ]);
   return pageDoc('Select Product Is the customer currently insured? Yes', [
     productSelect,
@@ -1843,9 +1843,43 @@ function testReturnShapeContracts() {
   }), selectDoc), ['result', 'productSet', 'ratingStateSet', 'currentInsuredSet', 'ownOrRentSet']);
   assert.strictEqual(selectDefaults.result, 'OK');
 
-  assertKeyBlock(runOperator('select_product_status', baseArgs(), selectDoc), [
-    'productValue', 'ratingStateValue', 'currentInsuredValue', 'ownOrRentValue', 'continuePresent', 'continueEnabled'
+  const selectStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), selectDoc), [
+    'result', 'routeFamily', 'productValue', 'ratingStateValue', 'autoSelected', 'effectiveDatePresent',
+    'effectiveDateFilled', 'currentAddressPresent', 'currentAddressSelected', 'insuredQuestionPresent',
+    'insuredYesPresent', 'insuredNoPresent', 'insuredYesSelected', 'insuredNoSelected',
+    'continuePresent', 'continueEnabled', 'missing'
   ]);
+  assert.strictEqual(selectStatus.routeFamily, 'intel-select-product');
+  assert.strictEqual(selectStatus.autoSelected, '1');
+
+  const readySelectDoc = selectProductDoc([
+    createInput('SelectProduct.EffectiveDate', '05/07/2026'),
+    createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }),
+    createRadio('insuredNo', 'SelectProduct.CustomerCurrentInsured', 'NO')
+  ]);
+  const readySelectStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), readySelectDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'routeFamily', 'ratingStateSelected', 'productSelected', 'autoSelected', 'effectiveDateFilled',
+    'currentAddressSelected', 'insuredYesSelected', 'continueEnabled', 'missing'
+  ]);
+  assert.strictEqual(readySelectStatus.result, 'READY');
+  assert.strictEqual(readySelectStatus.missing, '');
+  const continueButton = readySelectDoc.getElementById('selectProductContinue');
+  const continueClick = assertKeyBlock(runOperator('click_select_product_continue', baseArgs(), readySelectDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'clicked', 'continueEnabled', 'missing'
+  ]);
+  assert.strictEqual(continueClick.result, 'OK');
+  assert.strictEqual(continueClick.clicked, '1');
+  assert.strictEqual(continueButton.clickCalls, 1);
+
+  const insuredRequiredDoc = selectProductDoc([
+    createRadio('insuredNo', 'SelectProduct.CustomerCurrentInsured', 'NO')
+  ]);
+  insuredRequiredDoc.getElementById('insuredYes').checked = false;
+  const insuredRequiredStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), insuredRequiredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'insuredQuestionPresent', 'insuredYesPresent', 'insuredYesSelected', 'missing'
+  ]);
+  assert.strictEqual(insuredRequiredStatus.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
+  assert.ok(insuredRequiredStatus.missing.includes('currentlyInsured'));
 
   const participant = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',
@@ -1860,6 +1894,55 @@ function testReturnShapeContracts() {
     oppositeGenderValue: 'F'
   }), createParticipantModalDoc()), ['result', 'ageFirstLicensedSet', 'emailSet', 'militarySet', 'violationsSet', 'propertyOwnershipSet']);
   assert.strictEqual(participant.result, 'OK');
+
+  const inlineOptionalMissingDoc = new FakeDocument([
+    textNode("Let's get some more details", 'h2'),
+    createInput('ageFirstLicensed_ageFirstLicensed', ''),
+    createInput('emailAddress.emailAddress', ''),
+    createSelect('propertyOwnershipEntCd_option', [
+      { value: '', text: 'Select One' },
+      { value: '0001_0120', text: 'Own home' }
+    ]),
+    createRadio('gender_1002', 'gender', 'M', { checked: true }),
+    createRadio('maritalStatusEntCd_0003', 'marital', 'Single', { checked: true }),
+    createButton('PARTICIPANT_SAVE-btn', 'Save')
+  ]);
+  const optionalMissingStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), inlineOptionalMissingDoc, 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/'), [
+    'result', 'panelPresent', 'savePresent', 'saveEnabled', 'genderQuestionPresent', 'genderAlreadySelected',
+    'maritalQuestionPresent', 'maritalAlreadySelected', 'ownershipQuestionPresent', 'ownershipSelected',
+    'ageFirstLicensedPresent', 'ageFirstLicensedFilled', 'movingViolationsControlPresent',
+    'defensiveDrivingControlPresent', 'missingRequiredControls', 'optionalMissingControls'
+  ]);
+  assert.strictEqual(optionalMissingStatus.panelPresent, '1');
+  assert.strictEqual(optionalMissingStatus.movingViolationsControlPresent, '0');
+  assert.strictEqual(optionalMissingStatus.defensiveDrivingControlPresent, '0');
+  const optionalMissingFill = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
+    ageFirstLicensed: '16',
+    email: 'driver@example.test',
+    military: 'false',
+    violations: 'false',
+    defensiveDriving: 'false',
+    propertyOwnership: '0001_0120',
+    spouseSelectId: 'maritalStatusWithSpouse_spouseName',
+    expectedGender: 'M',
+    oppositeGenderValue: 'F'
+  }), inlineOptionalMissingDoc, 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/'), [
+    'result', 'ageFirstLicensedSet', 'emailSet', 'violationsSet', 'defensiveDrivingSet', 'propertyOwnershipSet', 'failedFields'
+  ]);
+  assert.strictEqual(optionalMissingFill.result, 'OK');
+  assert.strictEqual(optionalMissingFill.violationsSet, 'SKIP');
+  assert.strictEqual(optionalMissingFill.defensiveDrivingSet, 'SKIP');
+
+  const saveDisabledRequiredDoc = new FakeDocument([
+    textNode("Let's get some more details", 'h2'),
+    createInput('ageFirstLicensed_ageFirstLicensed', ''),
+    createButton('PARTICIPANT_SAVE-btn', 'Save', { disabled: true })
+  ]);
+  const saveDisabledRequiredStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), saveDisabledRequiredDoc, 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/'), [
+    'result', 'saveEnabled', 'ageFirstLicensedPresent', 'ageFirstLicensedFilled', 'missingRequiredControls'
+  ]);
+  assert.strictEqual(saveDisabledRequiredStatus.result, 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED');
+  assert.ok(saveDisabledRequiredStatus.missingRequiredControls.includes('ageFirstLicensed'));
 
   const vehicleModal = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, createVehicleModalDoc()), [
     'result', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked', 'ownershipClicked', 'detectedYear'
@@ -4375,8 +4458,8 @@ function testHighRiskStrengthenedContracts() {
     ]),
     createButton('selectProductContinue', 'Continue')
   ])), ['result', 'productSet', 'ratingStateSet', 'currentInsuredSet', 'failedFields']);
-  assert.strictEqual(selectFailure.result, 'FAILED');
-  assert.strictEqual(selectFailure.currentInsuredSet, '0');
+  assert.strictEqual(selectFailure.result, 'NOT_SELECT_PRODUCT');
+  assert.ok(['0', 'SKIP'].includes(selectFailure.currentInsuredSet));
 
   const startReady = fixtureScenario('start-quoting-ready');
   const startOk = assertKeyBlock(runOperator('ensure_auto_start_quoting_state', baseArgs({ ratingState: 'FL' }), startReady.doc, startReady.href), [

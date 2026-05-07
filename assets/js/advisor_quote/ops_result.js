@@ -1570,33 +1570,68 @@ copy(String((() => {
     }
     return { ok: false, method: controls.radios.length || controls.selects.length ? 'no-option-match' : 'marital-control-missing', state: current };
   };
+  const radioGroupHasControl = (nameRe) => Array.from(document.querySelectorAll('input[type=radio],input[type=checkbox],input'))
+    .filter(visible)
+    .filter((el) => nameRe.test(`${safe(el.name)} ${safe(el.id)}`));
+  const radioGroupAlreadySelected = (controls) => controls.some((el) => el.checked || isSelectedNode(el));
   const ascParticipantDetailStatus = (source = {}) => {
     const evidence = ascDriversVehiclesTextEvidence();
     const missing = [];
     if (isAscProductRoute()) evidence.push('url:/apps/ASCPRODUCT/');
     else missing.push('url:/apps/ASCPRODUCT/');
-    const saveButton = findAscSaveButton();
-    if (saveButton) evidence.push('button:profile-summary-submitBtn');
-    else missing.push('button:profile-summary-submitBtn');
+    const text = bodyText();
+    const panelPresent = /let'?s get some more details|participant|driver details|more details/i.test(text) || !!document.getElementById('PARTICIPANT_SAVE-btn');
+    const saveButton = findAscSaveButton() || document.getElementById('PARTICIPANT_SAVE-btn');
+    if (saveButton) evidence.push(`button:${safe(saveButton.id || 'save')}`);
+    else missing.push('button:save');
     const spouseSelect = findAscSpouseSelect();
     const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
-    const spouseOptions = spouseSelect
-      ? Array.from(spouseSelect.options || []).map((opt) => compact(`${safe(opt.value)}:${safe(opt.text || opt.innerText)}`, 90)).join('||')
-      : '';
+    const spouseOptions = spouseSelect ? Array.from(spouseSelect.options || []).map((opt) => compact(`${safe(opt.value)}:${safe(opt.text || opt.innerText)}`, 90)).join('||') : '';
     const marital = readAscMaritalStatus();
-    const ownership = readSelectState(document.getElementById('propertyOwnershipEntCd_option') || document.querySelector('select[id*="propertyOwnership"],select[name*="propertyOwnership"]'));
-    const ageFirstLicensed = document.getElementById('ageFirstLicensed_ageFirstLicensed') || document.querySelector('input[id*="AgeFirstLicensed"],input[name*="AgeFirstLicensed"]');
-    const email = document.getElementById('emailAddress.emailAddress') || document.querySelector('input[type=email],input[id*="Email"],input[name*="Email"]');
+    const maritalControls = findAscMaritalControls();
+    const ownershipEl = document.getElementById('propertyOwnershipEntCd_option') || document.querySelector('select[id*="propertyOwnership"],select[name*="propertyOwnership"]');
+    const ownership = readSelectState(ownershipEl);
+    const ageFirstLicensed = document.getElementById('ageFirstLicensed_ageFirstLicensed') || document.querySelector('input[id*="AgeFirstLicensed"],input[name*="AgeFirstLicensed"],input[id*="ageFirstLicensed"],input[name*="ageFirstLicensed"]');
+    const dob = document.querySelector('input[id*="Birth"],input[name*="Birth"],input[id*="DOB"],input[name*="DOB"]');
+    const email = document.getElementById('emailAddress.emailAddress') || document.querySelector('input[type=email],input[id*="Email"],input[name*="Email"],input[id*="email"],input[name*="email"]');
+    const phone = document.querySelector('input[type=tel],input[id*="Phone"],input[name*="Phone"],input[id*="phone"],input[name*="phone"]');
+    const licenseNumber = document.querySelector('input[id*="LicenseNumber"],input[name*="LicenseNumber"],input[id*="licenseNumber"],input[name*="licenseNumber"]');
+    const licenseState = document.querySelector('select[id*="LicenseState"],select[name*="LicenseState"],select[id*="licenseState"],select[name*="licenseState"]');
+    const genderControls = radioGroupHasControl(/gender/i);
+    const violationControls = radioGroupHasControl(/violation/i);
+    const defensiveControls = radioGroupHasControl(/defensive/i);
+    const missingRequired = [];
+    if (panelPresent && ageFirstLicensed && !safe(ageFirstLicensed.value).trim()) missingRequired.push('ageFirstLicensed');
+    if (panelPresent && ownershipEl && !safe(ownership.value || ownership.text).trim()) missingRequired.push('propertyOwnership');
+    if (panelPresent && genderControls.length && !radioGroupAlreadySelected(genderControls)) missingRequired.push('gender');
+    if (panelPresent && (maritalControls.radios.length || maritalControls.selects.length) && !safe(marital.value || marital.text).trim()) missingRequired.push('marital');
+    if (panelPresent && saveButton && isDisabledLike(saveButton) && !missingRequired.length) missingRequired.push('saveDisabledUnknownRequired');
+    const optionalMissing = [];
+    if (!violationControls.length) optionalMissing.push('movingViolations');
+    if (!defensiveControls.length) optionalMissing.push('defensiveDriving');
     const driverRows = collectAscDriverRows();
     const primary = driverRows[0] || {};
     let result = 'NOT_FOUND';
-    if (isAscProductRoute() && (evidence.length >= 2 || saveButton || driverRows.length)) result = 'FOUND';
+    if (isAscProductRoute() && (panelPresent || evidence.length >= 2 || saveButton || driverRows.length)) result = 'FOUND';
+    if (result === 'FOUND' && saveButton && isDisabledLike(saveButton) && missingRequired.length) result = 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
     return {
       result,
       ascProductRouteId: ascProductRouteId(),
-      primaryName: compact(primary.name || '', 120),
+      panelPresent: panelPresent ? '1' : '0',
+      primaryName: compact(primary.name || '', 0),
       primaryAge: primary.age || '',
-      maritalStatusPresent: (findAscMaritalControls().radios.length || findAscMaritalControls().selects.length) ? '1' : '0',
+      participantNameMasked: primary.name ? '[REDACTED]' : '',
+      savePresent: saveButton ? '1' : '0',
+      saveEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      saveButtonPresent: saveButton ? '1' : '0',
+      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      genderQuestionPresent: genderControls.length ? '1' : '0',
+      genderControlPresent: genderControls.length ? '1' : '0',
+      genderAlreadySelected: radioGroupAlreadySelected(genderControls) ? '1' : '0',
+      maritalQuestionPresent: (maritalControls.radios.length || maritalControls.selects.length) ? '1' : '0',
+      maritalControlPresent: (maritalControls.radios.length || maritalControls.selects.length) ? '1' : '0',
+      maritalAlreadySelected: safe(marital.value || marital.text).trim() ? '1' : '0',
+      maritalStatusPresent: (maritalControls.radios.length || maritalControls.selects.length) ? '1' : '0',
       maritalStatusSelected: compact(marital.text || '', 80),
       maritalStatusValue: compact(marital.value || '', 80),
       spouseDropdownPresent: spouseSelect ? '1' : '0',
@@ -1604,15 +1639,28 @@ copy(String((() => {
       spouseDropdownText: compact(spouseState.text || '', 120),
       spouseOptionCount: spouseSelect ? String((spouseSelect.options || []).length) : '0',
       spouseOptions: compact(spouseOptions, 240),
+      ownershipQuestionPresent: ownershipEl ? '1' : '0',
+      ownershipSelected: safe(ownership.value || ownership.text).trim() ? '1' : '0',
       propertyOwnershipValue: compact(ownership.value || '', 80),
       propertyOwnershipText: compact(ownership.text || '', 120),
+      dobPresent: dob ? '1' : '0',
+      ageFirstLicensedPresent: ageFirstLicensed ? '1' : '0',
+      ageFirstLicensedFilled: ageFirstLicensed && safe(ageFirstLicensed.value).trim() ? '1' : '0',
       ageFirstLicensedValue: compact(ageFirstLicensed ? ageFirstLicensed.value : '', 80),
+      movingViolationsQuestionPresent: violationControls.length ? '1' : '0',
+      movingViolationsControlPresent: violationControls.length ? '1' : '0',
+      movingViolationsAlreadySelected: radioGroupAlreadySelected(violationControls) ? '1' : '0',
+      defensiveDrivingQuestionPresent: defensiveControls.length ? '1' : '0',
+      defensiveDrivingControlPresent: defensiveControls.length ? '1' : '0',
+      defensiveDrivingAlreadySelected: radioGroupAlreadySelected(defensiveControls) ? '1' : '0',
+      licenseNumberPresent: licenseNumber ? '1' : '0',
+      licenseStatePresent: licenseState ? '1' : '0',
       emailPresent: email ? '1' : '0',
-      phonePresent: document.querySelector('input[type=tel],input[id*="Phone"],input[name*="Phone"]') ? '1' : '0',
-      saveButtonPresent: saveButton ? '1' : '0',
-      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      phonePresent: phone ? '1' : '0',
+      missingRequiredControls: missingRequired.join('|'),
+      optionalMissingControls: optionalMissing.join('|'),
       evidence: compact(evidence.join('|'), 240),
-      missing: compact(missing.join('|'), 240)
+      missing: compact(missing.concat(missingRequired).join('|'), 240)
     };
   };
   const normalizePersonName = (value) => normUpper(value)
@@ -2666,31 +2714,81 @@ copy(String((() => {
       evidence: match.reason || 'select-product-subnav'
     });
   };
+  const selectProductRouteFamily = () => (/\/apps\/intel\/[^/]+\/selectProduct/i.test(pageUrl()) || bodyText().includes('select product')) ? 'intel-select-product' : 'unknown';
+  const findEffectiveDateInput = () => findByStableId('SelectProduct.EffectiveDate')
+    || document.querySelector('input[id*="EffectiveDate"],input[name*="EffectiveDate"],input[placeholder*="Effective" i],input[aria-label*="Effective" i]');
+  const findCurrentAddressControls = () => Array.from(document.querySelectorAll('input[type=radio],input[type=checkbox],button,[role=button],label'))
+    .filter(visible)
+    .filter((el) => /current[-_\s]*address|same[-_\s]*address|use[-_\s]*this[-_\s]*address/i.test(`${safe(el.id)} ${safe(el.name)} ${safe(el.value)} ${readInputLabel(el)} ${getText(el)}`));
+  const readCurrentAddressState = () => {
+    const controls = findCurrentAddressControls();
+    const selected = controls.some((el) => isSelectedNode(el) || el.checked || /selected|checked|active/i.test(`${safe(el.className)} ${safe(el.getAttribute && el.getAttribute('aria-checked'))}`));
+    return { present: controls.length > 0, selected, safeUnique: controls.length === 1, controls };
+  };
+  const findSelectProductContinueButton = (source = {}) => {
+    const selectors = getSelectorArgs(source);
+    return findByStableId(selectors.selectProductContinueId || source.selectProductContinueId || 'selectProductContinue')
+      || Array.from(document.querySelectorAll('button,a,input[type=button],input[type=submit]'))
+        .filter(visible)
+        .find((el) => /continue/i.test(safe(el.innerText || el.textContent || el.value)));
+  };
+  const selectProductMissing = (status) => {
+    const missing = [];
+    if (status.ratingStatePresent !== '1') missing.push('ratingState');
+    else if (status.ratingStateSelected !== '1') missing.push('ratingStateSelected');
+    if (status.productPresent !== '1') missing.push('product');
+    else if (status.autoSelected !== '1') missing.push('autoProduct');
+    if (status.effectiveDatePresent === '1' && status.effectiveDateFilled !== '1') missing.push('effectiveDate');
+    if (status.currentAddressPresent === '1' && status.currentAddressSelected !== '1') missing.push('currentAddress');
+    if (status.insuredQuestionPresent === '1' && status.insuredYesSelected !== '1' && status.insuredNoSelected !== '1') missing.push('currentlyInsured');
+    if (status.continuePresent !== '1') missing.push('continue');
+    else if (status.continueEnabled !== '1') missing.push('continueEnabled');
+    return missing;
+  };
   const buildSelectProductStatus = (source = {}) => {
     const selectors = getSelectorArgs(source);
     const questionText = safe(source.currentInsuredQuestionText || 'Is the customer currently insured?');
     const ratingSelect = findByStableId(source.selectProductRatingStateId || selectors.selectProductRatingStateId || 'SelectProduct.RatingState');
     const productSelect = findByStableId(source.selectProductProductId || selectors.selectProductProductId || 'SelectProduct.Product');
-    const continueBtn = findByStableId(selectors.selectProductContinueId || source.selectProductContinueId || 'selectProductContinue');
+    const continueBtn = findSelectProductContinueButton(source);
     const ratingState = readSelectState(ratingSelect);
     const product = readSelectState(productSelect);
     const currentInsuredByName = readRadioGroupStateByName('SelectProduct.CustomerCurrentInsured');
     const semanticCurrentInsured = readSemanticAnswerState(questionText);
     const currentInsured = currentInsuredByName.selected
-      ? {
-          value: currentInsuredByName.label || currentInsuredByName.value,
-          selected: true,
-          source: currentInsuredByName.source
-        }
+      ? { value: currentInsuredByName.label || currentInsuredByName.value, selected: true, source: currentInsuredByName.source }
       : semanticCurrentInsured;
-    const ownOrRentByName = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
+    const insuredRadios = Array.from(document.querySelectorAll('input[type=radio],input'))
+      .filter((el) => /CustomerCurrentInsured|currentInsured|currentlyInsured/i.test(`${safe(el.name)} ${safe(el.id)}`));
+    const yesRadio = insuredRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'YES')) || null;
+    const noRadio = insuredRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'NO')) || null;
     const body = bodyText();
+    const insuredQuestionPresent = body.includes(lower(questionText)) || insuredRadios.length > 0;
     const currentInsuredAlert = body.includes(lower(questionText)) && body.includes('this is required');
-    return {
+    const ownOrRentByName = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
+    const effectiveDate = findEffectiveDateInput();
+    const currentAddress = readCurrentAddressState();
+    const status = {
+      result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING',
+      routeFamily: selectProductRouteFamily(),
+      ratingStatePresent: ratingSelect ? '1' : '0',
+      ratingStateSelected: ratingState.value || ratingState.text ? '1' : '0',
       ratingStateValue: ratingState.value,
       ratingStateText: ratingState.text,
+      productPresent: productSelect ? '1' : '0',
+      productSelected: product.value || product.text ? '1' : '0',
       productValue: product.value,
       productText: product.text,
+      autoSelected: (matchesNormalizedValue(product.value, 'AUTO') || matchesNormalizedValue(product.text, 'AUTO')) ? '1' : '0',
+      effectiveDatePresent: effectiveDate ? '1' : '0',
+      effectiveDateFilled: effectiveDate && safe(effectiveDate.value).trim() ? '1' : '0',
+      currentAddressPresent: currentAddress.present ? '1' : '0',
+      currentAddressSelected: currentAddress.selected ? '1' : '0',
+      insuredQuestionPresent: insuredQuestionPresent ? '1' : '0',
+      insuredYesPresent: yesRadio ? '1' : '0',
+      insuredNoPresent: noRadio ? '1' : '0',
+      insuredYesSelected: yesRadio && (yesRadio.checked || isSelectedNode(yesRadio)) ? '1' : '0',
+      insuredNoSelected: noRadio && (noRadio.checked || isSelectedNode(noRadio)) ? '1' : '0',
       currentInsuredValue: currentInsured.value,
       currentInsuredSelected: currentInsured.selected ? '1' : '0',
       currentInsuredSource: currentInsured.source,
@@ -2700,8 +2798,17 @@ copy(String((() => {
       ownOrRentSource: ownOrRentByName.source,
       alerts: collectVisibleAlerts().join(' || '),
       continuePresent: continueBtn ? '1' : '0',
-      continueEnabled: continueBtn && !continueBtn.disabled ? '1' : '0'
+      continueEnabled: continueBtn && !isDisabledLike(continueBtn) ? '1' : '0',
+      missing: ''
     };
+    const missing = selectProductMissing(status);
+    status.missing = missing.join('|');
+    if (status.routeFamily !== 'intel-select-product') status.result = 'NOT_SELECT_PRODUCT';
+    else if (status.insuredQuestionPresent === '1' && status.insuredYesSelected !== '1' && status.insuredNoSelected !== '1') status.result = 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED';
+    else if (status.continuePresent === '1' && status.continueEnabled !== '1') status.result = 'SELECT_PRODUCT_CONTINUE_DISABLED';
+    else if (missing.length) status.result = 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING';
+    else status.result = 'READY';
+    return status;
   };
   const extractStreetNumber = (value) => ((normalizeAddressText(value).match(/^\d+/) || [])[0]) || '';
   const hasWholeNormalizedToken = (haystack, token) => {
@@ -7231,100 +7338,108 @@ copy(String((() => {
       return clickCenterEl(btn) ? 'OK' : 'CLICK_FAILED';
     }
 
-    case 'set_select_product_defaults': {
+    case 'set_select_product_defaults':
+    case 'ensure_select_product_defaults': {
       const selectors = getSelectorArgs(args);
       const questionText = safe(args.currentInsuredQuestionText || 'Is the customer currently insured?');
       const answerText = safe(args.currentInsuredAnswerText || args.currentInsured || 'Yes');
       const ratingSelect = findByStableId(args.selectProductRatingStateId || selectors.selectProductRatingStateId || 'SelectProduct.RatingState');
       const productSelect = findByStableId(args.selectProductProductId || selectors.selectProductProductId || 'SelectProduct.Product');
+      const effectiveDate = findEffectiveDateInput();
       const productWanted = safe(args.productValue || 'AUTO');
       const ratingStateWanted = safe(args.ratingState);
 
       let productMethod = 'product-missing';
       if (productSelect) {
         const current = readSelectState(productSelect);
-        if (matchesNormalizedValue(current.value, productWanted) || matchesNormalizedValue(current.text, productWanted))
-          productMethod = 'already-selected';
-        else
-          productMethod = setSelectValue(productSelect, productWanted, false) ? 'stable-select' : 'select-failed';
+        if (matchesNormalizedValue(current.value, productWanted) || matchesNormalizedValue(current.text, productWanted)) productMethod = 'already-selected';
+        else if (!current.value || /select\s+one|choose|please select/i.test(current.text)) productMethod = setSelectValue(productSelect, productWanted, false) ? 'stable-select' : 'select-failed';
+        else productMethod = 'preserved-existing';
       }
 
       let ratingStateMethod = 'rating-state-missing';
       if (ratingSelect) {
         const current = readSelectState(ratingSelect);
-        if (ratingStateMatches(current.value, current.text, ratingStateWanted))
-          ratingStateMethod = 'already-selected';
-        else
-          ratingStateMethod = setSelectValue(ratingSelect, ratingStateWanted, false) ? 'stable-select' : 'select-failed';
+        if (ratingStateMatches(current.value, current.text, ratingStateWanted)) ratingStateMethod = 'already-selected';
+        else if (!current.value || /select\s+one|choose|please select/i.test(current.text)) ratingStateMethod = setSelectValue(ratingSelect, ratingStateWanted, false) ? 'stable-select' : 'select-failed';
+        else ratingStateMethod = 'preserved-existing';
+      }
+
+      let effectiveDateSet = 'SKIP';
+      let effectiveDateMethod = 'not-present';
+      const effectiveDateValue = safe(args.effectiveDate || args.selectProductEffectiveDate || '');
+      if (effectiveDate) {
+        if (safe(effectiveDate.value).trim()) { effectiveDateSet = '1'; effectiveDateMethod = 'already-filled'; }
+        else if (effectiveDateValue) { effectiveDateMethod = setInputValue(effectiveDate, effectiveDateValue, false) ? 'input' : 'input-failed'; effectiveDateSet = safe(effectiveDate.value).trim() ? '1' : '0'; }
+        else { effectiveDateSet = '0'; effectiveDateMethod = 'empty-no-default'; }
+      }
+
+      let currentAddressSet = 'SKIP';
+      let currentAddressMethod = 'not-present';
+      const currentAddress = readCurrentAddressState();
+      if (currentAddress.present) {
+        if (currentAddress.selected) { currentAddressSet = '1'; currentAddressMethod = 'already-selected'; }
+        else if (currentAddress.safeUnique) { const target = getInputClickTarget(currentAddress.controls[0]) || currentAddress.controls[0]; currentAddressMethod = clickCenterEl(target) ? 'unique-current-address' : 'current-address-click-failed'; currentAddressSet = readCurrentAddressState().selected ? '1' : '0'; }
+        else { currentAddressSet = '0'; currentAddressMethod = 'ambiguous-current-address'; }
       }
 
       let currentInsuredSet = 'SKIP';
       let currentInsuredMethod = 'not-requested';
-      if (safe(args.currentInsured)) {
-        const currentState = readRadioGroupStateByName('SelectProduct.CustomerCurrentInsured');
-        if (currentState.selected && answerValueMatches(currentState.label || currentState.value, args.currentInsured)) {
-          currentInsuredSet = '1';
-          currentInsuredMethod = 'already-selected';
-        } else {
-          const radioResult = setRadioByName('SelectProduct.CustomerCurrentInsured', args.currentInsured);
-          currentInsuredSet = radioResult.ok ? '1' : '0';
-          currentInsuredMethod = radioResult.method;
-          if (!radioResult.ok) {
-            const semanticTarget = findSemanticAnswerTarget(questionText, answerText);
-            if (semanticTarget) {
-              currentInsuredSet = clickCenterEl(semanticTarget) ? '1' : '0';
-              currentInsuredMethod = 'semantic-center';
-            }
-          }
+      const beforeStatus = buildSelectProductStatus(args);
+      if (safe(args.currentInsured) && beforeStatus.insuredQuestionPresent === '1' && beforeStatus.insuredYesSelected !== '1' && beforeStatus.insuredNoSelected !== '1') {
+        const radioResult = setRadioByName('SelectProduct.CustomerCurrentInsured', args.currentInsured);
+        currentInsuredSet = radioResult.ok ? '1' : '0';
+        currentInsuredMethod = radioResult.method;
+        if (!radioResult.ok) {
+          const semanticTarget = findSemanticAnswerTarget(questionText, answerText);
+          if (semanticTarget) { currentInsuredSet = clickCenterEl(semanticTarget) ? '1' : '0'; currentInsuredMethod = 'semantic-center'; }
         }
+      } else if (beforeStatus.insuredYesSelected === '1' || beforeStatus.insuredNoSelected === '1') {
+        currentInsuredSet = '1';
+        currentInsuredMethod = 'already-selected';
       }
 
       let ownOrRentSet = 'SKIP';
       let ownOrRentMethod = 'not-requested';
       if (safe(args.ownOrRent)) {
         const ownOrRentState = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
-        if (ownOrRentState.selected && answerValueMatches(ownOrRentState.label || ownOrRentState.value, args.ownOrRent)) {
-          ownOrRentSet = '1';
-          ownOrRentMethod = 'already-selected';
-        } else {
-          const ownOrRentResult = setRadioByName('SelectProduct.CustomerOwnOrRent', args.ownOrRent);
-          ownOrRentSet = ownOrRentResult.ok ? '1' : '0';
-          ownOrRentMethod = ownOrRentResult.method;
-        }
+        if (ownOrRentState.selected) { ownOrRentSet = '1'; ownOrRentMethod = 'already-selected'; }
+        else { const ownOrRentResult = setRadioByName('SelectProduct.CustomerOwnOrRent', args.ownOrRent); ownOrRentSet = ownOrRentResult.ok ? '1' : '0'; ownOrRentMethod = ownOrRentResult.method; }
       }
 
       const afterStatus = buildSelectProductStatus(args);
-      const productSet = (matchesNormalizedValue(afterStatus.productValue, productWanted) || matchesNormalizedValue(afterStatus.productText, productWanted)) ? '1' : '0';
-      const ratingStateSet = ratingStateMatches(afterStatus.ratingStateValue, afterStatus.ratingStateText, ratingStateWanted) ? '1' : '0';
-      if (safe(args.currentInsured))
-        currentInsuredSet = (afterStatus.currentInsuredSelected === '1' && answerValueMatches(afterStatus.currentInsuredValue, args.currentInsured)) ? '1' : '0';
-      if (safe(args.ownOrRent))
-        ownOrRentSet = (afterStatus.ownOrRentSelected === '1' && answerValueMatches(afterStatus.ownOrRentValue, args.ownOrRent)) ? '1' : '0';
-
-      const requiredChecks = [
-        { name: 'product', value: productSet },
-        { name: 'ratingState', value: ratingStateSet },
-        ...(safe(args.currentInsured) ? [{ name: 'currentInsured', value: currentInsuredSet }] : [])
-      ];
-      const optionalChecks = [
-        ...(safe(args.ownOrRent) ? [{ name: 'ownOrRent', value: ownOrRentSet }] : [])
-      ];
-      const result = resultFromChecks(requiredChecks, optionalChecks);
-
+      const productSet = afterStatus.autoSelected;
+      const ratingStateSet = ratingStateMatches(afterStatus.ratingStateValue, afterStatus.ratingStateText, ratingStateWanted) ? '1' : afterStatus.ratingStateSelected;
+      const result = afterStatus.result === 'READY' ? 'OK' : afterStatus.result;
       return lineResult({
         result,
-        method: `product:${productMethod}|ratingState:${ratingStateMethod}|currentInsured:${currentInsuredMethod}|ownOrRent:${ownOrRentMethod}`,
+        method: `product:${productMethod}|ratingState:${ratingStateMethod}|effectiveDate:${effectiveDateMethod}|currentAddress:${currentAddressMethod}|currentInsured:${currentInsuredMethod}|ownOrRent:${ownOrRentMethod}`,
         productSet,
         productMethod,
         ratingStateSet,
         ratingStateMethod,
+        effectiveDateSet,
+        effectiveDateMethod,
+        currentAddressSet,
+        currentAddressMethod,
         currentInsuredSet,
         currentInsuredMethod,
         ownOrRentSet,
         ownOrRentMethod,
         ...afterStatus,
-        failedFields: failedCheckNames(requiredChecks.concat(optionalChecks))
+        result,
+        failedFields: afterStatus.missing
       });
+    }
+
+    case 'click_select_product_continue': {
+      const status = buildSelectProductStatus(args);
+      const continueBtn = findSelectProductContinueButton(args);
+      if (status.result !== 'READY') return lineResult({ result: status.result === 'NOT_SELECT_PRODUCT' ? 'SELECT_PRODUCT_FALLBACK_NOT_READY' : status.result, clicked: '0', continueEnabled: status.continueEnabled, missing: status.missing });
+      if (!continueBtn) return lineResult({ result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING', clicked: '0', continueEnabled: '0', missing: 'continue' });
+      if (isDisabledLike(continueBtn)) return lineResult({ result: 'SELECT_PRODUCT_CONTINUE_DISABLED', clicked: '0', continueEnabled: '0', missing: 'continueEnabled' });
+      const clicked = clickCenterEl(continueBtn);
+      return lineResult({ result: clicked ? 'OK' : 'CLICK_FAILED', clicked: clicked ? '1' : '0', continueEnabled: '1', missing: '', targetText: compact(getText(continueBtn), 80) });
     }
 
     case 'select_product_status': {
@@ -7445,13 +7560,17 @@ copy(String((() => {
       const military = safe(args.military)
         ? (() => {
             const result = setRadioByName('agreement.agreementParticipant.militaryInd', args.military);
-            return { applied: result.ok ? '1' : '0', method: result.method };
+            return (result.method === 'no-radio-match')
+              ? { applied: 'SKIP', method: 'question-not-shown' }
+              : { applied: result.ok ? '1' : '0', method: result.method };
           })()
         : { applied: 'SKIP', method: 'not-requested' };
       const violations = safe(args.violations)
         ? (() => {
             const result = setRadioByName('agreement.agreementParticipant.party.violationInd', args.violations);
-            return { applied: result.ok ? '1' : '0', method: result.method };
+            return (result.method === 'no-radio-match')
+              ? { applied: 'SKIP', method: 'question-not-shown' }
+              : { applied: result.ok ? '1' : '0', method: result.method };
           })()
         : { applied: 'SKIP', method: 'not-requested' };
       let defensiveDriving = { applied: 'SKIP', method: 'not-requested' };
@@ -7507,8 +7626,8 @@ copy(String((() => {
       const requiredChecks = [
         ...(safe(args.ageFirstLicensed) ? [{ name: 'ageFirstLicensed', value: age.applied }] : []),
         ...(safe(args.email) ? [{ name: 'email', value: email.applied }] : []),
-        ...(safe(args.military) ? [{ name: 'military', value: military.applied }] : []),
-        ...(safe(args.violations) ? [{ name: 'violations', value: violations.applied }] : []),
+        ...(military.applied !== 'SKIP' ? [{ name: 'military', value: military.applied }] : []),
+        ...(violations.applied !== 'SKIP' ? [{ name: 'violations', value: violations.applied }] : []),
         ...(safe(args.propertyOwnership) ? [{ name: 'propertyOwnership', value: propertyOwnership.applied }] : []),
         ...(genderFallback.applied !== 'SKIP' ? [{ name: 'genderFallback', value: genderFallback.applied }] : []),
         ...(spouseSelection.applied !== 'SKIP' ? [{ name: 'spouseSelection', value: spouseSelection.applied }] : [])
@@ -7516,7 +7635,10 @@ copy(String((() => {
       const optionalChecks = [
         ...(safe(args.defensiveDriving) ? [{ name: 'defensiveDriving', value: defensiveDriving.applied, allowSkip: true }] : [])
       ];
-      const result = resultFromChecks(requiredChecks, optionalChecks);
+      let result = resultFromChecks(requiredChecks, optionalChecks);
+      const postFillStatus = ascParticipantDetailStatus(args);
+      if (postFillStatus.result === 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED')
+        result = 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
       return lineResult({
         result,
         method: [

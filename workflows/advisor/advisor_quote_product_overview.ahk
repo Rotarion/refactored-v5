@@ -365,7 +365,7 @@ AdvisorQuoteHandleSelectProduct(db, &failureReason := "", &failureScanPath := ""
         "texts", db["texts"],
         "selectors", db["selectors"]
     )
-    applyStatus := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("set_select_product_defaults", applyArgs))
+    applyStatus := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("ensure_select_product_defaults", applyArgs))
     applyResult := AdvisorQuoteStatusValue(applyStatus, "result")
     if (applyResult = "FAILED" || applyResult = "ERROR" || applyResult = "") {
         failureReason := "Could not apply Select Product defaults."
@@ -392,15 +392,26 @@ AdvisorQuoteHandleSelectProduct(db, &failureReason := "", &failureScanPath := ""
         return false
     }
 
-    if !AdvisorQuoteClickById(db["selectors"]["selectProductContinueId"], db["timeouts"]["actionMs"])
-        if !AdvisorQuoteClickByText("Continue", "button,a", db["timeouts"]["actionMs"]) {
-            failureReason := "Could not click Continue on Select Product."
-            failureScanPath := AdvisorQuoteScanCurrentPage("SELECT_PRODUCT", "select-product-continue-missing")
-            return false
-        }
+    clickStatus := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("click_select_product_continue", applyArgs, 1, 120))
+    clickResult := AdvisorQuoteStatusValue(clickStatus, "result")
+    AdvisorQuoteAppendLog("SELECT_PRODUCT_CONTINUE_CLICK", AdvisorQuoteGetLastStep(), "result=" clickResult . ", clicked=" AdvisorQuoteStatusValue(clickStatus, "clicked") . ", missing=" AdvisorQuoteStatusValue(clickStatus, "missing"))
+    if (clickResult != "OK") {
+        failureReason := clickResult
+        if (failureReason = "")
+            failureReason := "SELECT_PRODUCT_FALLBACK_NOT_READY"
+        failureScanPath := AdvisorQuoteScanCurrentPage("SELECT_PRODUCT", "select-product-continue-refused")
+        return false
+    }
 
-    waitArgs := Map("ascProductContains", db["urls"]["ascProductContains"])
+    waitArgs := Map(
+        "ascProductContains", db["urls"]["ascProductContains"],
+        "urls", db["urls"],
+        "texts", db["texts"],
+        "selectors", db["selectors"]
+    )
     if AdvisorQuoteWaitForCondition("select_product_to_consumer", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs)
+        return true
+    if AdvisorQuoteWaitForCondition("is_asc", db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"], waitArgs)
         return true
 
     status := AdvisorQuoteGetSelectProductStatus(db)
@@ -426,20 +437,27 @@ AdvisorQuoteGetSelectProductStatus(db) {
 }
 
 AdvisorQuoteBuildSelectProductStatusDetail(status) {
-    return "ratingStateValue=" AdvisorQuoteStatusValue(status, "ratingStateValue")
-        . ", ratingStateText=" AdvisorQuoteStatusValue(status, "ratingStateText")
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", routeFamily=" AdvisorQuoteStatusValue(status, "routeFamily")
+        . ", ratingStatePresent=" AdvisorQuoteStatusValue(status, "ratingStatePresent")
+        . ", ratingStateSelected=" AdvisorQuoteStatusValue(status, "ratingStateSelected")
+        . ", ratingStateValue=" AdvisorQuoteStatusValue(status, "ratingStateValue")
+        . ", productPresent=" AdvisorQuoteStatusValue(status, "productPresent")
+        . ", productSelected=" AdvisorQuoteStatusValue(status, "productSelected")
         . ", productValue=" AdvisorQuoteStatusValue(status, "productValue")
-        . ", productText=" AdvisorQuoteStatusValue(status, "productText")
-        . ", currentInsuredValue=" AdvisorQuoteStatusValue(status, "currentInsuredValue")
-        . ", currentInsuredSelected=" AdvisorQuoteStatusValue(status, "currentInsuredSelected")
-        . ", currentInsuredSource=" AdvisorQuoteStatusValue(status, "currentInsuredSource")
-        . ", currentInsuredAlert=" AdvisorQuoteStatusValue(status, "currentInsuredAlert")
-        . ", ownOrRentValue=" AdvisorQuoteStatusValue(status, "ownOrRentValue")
-        . ", ownOrRentSelected=" AdvisorQuoteStatusValue(status, "ownOrRentSelected")
-        . ", ownOrRentSource=" AdvisorQuoteStatusValue(status, "ownOrRentSource")
-        . ", alerts=" AdvisorQuoteStatusValue(status, "alerts")
+        . ", autoSelected=" AdvisorQuoteStatusValue(status, "autoSelected")
+        . ", effectiveDatePresent=" AdvisorQuoteStatusValue(status, "effectiveDatePresent")
+        . ", effectiveDateFilled=" AdvisorQuoteStatusValue(status, "effectiveDateFilled")
+        . ", currentAddressPresent=" AdvisorQuoteStatusValue(status, "currentAddressPresent")
+        . ", currentAddressSelected=" AdvisorQuoteStatusValue(status, "currentAddressSelected")
+        . ", insuredQuestionPresent=" AdvisorQuoteStatusValue(status, "insuredQuestionPresent")
+        . ", insuredYesPresent=" AdvisorQuoteStatusValue(status, "insuredYesPresent")
+        . ", insuredNoPresent=" AdvisorQuoteStatusValue(status, "insuredNoPresent")
+        . ", insuredYesSelected=" AdvisorQuoteStatusValue(status, "insuredYesSelected")
+        . ", insuredNoSelected=" AdvisorQuoteStatusValue(status, "insuredNoSelected")
         . ", continuePresent=" AdvisorQuoteStatusValue(status, "continuePresent")
         . ", continueEnabled=" AdvisorQuoteStatusValue(status, "continueEnabled")
+        . ", missing=" AdvisorQuoteStatusValue(status, "missing")
 }
 
 AdvisorQuoteGetProductOverviewTileStatus(db) {
@@ -514,62 +532,26 @@ AdvisorQuoteWaitForProductOverviewAutoSelected(db, timeoutMs, &status := "") {
 AdvisorQuoteSelectProductStatusValid(status, db, afterContinue := false, &failureReason := "") {
     failureReason := ""
     if !IsObject(status) || (status.Count = 0) {
-        failureReason := "Select Product status could not be read back from the page."
+        failureReason := "SELECT_PRODUCT_FALLBACK_NOT_READY"
         return false
     }
-
-    if !AdvisorQuoteStatusOptionMatches(
-        AdvisorQuoteStatusValue(status, "ratingStateValue"),
-        AdvisorQuoteStatusValue(status, "ratingStateText"),
-        db["defaults"]["ratingState"],
-        db["defaults"]["ratingState"]
-    ) {
-        failureReason := "Rating State did not stay on " db["defaults"]["ratingState"] "."
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "READY")
+        return true
+    if (result != "") {
+        failureReason := result
         return false
     }
-
-    if !AdvisorQuoteStatusOptionMatches(
-        AdvisorQuoteStatusValue(status, "productValue"),
-        AdvisorQuoteStatusValue(status, "productText"),
-        "AUTO",
-        db["texts"]["productOverviewAutoTile"]
-    ) {
-        failureReason := "Select Product did not stay on Auto."
-        return false
-    }
-
-    if (AdvisorQuoteStatusValue(status, "continuePresent") != "1") {
-        failureReason := "Select Product Continue button is not present."
-        return false
-    }
-    if (AdvisorQuoteStatusValue(status, "continueEnabled") != "1") {
-        failureReason := "Select Product Continue button is not enabled."
-        return false
-    }
-
-    currentInsuredWanted := AdvisorNormalizeLooseToken(db["defaults"]["currentInsured"])
-    currentInsuredValue := AdvisorNormalizeLooseToken(AdvisorQuoteStatusValue(status, "currentInsuredValue"))
-    currentInsuredSelected := (
-        AdvisorQuoteStatusValue(status, "currentInsuredSelected") = "1"
-        || currentInsuredValue = currentInsuredWanted
-    )
-    if (!currentInsuredSelected || currentInsuredValue != currentInsuredWanted) {
-        failureReason := "Current insured Yes default did not stick on Select Product."
-        return false
-    }
-
-    ownOrRentWanted := AdvisorNormalizeLooseToken(db["defaults"]["ownOrRent"])
-    ownOrRentValue := AdvisorNormalizeLooseToken(AdvisorQuoteStatusValue(status, "ownOrRentValue"))
-    ownOrRentSelected := (
-        AdvisorQuoteStatusValue(status, "ownOrRentSelected") = "1"
-        || ownOrRentValue = ownOrRentWanted
-    )
-    if (!ownOrRentSelected || ownOrRentValue != ownOrRentWanted) {
-        failureReason := "Own/Rent Own default did not stick on Select Product."
-        return false
-    }
-
-    return true
+    missing := AdvisorQuoteStatusValue(status, "missing")
+    if InStr(missing, "currentlyInsured")
+        failureReason := "SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED"
+    else if InStr(missing, "continueEnabled")
+        failureReason := "SELECT_PRODUCT_CONTINUE_DISABLED"
+    else if (missing != "")
+        failureReason := "SELECT_PRODUCT_REQUIRED_FIELDS_MISSING"
+    else
+        failureReason := "SELECT_PRODUCT_FALLBACK_NOT_READY"
+    return false
 }
 
 AdvisorQuoteHandleProductOverview(db) {

@@ -696,16 +696,23 @@ AdvisorQuoteLogAscParticipantDetailStatus(status, eventType) {
 AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
     return "result=" AdvisorQuoteStatusValue(status, "result")
         . ", ascProductRouteId=" AdvisorQuoteStatusValue(status, "ascProductRouteId")
-        . ", maritalStatusPresent=" AdvisorQuoteStatusValue(status, "maritalStatusPresent")
-        . ", maritalStatusSelected=" AdvisorQuoteStatusValue(status, "maritalStatusSelected")
-        . ", spouseDropdownPresent=" AdvisorQuoteStatusValue(status, "spouseDropdownPresent")
-        . ", spouseOptionCount=" AdvisorQuoteStatusValue(status, "spouseOptionCount")
-        . ", propertyOwnershipValue=" AdvisorQuoteStatusValue(status, "propertyOwnershipValue")
-        . ", ageFirstLicensedValue=" AdvisorQuoteStatusValue(status, "ageFirstLicensedValue")
+        . ", panelPresent=" AdvisorQuoteStatusValue(status, "panelPresent")
+        . ", savePresent=" AdvisorQuoteStatusValue(status, "savePresent")
+        . ", saveEnabled=" AdvisorQuoteStatusValue(status, "saveEnabled")
+        . ", genderControlPresent=" AdvisorQuoteStatusValue(status, "genderControlPresent")
+        . ", genderAlreadySelected=" AdvisorQuoteStatusValue(status, "genderAlreadySelected")
+        . ", maritalControlPresent=" AdvisorQuoteStatusValue(status, "maritalControlPresent")
+        . ", maritalAlreadySelected=" AdvisorQuoteStatusValue(status, "maritalAlreadySelected")
+        . ", ownershipQuestionPresent=" AdvisorQuoteStatusValue(status, "ownershipQuestionPresent")
+        . ", ownershipSelected=" AdvisorQuoteStatusValue(status, "ownershipSelected")
+        . ", ageFirstLicensedPresent=" AdvisorQuoteStatusValue(status, "ageFirstLicensedPresent")
+        . ", ageFirstLicensedFilled=" AdvisorQuoteStatusValue(status, "ageFirstLicensedFilled")
+        . ", movingViolationsControlPresent=" AdvisorQuoteStatusValue(status, "movingViolationsControlPresent")
+        . ", defensiveDrivingControlPresent=" AdvisorQuoteStatusValue(status, "defensiveDrivingControlPresent")
         . ", emailPresent=" AdvisorQuoteStatusValue(status, "emailPresent")
         . ", phonePresent=" AdvisorQuoteStatusValue(status, "phonePresent")
-        . ", saveButtonPresent=" AdvisorQuoteStatusValue(status, "saveButtonPresent")
-        . ", saveButtonEnabled=" AdvisorQuoteStatusValue(status, "saveButtonEnabled")
+        . ", missingRequiredControls=" AdvisorQuoteStatusValue(status, "missingRequiredControls")
+        . ", optionalMissingControls=" AdvisorQuoteStatusValue(status, "optionalMissingControls")
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
 }
@@ -1610,12 +1617,23 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
     failureReason := ""
     failureScan := ""
     if !AdvisorQuoteFillParticipantModal(profile, db) {
-        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: fill failed."
+        participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+        statusResult := AdvisorQuoteStatusValue(participantStatus, "result")
+        if (statusResult = "ASC_INLINE_PARTICIPANT_SAVE_DISABLED")
+            failureReason := "ASC_INLINE_PARTICIPANT_SAVE_DISABLED: " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
+        else
+            failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: fill failed. " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-fill-failed")
         return false
     }
+    participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
+    if (AdvisorQuoteStatusValue(participantStatus, "saveEnabled") != "1" && AdvisorQuoteStatusValue(participantStatus, "saveButtonEnabled") != "1") {
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_DISABLED: " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-save-disabled")
+        return false
+    }
     if !AdvisorQuoteClickById(db["selectors"]["participantSaveId"], db["timeouts"]["actionMs"]) {
-        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: save click failed."
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: save click failed. " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-save-click-failed")
         return false
     }
@@ -1635,13 +1653,16 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
 }
 
 AdvisorQuoteAscParticipantRequiredSatisfied(participantStatus) {
-    if (AdvisorQuoteStatusValue(participantStatus, "result") != "FOUND")
+    result := AdvisorQuoteStatusValue(participantStatus, "result")
+    if (result != "FOUND" && result != "READY")
         return false
-    if (AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedValue") = "")
+    if (AdvisorQuoteStatusValue(participantStatus, "missingRequiredControls") != "")
         return false
-    if (AdvisorQuoteStatusValue(participantStatus, "propertyOwnershipValue") = "" && AdvisorQuoteStatusValue(participantStatus, "propertyOwnershipText") = "")
+    if (AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedPresent") = "1" && AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedFilled") != "1")
         return false
-    return AdvisorQuoteStatusValue(participantStatus, "missing") = ""
+    if (AdvisorQuoteStatusValue(participantStatus, "ownershipQuestionPresent") = "1" && AdvisorQuoteStatusValue(participantStatus, "ownershipSelected") != "1")
+        return false
+    return true
 }
 
 AdvisorQuoteHandleAscVehicleModalLedger(profile, db, beforeSnapshot, &failureReason := "", &failureScan := "") {
