@@ -2601,6 +2601,24 @@ function testVehicleContracts() {
   })), ['result', 'vehicleMatched', 'confirmedVehicleMatched', 'modelMatched']);
   assert.notStrictEqual(crvDoesNotMatchHrvStatus.result, 'ADDED');
   assert.strictEqual(crvDoesNotMatchHrvStatus.confirmedVehicleMatched, '0');
+  const exactYearMakeVinModelMismatchStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2021',
+    make: 'Mazda',
+    model: 'Mazda 3',
+    vin: '3MVDMBAY1MM306549',
+    allowedMakeLabels: 'MAZDA',
+    strictModelMatch: '1'
+  }, confirmedVehicleCardDoc({
+    text: '2021 Mazda CX-30 3MVDMBAY1MM306549 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'vinMatched', 'exactYearMakeVinMatch', 'method']);
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.result, 'ADDED');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.yearMatched, '1');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.makeMatched, '1');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.modelMatched, '0');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.vinMatched, '1');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.exactYearMakeVinMatch, '1');
+  assert.strictEqual(exactYearMakeVinModelMismatchStatus.method, 'vin-backed-exact-year-make');
   const priusDbNonOvermatchStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
     year: '2024',
     make: 'Toyota',
@@ -3036,6 +3054,26 @@ function testVehicleContracts() {
   ])), ['result', 'vehicleMatched', 'confirmedVehicleMatched', 'method']);
   assert.notStrictEqual(potentialVehicleStatus.result, 'ADDED');
   assert.strictEqual(potentialVehicleStatus.confirmedVehicleMatched, '0');
+  const mazdaConfirmButton = new FakeElement('button', { text: 'Confirm' });
+  const mazdaPotentialCard = new FakeElement('div', { className: 'vehicle-card', text: '2021 Mazda CX-30 3MVDMBAY1MM306549' });
+  mazdaPotentialCard.appendChild(mazdaConfirmButton);
+  mazdaPotentialCard.appendChild(new FakeElement('button', { text: 'Remove' }));
+  const exactYearMakeVinPotentialStatus = assertKeyBlock(runOperator('confirm_potential_vehicle', {
+    year: '2021',
+    make: 'Mazda',
+    model: 'Mazda 3',
+    vin: '3MVDMBAY1MM306549',
+    allowedMakeLabels: 'MAZDA',
+    strictModelMatch: '1'
+  }, new FakeDocument([
+    textNode('POTENTIAL VEHICLES'),
+    mazdaPotentialCard
+  ])), ['result', 'matches', 'score', 'candidateScope', 'confirmClicked', 'rejectedReason']);
+  assert.strictEqual(exactYearMakeVinPotentialStatus.result, 'CONFIRMED');
+  assert.strictEqual(exactYearMakeVinPotentialStatus.matches, '1');
+  assert.strictEqual(exactYearMakeVinPotentialStatus.candidateScope, 'single-card');
+  assert.strictEqual(exactYearMakeVinPotentialStatus.confirmClicked, '1');
+  assert.strictEqual(mazdaConfirmButton.clickCalls, 1);
   const differentConfirmedVehicleStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', { year: '2019', make: 'Honda', model: 'Pilot' }, confirmedVehicleCardDoc({
     text: '2020 Honda CR-V 5J6RW2H80LL000001 Edit Remove CONFIRMED'
   })), ['result', 'vehicleMatched', 'confirmedVehicleMatched']);

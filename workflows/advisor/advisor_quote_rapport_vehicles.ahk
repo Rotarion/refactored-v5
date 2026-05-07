@@ -380,7 +380,7 @@ AdvisorQuoteRapportVehicleLedgerSatisfiedCount(ledger) {
 
 AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled) {
     return AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger)
-        && Integer(confirmedOrAddedVehicleCount) > 0
+        && (Integer(confirmedOrAddedVehicleCount) > 0 || Trim(String(createQuotesEnabled)) = "1")
         && Trim(String(staleAddRowPresent)) != "1"
         && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1")
 }
@@ -1422,6 +1422,9 @@ AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(status) {
     if (AdvisorQuoteStatusValue(status, "yearMatched") = "1"
         && AdvisorQuoteStatusValue(status, "modelMatched") = "1")
         return true
+    if (AdvisorQuoteStatusValue(status, "exactYearMakeVinMatch") = "1"
+        && AdvisorQuoteStatusValue(status, "vinMatched") = "1")
+        return true
     return AdvisorQuoteStatusValue(status, "yearWindowVinMatch") = "1"
         && AdvisorQuoteStatusValue(status, "vinMatched") = "1"
 }
@@ -1540,6 +1543,7 @@ AdvisorQuoteLogGatherVehicleAddStatus(status, eventType, vehicle := "") {
             . ", makeMatched=" AdvisorQuoteStatusValue(status, "makeMatched")
             . ", modelMatched=" AdvisorQuoteStatusValue(status, "modelMatched")
             . ", vinMatched=" AdvisorQuoteStatusValue(status, "vinMatched")
+            . ", exactYearMakeVinMatch=" AdvisorQuoteStatusValue(status, "exactYearMakeVinMatch")
             . ", vinEvidence=" AdvisorQuoteStatusValue(status, "vinEvidence")
             . ", partialPromoted=" AdvisorQuoteStatusValue(status, "partialPromoted")
             . ", promotedModel=" AdvisorQuoteStatusValue(status, "promotedModel")

@@ -1022,6 +1022,7 @@ copy(String((() => {
     const vinSuffixMatch = !vinMatch && !!match.vinSuffix && haystack.includes(match.vinSuffix);
     const vinBacked = !!(vinMatch || vinSuffixMatch);
     const modelFamilyRelated = vehicleModelFamilyRelated(haystack, match);
+    const exactYearMakeVinMatch = !!(yearMatch && makeMatch && vinBacked);
     const yearWindowVinMatch = !!(match.year && yearDelta !== null && Math.abs(yearDelta) === 1
       && makeMatch && vinBacked && (modelMatch || modelFamilyRelated));
     let score = 0;
@@ -1035,6 +1036,7 @@ copy(String((() => {
       threshold: 90,
       yearMatch,
       yearDelta: yearDelta === null ? '' : String(yearDelta),
+      exactYearMakeVinMatch,
       yearWindowVinMatch,
       makeMatch,
       modelMatch,
@@ -1126,7 +1128,8 @@ copy(String((() => {
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'year-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
     if (!safe(candidate && candidate.details && candidate.details.makeMatch))
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'make-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
-    if (!safe(candidate && candidate.details && candidate.details.modelMatch))
+    if (!safe(candidate && candidate.details && candidate.details.modelMatch)
+      && !safe(candidate && candidate.details && candidate.details.exactYearMakeVinMatch))
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'model-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
     if (text.includes('confirmed vehicles') && text.includes('potential vehicles'))
       return { ok: false, candidateScope: 'broad-section', rejectedReason: 'broad-container', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
@@ -3956,7 +3959,10 @@ copy(String((() => {
     const exactConfirmedCandidates = scoredConfirmedCandidates
       .filter((candidate) => candidate.details.yearMatch && candidate.details.makeMatch && candidate.details.modelMatch)
       .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
-    const yearWindowVinCandidates = exactConfirmedCandidates.length ? [] : scoredConfirmedCandidates
+    const exactYearMakeVinCandidates = exactConfirmedCandidates.length ? [] : scoredConfirmedCandidates
+      .filter((candidate) => candidate.details.exactYearMakeVinMatch)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const yearWindowVinCandidates = exactConfirmedCandidates.length || exactYearMakeVinCandidates.length ? [] : scoredConfirmedCandidates
       .filter((candidate) => candidate.details.yearWindowVinMatch)
       .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
     const candidateTexts = confirmedCandidates.concat(candidates)
@@ -3964,6 +3970,7 @@ copy(String((() => {
       .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
       .slice(0, 5);
     const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate)
+      || (exactYearMakeVinCandidates.length === 1 ? exactYearMakeVinCandidates[0] : null)
       || (yearWindowVinCandidates.length === 1 ? yearWindowVinCandidates[0] : null)
       || candidates.find(isConfirmedVehicleCandidate)
       || null;
@@ -3977,13 +3984,14 @@ copy(String((() => {
     const vehicleMatched = !!matched && yearMatched && makeMatched && modelMatched;
     const confirmedVehicleMatched = !!confirmed;
     const confirmedStatusMatched = !!confirmed && normLower(confirmed.cardText).includes('confirmed');
+    const exactYearMakeVinMatch = !!confirmed && !!confirmed.details && !!confirmed.details.exactYearMakeVinMatch;
     const yearWindowVinMatch = !!confirmed && !!confirmed.details && !!confirmed.details.yearWindowVinMatch;
     const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowState.rowIncomplete && rowState.rowMatchesExpectedContext;
     let result = 'MISSING';
     let method = 'no-vehicle-evidence';
     if (confirmedVehicleMatched) {
       result = 'ADDED';
-      method = yearWindowVinMatch ? 'vin-backed-year-window' : 'confirmed-vehicle-card';
+      method = exactYearMakeVinMatch && !modelMatched ? 'vin-backed-exact-year-make' : (yearWindowVinMatch ? 'vin-backed-year-window' : 'confirmed-vehicle-card');
     } else if (vehicleMatched && /added to quote/.test(lower(matchedText)) && !findCardButtonByText(matched.card, 'Confirm')) {
       result = 'IN_PROGRESS';
       method = 'vehicle-card-added-unconfirmed';
@@ -4012,6 +4020,7 @@ copy(String((() => {
       makeMatched: makeMatched ? '1' : '0',
       modelMatched: modelMatched ? '1' : '0',
       vinMatched: (matchArgs.vin || matchArgs.vinSuffix) && vinMatched ? '1' : '0',
+      exactYearMakeVinMatch: exactYearMakeVinMatch ? '1' : '0',
       yearWindowVinMatch: yearWindowVinMatch ? '1' : '0',
       vinEvidence: matchedText && vehicleVinEvidenceText(matchedText) ? '1' : '0',
       partialPromoted: '0',
@@ -6391,7 +6400,15 @@ copy(String((() => {
         });
       const scoped = findVehicleMatchCandidates(args)
         .map((candidate) => ({ candidate, scope: potentialVehicleCandidateScope(candidate) }));
-      const candidates = scoped.filter((entry) => entry.scope.ok);
+      const scopedCandidates = scoped.filter((entry) => entry.scope.ok)
+        .sort((a, b) => a.candidate.cardText.length - b.candidate.cardText.length);
+      const candidates = [];
+      for (const entry of scopedCandidates) {
+        const entryText = lower(entry.candidate.cardText);
+        if (candidates.some((existing) => entryText.includes(lower(existing.candidate.cardText))))
+          continue;
+        candidates.push(entry);
+      }
       const rejected = scoped.find((entry) => entry.scope.rejectedReason) || null;
       if (!candidates.length)
         return linesOut({
