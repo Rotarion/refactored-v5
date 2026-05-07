@@ -54,6 +54,10 @@ PersistRunState("startup")
 #Include workflows\prospect_fill.ahk
 #Include workflows\advisor\advisor_quote_transport.ahk
 #Include workflows\advisor\advisor_quote_metrics.ahk
+#Include workflows\advisor\advisor_quote_entry.ahk
+#Include workflows\advisor\advisor_quote_customer_summary.ahk
+#Include workflows\advisor\advisor_quote_product_overview.ahk
+#Include workflows\advisor\advisor_quote_consumer_reports.ahk
 #Include workflows\advisor_quote_workflow.ahk
 #Include workflows\crm_activity.ahk
 #Include workflows\config_ui.ahk

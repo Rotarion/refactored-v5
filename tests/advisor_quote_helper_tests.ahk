@@ -28,6 +28,12 @@ for _, arg in A_Args {
 #Include ..\adapters\quo_adapter.ahk
 #Include ..\adapters\crm_adapter.ahk
 #Include ..\adapters\tag_selector_adapter.ahk
+#Include ..\workflows\advisor\advisor_quote_transport.ahk
+#Include ..\workflows\advisor\advisor_quote_metrics.ahk
+#Include ..\workflows\advisor\advisor_quote_entry.ahk
+#Include ..\workflows\advisor\advisor_quote_customer_summary.ahk
+#Include ..\workflows\advisor\advisor_quote_product_overview.ahk
+#Include ..\workflows\advisor\advisor_quote_consumer_reports.ahk
 #Include ..\workflows\advisor_quote_workflow.ahk
 
 if advisorQuoteHelperResidentTransportOnly {
