@@ -1241,27 +1241,57 @@ copy(String((() => {
       strictModelMatch: safe(source.strictModelMatch) === '1' || source.strictModelMatch === true
     };
   };
+  const vehicleYearDelta = (cardText, expectedYear) => {
+    const wanted = Number(safe(expectedYear).trim());
+    if (!wanted) return null;
+    const years = (safe(cardText).match(/\b(?:19|20)\d{2}\b/g) || [])
+      .map((value) => Number(value))
+      .filter(Boolean);
+    if (!years.length) return null;
+    return years
+      .map((year) => year - wanted)
+      .sort((a, b) => Math.abs(a) - Math.abs(b))[0];
+  };
+  const vehicleModelFamilyRelated = (haystack, match) => {
+    const key = normalizeVehicleModelKey(match.model || (match.modelAliases || [])[0] || '');
+    const haystackKey = normalizeVehicleModelKey(haystack);
+    if (!key || !haystackKey) return false;
+    if (/^F\d{3,4}/.test(key) && /FSERIES|F150|F250|F350|F450/.test(haystackKey)) return true;
+    if (key.startsWith('WRANGLER') && haystackKey.includes('WRANGLER')) return true;
+    if (key.startsWith('SILVERADO') && haystackKey.includes('SILVERADO')) return true;
+    if (key.startsWith('RAM') && haystackKey.includes('RAM')) return true;
+    if (key.startsWith('TRANSIT') && haystackKey.includes('TRANSIT')) return true;
+    return false;
+  };
   const scoreVehicleCandidate = (cardText, source = {}) => {
     const match = getVehicleMatchArgs(source);
     const haystack = normalizeVehicleText(cardText);
-    const yearMatch = !!match.year && new RegExp(`(^|\\s)${match.year}(\\s|$)`).test(haystack);
+    const yearDelta = vehicleYearDelta(cardText, match.year);
+    const yearMatch = !!match.year && yearDelta === 0;
     const makeMatch = vehicleMakeMatches(haystack, match);
     const modelMatch = vehicleModelMatches(haystack, match);
     const trimMatch = !!match.trim && haystack.includes(match.trim);
     const vinMatch = !!match.vin && haystack.includes(match.vin);
     const vinSuffixMatch = !vinMatch && !!match.vinSuffix && haystack.includes(match.vinSuffix);
+    const vinBacked = !!(vinMatch || vinSuffixMatch);
+    const modelFamilyRelated = vehicleModelFamilyRelated(haystack, match);
+    const yearWindowVinMatch = !!(match.year && yearDelta !== null && Math.abs(yearDelta) === 1
+      && makeMatch && vinBacked && (modelMatch || modelFamilyRelated));
     let score = 0;
     if (yearMatch) score += 40;
     if (makeMatch) score += 30;
     if (modelMatch) score += 30;
     if (trimMatch) score += 10;
-    if (vinMatch || vinSuffixMatch) score += 50;
+    if (vinBacked) score += 50;
     return {
       score,
       threshold: 90,
       yearMatch,
+      yearDelta: yearDelta === null ? '' : String(yearDelta),
+      yearWindowVinMatch,
       makeMatch,
       modelMatch,
+      modelFamilyRelated,
       trimMatch,
       vinMatch,
       vinSuffixMatch
@@ -4182,15 +4212,25 @@ copy(String((() => {
       });
     }
     const candidates = findVehicleMatchCandidates(source);
-    const confirmedCandidates = confirmedVehicleCandidates()
-      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }))
+    const scoredConfirmedCandidates = confirmedVehicleCandidates()
+      .map((candidate) => ({ ...candidate, details: scoreVehicleCandidate(candidate.cardText, source) }));
+    const confirmedCandidates = scoredConfirmedCandidates
       .filter((candidate) => candidate.details.score >= candidate.details.threshold)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const exactConfirmedCandidates = scoredConfirmedCandidates
+      .filter((candidate) => candidate.details.yearMatch && candidate.details.makeMatch && candidate.details.modelMatch)
+      .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
+    const yearWindowVinCandidates = exactConfirmedCandidates.length ? [] : scoredConfirmedCandidates
+      .filter((candidate) => candidate.details.yearWindowVinMatch)
       .sort((a, b) => b.details.score - a.details.score || a.cardText.length - b.cardText.length);
     const candidateTexts = confirmedCandidates.concat(candidates)
       .map((candidate) => compact(candidate.cardText, 120))
       .filter((textValue, index, list) => textValue && list.indexOf(textValue) === index)
       .slice(0, 5);
-    const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate) || candidates.find(isConfirmedVehicleCandidate) || null;
+    const confirmed = confirmedCandidates.find(isConfirmedVehicleCandidate)
+      || (yearWindowVinCandidates.length === 1 ? yearWindowVinCandidates[0] : null)
+      || candidates.find(isConfirmedVehicleCandidate)
+      || null;
     const matched = confirmed || candidates[0] || null;
     const matchedText = matched ? compact(matched.cardText, 180) : '';
     const matchedNorm = normUpper(matchedText);
@@ -4201,12 +4241,13 @@ copy(String((() => {
     const vehicleMatched = !!matched && yearMatched && makeMatched && modelMatched;
     const confirmedVehicleMatched = !!confirmed;
     const confirmedStatusMatched = !!confirmed && normLower(confirmed.cardText).includes('confirmed');
+    const yearWindowVinMatch = !!confirmed && !!confirmed.details && !!confirmed.details.yearWindowVinMatch;
     const duplicateAddRowOpenForConfirmedVehicle = confirmedVehicleMatched && rowState.rowIncomplete && rowState.rowMatchesExpectedContext;
     let result = 'MISSING';
     let method = 'no-vehicle-evidence';
     if (confirmedVehicleMatched) {
       result = 'ADDED';
-      method = 'confirmed-vehicle-card';
+      method = yearWindowVinMatch ? 'vin-backed-year-window' : 'confirmed-vehicle-card';
     } else if (vehicleMatched && /added to quote/.test(lower(matchedText)) && !findCardButtonByText(matched.card, 'Confirm')) {
       result = 'IN_PROGRESS';
       method = 'vehicle-card-added-unconfirmed';
@@ -4235,6 +4276,7 @@ copy(String((() => {
       makeMatched: makeMatched ? '1' : '0',
       modelMatched: modelMatched ? '1' : '0',
       vinMatched: (matchArgs.vin || matchArgs.vinSuffix) && vinMatched ? '1' : '0',
+      yearWindowVinMatch: yearWindowVinMatch ? '1' : '0',
       vinEvidence: matchedText && vehicleVinEvidenceText(matchedText) ? '1' : '0',
       partialPromoted: '0',
       promotedModel: '',

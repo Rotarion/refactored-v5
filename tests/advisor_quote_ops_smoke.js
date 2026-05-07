@@ -2666,6 +2666,41 @@ function testVehicleContracts() {
   assert.strictEqual(wranglerTruncatedStatus.result, 'ADDED');
   assert.strictEqual(wranglerTruncatedStatus.confirmedVehicleMatched, '1');
   assert.strictEqual(wranglerTruncatedStatus.modelMatched, '1');
+  const yearWindowVinStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Ford',
+    model: 'F-150',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    modelAliases: 'F150|F-150',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1',
+    vinSuffix: 'VIN12344'
+  }, confirmedVehicleCardDoc({
+    text: '2025 Ford Trucks F-Series VIN12344 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'yearMatched', 'makeMatched', 'modelMatched', 'vinMatched', 'yearWindowVinMatch', 'method']);
+  assert.strictEqual(yearWindowVinStatus.result, 'ADDED');
+  assert.strictEqual(yearWindowVinStatus.confirmedVehicleMatched, '1');
+  assert.strictEqual(yearWindowVinStatus.yearMatched, '0');
+  assert.strictEqual(yearWindowVinStatus.makeMatched, '1');
+  assert.strictEqual(yearWindowVinStatus.modelMatched, '0');
+  assert.strictEqual(yearWindowVinStatus.vinMatched, '1');
+  assert.strictEqual(yearWindowVinStatus.yearWindowVinMatch, '1');
+  assert.strictEqual(yearWindowVinStatus.method, 'vin-backed-year-window');
+  const yearWindowWrongMakeStatus = assertKeyBlock(runOperator('gather_vehicle_add_status', {
+    year: '2024',
+    make: 'Ford',
+    model: 'F-150',
+    allowedMakeLabels: 'FORD|FORD TRUCKS',
+    modelAliases: 'F150|F-150',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1',
+    vinSuffix: 'VIN12344'
+  }, confirmedVehicleCardDoc({
+    text: '2025 Chevrolet Trucks F-Series VIN12344 Edit Remove CONFIRMED'
+  })), ['result', 'confirmedVehicleMatched', 'yearWindowVinMatch']);
+  assert.notStrictEqual(yearWindowWrongMakeStatus.result, 'ADDED');
+  assert.strictEqual(yearWindowWrongMakeStatus.confirmedVehicleMatched, '0');
+  assert.strictEqual(yearWindowWrongMakeStatus.yearWindowVinMatch, '0');
   const f150PotentialConfirm = createVehicleCard('POTENTIAL VEHICLES 2024 Ford Trucks F150 4WD Confirm Remove', 'confirm-f150');
   const f150PotentialStatus = assertKeyBlock(runOperator('confirm_potential_vehicle', {
     year: '2024',

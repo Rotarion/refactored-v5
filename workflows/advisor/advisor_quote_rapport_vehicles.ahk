@@ -1359,8 +1359,16 @@ AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &failureReason := "",
         resultStatus := AdvisorQuoteHandleVehicleEditModal(vehicle)
         AdvisorQuoteLogGatherVehicleEditStatus(resultStatus, "VEHICLE_EDIT_RESULT", vehicle, attemptContext)
         result := AdvisorQuoteStatusValue(resultStatus, "result")
+        if (result = "UPDATED" || result = "NO_ACTION_NEEDED") {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_EDIT_VEHICLE_SUBMODEL_VERIFIED",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"] ", result=" result ", context=" attemptContext
+            )
+        }
         switch result {
             case "UPDATED":
+                AdvisorQuoteAppendLog("RAPPORT_EDIT_VEHICLE_UPDATED", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", context=" attemptContext)
                 postUpdateStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db)
                 AdvisorQuoteLogGatherVehicleAddStatus(postUpdateStatus, "VEHICLE_EDIT_POST_UPDATE_STATUS", vehicle)
                 if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postUpdateStatus)
@@ -1382,10 +1390,12 @@ AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &failureReason := "",
                 }
                 return "NO_ACTION"
             case "NO_SUBMODEL_OPTIONS":
+                AdvisorQuoteAppendLog("RAPPORT_EDIT_VEHICLE_UPDATE_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=no-submodel-options, context=" attemptContext)
                 failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Sub-Model is required but no valid Sub-Model options were available for " vehicle["displayKey"] "."
                 failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-no-submodel-options")
                 return "FAILED"
             default:
+                AdvisorQuoteAppendLog("RAPPORT_EDIT_VEHICLE_UPDATE_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", result=" result ", context=" attemptContext)
                 failureReason := "VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED: Could not complete Edit Vehicle Sub-Model for " vehicle["displayKey"] "."
                 failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-edit-submodel-failed")
                 return "FAILED"
@@ -1404,12 +1414,16 @@ AdvisorQuoteGatherVehicleAddStatusComplete(status) {
 }
 
 AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(status) {
-    return AdvisorQuoteStatusValue(status, "result") = "ADDED"
-        && AdvisorQuoteStatusValue(status, "confirmedVehicleMatched") = "1"
-        && AdvisorQuoteStatusValue(status, "confirmedStatusMatched") = "1"
-        && AdvisorQuoteStatusValue(status, "yearMatched") = "1"
-        && AdvisorQuoteStatusValue(status, "makeMatched") = "1"
-        && AdvisorQuoteStatusValue(status, "modelMatched") = "1"
+    if (AdvisorQuoteStatusValue(status, "result") != "ADDED"
+        || AdvisorQuoteStatusValue(status, "confirmedVehicleMatched") != "1"
+        || AdvisorQuoteStatusValue(status, "confirmedStatusMatched") != "1"
+        || AdvisorQuoteStatusValue(status, "makeMatched") != "1")
+        return false
+    if (AdvisorQuoteStatusValue(status, "yearMatched") = "1"
+        && AdvisorQuoteStatusValue(status, "modelMatched") = "1")
+        return true
+    return AdvisorQuoteStatusValue(status, "yearWindowVinMatch") = "1"
+        && AdvisorQuoteStatusValue(status, "vinMatched") = "1"
 }
 
 AdvisorQuoteGatherVehiclePartialStatusPromoted(status) {
