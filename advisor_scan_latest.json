@@ -1,0 +1,431 @@
+﻿{
+  "capturedAt": "2026-05-07T14:35:11.832Z",
+  "stepLabel": "DRIVERS_VEHICLES",
+  "scanReason": "asc-inline-fill-failed",
+  "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
+  "title": "Allstate Advisor Pro℠",
+  "heading": "JORGE SUAREZ (View Customer)",
+  "bodySample": "Skip To Main Content ALLSTATE ADVISOR PRO Help US INSURANCE EXPERTS LLC - A0D6218 JORGE SUAREZ (View Customer) START HERE (Pre-fill included) PRODUCTS Auto Close Add Product CONSUMER REPORTS (All Products) COVERAGES (All Products) Drivers and vehicles You may see some results from public records. Remove any that don't apply. We'll walk you through this process. Add drivers Be sure to add only licensed drivers who reside in your household, including those staying in your home for an extended period. Licensed drivers in your household not listed on the policy may not be covered. Jorge Suarez Age 65 Found driver - needs review JS Do you want to add Jorge to your quote? yes, add to quote Elizabeth Pons Rodriguez Age 57 Found driver - needs review EP Do you want to add Elizabeth to your quote? yes, add to quote remove Ernesto Epifanio Suarez Age 68 Found driver - needs review ES Do you want to add Ernesto to your quote? yes, add to quote remove Note: All drivers need to either be added or removed to continue. Add vehicles Add all vehicles garaged at your home that you want to include. 2025 Ford Expedition Found vehicle - needs review Do you want to add this Expedition to your quote? yes, add to quote remove 2013 Chevrolet Sonic VIN: 1G1JA5SH*******24 Found vehicle - needs review Do you want to add this Sonic to your quote? yes, add to quote remove 2021 Toyota Corolla VIN: 5YFEPMAE*******52 Found vehicle - needs review Do you want to add this Corolla to your quote? yes, add to quote remove 2025 Ford Escape VIN: 1FMCU0GN*******74 Found vehicle - needs review Do you want to add this Escape to your quote? yes, add to quote remove Note: Add at least one vehicle to continue. save and continue Interaction_Id: 514e6e06-1785-4ff6-9fbd-7517af4dd61e Let's get some more details What's your gender, as listed on your driver's license? Male Female What's your marital status? Single Married Widowed Do you or your spouse (if applicable) own or rent your home? Own a home Own a condo Own a mobile or manufactured home Rent None of the above What's your date of birth? 02-**-1961 Address 1810 W 56th St Hialeah, FL 33012 At what age were you issued your first driver's license? years old If you don't have a license or had to give up your license for medical reasons, please give us a call at 1-866-362-2130. Have you had any moving violations in the past five years? Yes No Driver's license number *********0430 State licensed FL Edit Have you completed a defensive driving course in the l",
+  "headings": [
+    {
+      "tag": "H3",
+      "id": "",
+      "text": "JORGE SUAREZ (View Customer)"
+    },
+    {
+      "tag": "H1",
+      "id": "",
+      "text": "Drivers and vehicles"
+    },
+    {
+      "tag": "H2",
+      "id": "",
+      "text": "Add drivers"
+    },
+    {
+      "tag": "H2",
+      "id": "",
+      "text": "Add vehicles"
+    },
+    {
+      "tag": "H1",
+      "id": "",
+      "text": "Let's get some more details"
+    }
+  ],
+  "fields": [
+    {
+      "tag": "SELECT",
+      "id": "field_81",
+      "name": "",
+      "type": "select-one",
+      "label": "",
+      "disabled": true,
+      "class": "c-dropdown__menu",
+      "value": "0D6218",
+      "selectedIndex": 0,
+      "selectedText": "US INSURANCE EXPERTS LLC - A0D6218",
+      "options": [
+        {
+          "index": 0,
+          "value": "0D6218",
+          "text": "US INSURANCE EXPERTS LLC - A0D6218",
+          "isCurrent": true,
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "tag": "SELECT",
+      "id": "propertyOwnershipEntCd_option",
+      "name": "agreement.agreementParticipant.party.propertyOwnershipEntCd",
+      "type": "select-one",
+      "label": "Do you or your spouse (if applicable) own or rent your home?",
+      "disabled": false,
+      "class": "mesh-132yc1b e1vts87l0",
+      "value": "0002_0120",
+      "selectedIndex": 3,
+      "selectedText": "Rent",
+      "options": [
+        {
+          "index": 0,
+          "value": "0001_0120",
+          "text": "Own a home",
+          "isCurrent": false,
+          "disabled": false
+        },
+        {
+          "index": 1,
+          "value": "0001_0038",
+          "text": "Own a condo",
+          "isCurrent": false,
+          "disabled": false
+        },
+        {
+          "index": 2,
+          "value": "0001_0014",
+          "text": "Own a mobile or manufactured home",
+          "isCurrent": false,
+          "disabled": false
+        },
+        {
+          "index": 3,
+          "value": "0002_0120",
+          "text": "Rent",
+          "isCurrent": true,
+          "disabled": false
+        },
+        {
+          "index": 4,
+          "value": "0013",
+          "text": "None of the above",
+          "isCurrent": false,
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "tag": "INPUT",
+      "id": "ageFirstLicensed_ageFirstLicensed",
+      "name": "agreement.agreementParticipant.party.ageFirstLicensed",
+      "type": "text",
+      "label": "At what age were you issued your first driver's license?",
+      "disabled": false,
+      "class": "mesh-18eyre8 eo1dbaf0",
+      "value": "16"
+    },
+    {
+      "tag": "INPUT",
+      "id": "emailAddress.emailAddress",
+      "name": "agreement.agreementParticipant.party.email.emailAddress",
+      "type": "email",
+      "label": "What's your email address?",
+      "disabled": false,
+      "class": "mesh-18eyre8 eo1dbaf0",
+      "value": "jsuarezt47@gmail.com"
+    },
+    {
+      "tag": "INPUT",
+      "id": "phoneNumber_phoneNumber",
+      "name": "agreement.agreementParticipant.party.phone.phoneNumber",
+      "type": "text",
+      "label": "Phone number(Optional)",
+      "disabled": false,
+      "class": "mesh-18eyre8 eo1dbaf0",
+      "value": "(786) 399-8886"
+    }
+  ],
+  "buttons": [
+    {
+      "tag": "BUTTON",
+      "id": "skip-nav-button",
+      "name": "",
+      "text": "Skip To Main Content",
+      "value": "",
+      "class": "u-flex--middle c-status-bar__cta skip-nav-button",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "home_logo",
+      "name": "",
+      "text": "ALLSTATE ADVISOR PRO",
+      "value": "",
+      "class": "c-masthead-logo c-masthead-logo--sm c-masthead-logo-ap has-light",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "Help",
+      "value": "",
+      "class": "c-tooltip__trigger ",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "Help",
+      "value": "",
+      "class": "",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "FAQs and Best Practices",
+      "value": "",
+      "class": "c-menu-btn",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "Search Technology Support",
+      "value": "",
+      "class": "c-menu-btn",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "START HERE (Pre-fill included)",
+      "value": "",
+      "class": "c-sidebar-item u-text-lg u-text-bold",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "START HERE (Pre-fill included)",
+      "value": "",
+      "class": "c-btn c-btn--tertiary",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "Auto Close",
+      "value": "",
+      "class": "c-sidebar-item u-no-spacing--padding-right u-no-spacing--padding-top u-no-spacing--padding-bottom is-active",
+      "disabled": false
+    },
+    {
+      "tag": "DIV",
+      "id": "",
+      "name": "",
+      "text": "Auto",
+      "value": "",
+      "class": "l-split__left u-flex u-flex-middle",
+      "disabled": false
+    },
+    {
+      "tag": "DIV",
+      "id": "",
+      "name": "",
+      "text": "Close",
+      "value": "",
+      "class": "u-align-center c-sidebar-item--button",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "addProduct",
+      "name": "",
+      "text": "Add Product",
+      "value": "",
+      "class": "c-sidebar-item",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "CONSUMER REPORTS (All Products)",
+      "value": "",
+      "class": "c-sidebar-item u-flex--column",
+      "disabled": false
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "COVERAGES (All Products)",
+      "value": "",
+      "class": "c-sidebar-item u-flex--column",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "jorge-suarez-add",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "elizabeth-pons rodriguez-addToQuote",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "elizabeth-pons rodriguez-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "ernesto-suarez-addToQuote",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "ernesto-suarez-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2025-ford-expedition-add",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2025-ford-expedition-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2013-chevrolet-sonic-add",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2013-chevrolet-sonic-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2021-toyota-corolla-add",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2021-toyota-corolla-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2025-ford-escape-add",
+      "name": "",
+      "text": "yes, add to quote",
+      "value": "",
+      "class": "mesh-jyv6ml e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "2025-ford-escape-remove",
+      "name": "",
+      "text": "remove",
+      "value": "",
+      "class": "mesh-axvqsn e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "profile-summary-submitBtn",
+      "name": "",
+      "text": "save and continue",
+      "value": "",
+      "class": "mesh-mhvsbt e14c8aa40",
+      "disabled": true
+    },
+    {
+      "tag": "A",
+      "id": "",
+      "name": "",
+      "text": "1-866-362-2130",
+      "value": "",
+      "class": "c-link",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "Edit",
+      "value": "",
+      "class": "mesh-17k70v2 e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "",
+      "name": "",
+      "text": "What is this?",
+      "value": "",
+      "class": "mesh-63uvca e14c8aa40",
+      "disabled": false
+    },
+    {
+      "tag": "BUTTON",
+      "id": "PARTICIPANT_SAVE-btn",
+      "name": "",
+      "text": "save",
+      "value": "save",
+      "class": "mesh-1gjjgqo e14c8aa40",
+      "disabled": false
+    }
+  ],
+  "radios": [],
+  "alerts": [],
+  "modalText": ""
+}
