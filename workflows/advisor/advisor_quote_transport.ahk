@@ -135,6 +135,142 @@ AdvisorQuoteResidentRequestId(op) {
     return "resident-" AdvisorQuoteJsMetricSafeToken(op, "op") "-" A_TickCount
 }
 
+
+AdvisorQuoteResidentRouteFamily(state := "", status := "") {
+    stateName := AdvisorQuoteJsMetricSafeToken(state, "")
+    if IsObject(status) {
+        routeFamily := AdvisorQuoteJsMetricSafeToken(AdvisorQuoteStatusValue(status, "routeFamily"), "")
+        detectedState := AdvisorQuoteJsMetricSafeToken(AdvisorQuoteStatusValue(status, "detectedState"), "")
+        url := StrLower(AdvisorQuoteStatusValue(status, "url"))
+        if (routeFamily != "") {
+            routeLower := StrLower(routeFamily)
+            if InStr(routeLower, "ascproduct") || InStr(url, "/apps/ascproduct/") {
+                if InStr(detectedState, "DRIVERS") || InStr(detectedState, "VEHICLES")
+                    return "ascproduct-drivers-vehicles"
+                if InStr(detectedState, "INCIDENT")
+                    return "ascproduct-incidents"
+                if InStr(detectedState, "COVERAGE") || InStr(detectedState, "DRIVEWISE")
+                    return "ascproduct-coverages"
+                if InStr(detectedState, "QUOTE")
+                    return "ascproduct-quote"
+                return "ascproduct-unknown"
+            }
+            if InStr(routeLower, "select")
+                return "intel-select-product"
+            if InStr(routeLower, "rapport") || InStr(routeLower, "gather")
+                return "intel-rapport"
+            if InStr(routeLower, "customer")
+                return "customer-summary"
+            if InStr(routeLower, "product")
+                return "product-overview"
+        }
+        if InStr(url, "/apps/intel/") && InStr(url, "/rapport")
+            return "intel-rapport"
+        if InStr(url, "/apps/intel/") && InStr(url, "/selectproduct")
+            return "intel-select-product"
+        if InStr(url, "/apps/customer-summary/")
+            return "customer-summary"
+        if InStr(url, "/apps/product") || InStr(url, "productoverview")
+            return "product-overview"
+    }
+
+    if InStr(stateName, "ASC_PRODUCT") || InStr(stateName, "ASCPRODUCT") {
+        if InStr(stateName, "DRIVER") || InStr(stateName, "VEHICLE")
+            return "ascproduct-drivers-vehicles"
+        if InStr(stateName, "INCIDENT")
+            return "ascproduct-incidents"
+        if InStr(stateName, "COVERAGE") || InStr(stateName, "DRIVEWISE")
+            return "ascproduct-coverages"
+        if InStr(stateName, "QUOTE")
+            return "ascproduct-quote"
+        return "ascproduct-unknown"
+    }
+    if InStr(stateName, "SELECT_PRODUCT")
+        return "intel-select-product"
+    if InStr(stateName, "RAPPORT") || InStr(stateName, "GATHER")
+        return "intel-rapport"
+    if InStr(stateName, "CUSTOMER_SUMMARY")
+        return "customer-summary"
+    if InStr(stateName, "PRODUCT_OVERVIEW")
+        return "product-overview"
+    return "unknown"
+}
+
+AdvisorQuoteBuildResidentOperatorHealthArgs(routeFamily := "") {
+    return Map(
+        "command", "health",
+        "version", AdvisorQuoteResidentOperatorVersion(),
+        "buildHash", AdvisorQuoteResidentOperatorBuildHash(),
+        "__residentExpectedBuildHash", AdvisorQuoteResidentOperatorBuildHash(),
+        "__residentExpectedHost", "advisorpro",
+        "__residentExpectedRouteFamily", AdvisorQuoteJsMetricSafeToken(routeFamily, "unknown")
+    )
+}
+
+AdvisorQuoteBuildResidentHealthCheckJs(routeFamily := "") {
+    argLiteral := JsLiteral(AdvisorQuoteBuildResidentOperatorHealthArgs(routeFamily))
+    return "copy(String((() => { try { const h = (typeof globalThis !== 'undefined') ? globalThis : window; const r = h && h.__advisorQuoteResidentOperator; const pageUrl = String(location && location.href || ''); const route = pageUrl.includes('/apps/ASCPRODUCT/') ? 'ASCPRODUCT' : (pageUrl.toLowerCase().includes('/selectproduct') ? 'SELECT_PRODUCT' : (pageUrl.toLowerCase().includes('/rapport') ? 'RAPPORT' : 'UNKNOWN')); if (!r || typeof r.status !== 'function') return 'result=MISSING\nblockedReason=missing-resident-operator\nversion=\nbuildHash=\nurl=' + pageUrl + '\nrouteFamily=' + route + '\ndetectedState=UNKNOWN\nrequestCount=0'; return Object.entries(r.status(" argLiteral ")).map(([k,v]) => k + '=' + String(v == null ? '' : v).replace(/[\r\n]+/g, ' ')).join('\n'); } catch (e) { return 'result=ERROR\nblockedReason=js-error\nmessage=' + String(e && e.message || e); } })()))"
+}
+
+AdvisorQuoteResidentHealthCheck(routeFamily := "", step := "") {
+    logStep := Trim(String(step ?? "")) != "" ? step : AdvisorQuoteGetLastStep()
+    requestedRoute := AdvisorQuoteJsMetricSafeToken(routeFamily, "unknown")
+    AdvisorQuoteRecordResidentRouteMetric("health_attempt", requestedRoute, "", false)
+    AdvisorQuoteAppendLog("ADVISOR_RESIDENT_ROUTE_HEALTH_ATTEMPT", logStep, "routeFamily=" requestedRoute)
+
+    raw := AdvisorQuoteExecuteResidentTinyJs(AdvisorQuoteBuildResidentHealthCheckJs(requestedRoute), 1200)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    observedRoute := AdvisorQuoteResidentRouteFamily(logStep, status)
+    if (observedRoute = "")
+        observedRoute := requestedRoute
+    result := AdvisorQuoteStatusValue(status, "result")
+    fallbackReason := AdvisorQuoteResidentFallbackReason(status)
+
+    if (result = "OK") {
+        AdvisorQuoteRecordResidentRouteMetric("health_success", observedRoute, "", true)
+        AdvisorQuoteAppendLog("ADVISOR_RESIDENT_ROUTE_HEALTH_OK", logStep, "routeFamily=" observedRoute ", requestCount=" AdvisorQuoteStatusValue(status, "requestCount"))
+        return Map("ok", "1", "result", result, "routeFamily", observedRoute, "status", status, "fallbackReason", "")
+    }
+
+    AdvisorQuoteRecordResidentRouteMetric("health_fallback", observedRoute, fallbackReason, true)
+    eventName := (result = "MISSING") ? "ADVISOR_RESIDENT_ROUTE_HEALTH_MISSING" : "ADVISOR_RESIDENT_ROUTE_HEALTH_STALE"
+    AdvisorQuoteAppendLog(eventName, logStep, "routeFamily=" observedRoute ", result=" (result = "" ? "EMPTY" : result) ", fallbackReason=" fallbackReason)
+    return Map("ok", "0", "result", (result = "" ? "EMPTY" : result), "routeFamily", observedRoute, "status", status, "fallbackReason", fallbackReason)
+}
+
+AdvisorQuoteEnsureResidentForRoute(routeFamily := "", step := "") {
+    global advisorQuoteResidentOperatorBootstrapped, advisorQuoteResidentContextRouteFamily
+    logStep := Trim(String(step ?? "")) != "" ? step : AdvisorQuoteGetLastStep()
+    requestedRoute := AdvisorQuoteJsMetricSafeToken(routeFamily, AdvisorQuoteResidentRouteFamily(logStep))
+    if (requestedRoute = "")
+        requestedRoute := "unknown"
+
+    health := AdvisorQuoteResidentHealthCheck(requestedRoute, logStep)
+    observedRoute := AdvisorQuoteStatusValue(health, "routeFamily")
+    if (observedRoute = "")
+        observedRoute := requestedRoute
+
+    if (AdvisorQuoteStatusValue(health, "ok") = "1") {
+        advisorQuoteResidentOperatorBootstrapped := true
+        advisorQuoteResidentContextRouteFamily := observedRoute
+        AdvisorQuoteRecordResidentRouteMetric("route_reuse", observedRoute, "", true)
+        AdvisorQuoteAppendLog("ADVISOR_RESIDENT_ROUTE_REUSE", logStep, "routeFamily=" observedRoute)
+        return true
+    }
+
+    advisorQuoteResidentOperatorBootstrapped := false
+    AdvisorQuoteRecordResidentRouteMetric("route_bootstrap", observedRoute, AdvisorQuoteStatusValue(health, "fallbackReason"), false)
+    AdvisorQuoteAppendLog("ADVISOR_RESIDENT_ROUTE_BOOTSTRAP", logStep, "routeFamily=" observedRoute ", fallbackReason=" AdvisorQuoteStatusValue(health, "fallbackReason"))
+    ok := AdvisorQuoteEnsureResidentOperator(logStep)
+    if ok {
+        advisorQuoteResidentContextRouteFamily := observedRoute
+        AdvisorQuoteRecordResidentRouteMetric("route_bootstrap_success", observedRoute, "", true)
+    } else {
+        AdvisorQuoteRecordResidentRouteMetric("route_bootstrap_fallback", observedRoute, "bootstrap-failed", true)
+    }
+    return ok
+}
+
 AdvisorQuoteBuildResidentOperatorBootstrapArgs() {
     return Map(
         "command", "bootstrap",
@@ -290,7 +426,8 @@ AdvisorQuoteRunOpViaResidentTransport(op, args := Map(), state := "") {
         return AdvisorQuoteRunnerNotUsed(gateReason)
     }
 
-    if !AdvisorQuoteEnsureResidentOperator(step) {
+    routeFamily := AdvisorQuoteResidentRouteFamily(step)
+    if !AdvisorQuoteEnsureResidentForRoute(routeFamily, step) {
         AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, 0, "fallback", "bootstrap-failed", true)
         if (kind = "mutation")
             AdvisorQuoteRecordResidentMutationMetric(opName, args, "fallback", "bootstrap-failed", true)
@@ -308,6 +445,7 @@ AdvisorQuoteRunOpViaResidentTransport(op, args := Map(), state := "") {
     payloadLength := StrLen(js)
     start := A_TickCount
     AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "attempt", "", false)
+    AdvisorQuoteRecordResidentRouteMetric("tiny_attempt", routeFamily, "", false)
     if (kind = "mutation")
         AdvisorQuoteRecordResidentMutationMetric(opName, args, "attempt", "", false)
     AdvisorQuoteAppendLog(
@@ -322,6 +460,7 @@ AdvisorQuoteRunOpViaResidentTransport(op, args := Map(), state := "") {
 
     if AdvisorQuoteResidentPayloadValid(opName, raw) {
         AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "success", "", true)
+        AdvisorQuoteRecordResidentRouteMetric("tiny_success", routeFamily, "", false)
         if (kind = "mutation")
             AdvisorQuoteRecordResidentMutationMetric(opName, args, "success", "", true)
         AdvisorQuoteAppendLog(
@@ -350,6 +489,7 @@ AdvisorQuoteRunOpViaResidentTransport(op, args := Map(), state := "") {
     }
 
     AdvisorQuoteRecordResidentTinyCommandMetric(opName, args, payloadLength, "fallback", fallbackReason, true)
+    AdvisorQuoteRecordResidentRouteMetric("tiny_fallback", routeFamily, fallbackReason, false)
     if (kind = "mutation")
         AdvisorQuoteRecordResidentMutationMetric(opName, args, "fallback", fallbackReason, true)
     AdvisorQuoteAppendLog(

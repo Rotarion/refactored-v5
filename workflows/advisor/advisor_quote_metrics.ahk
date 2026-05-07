@@ -42,7 +42,14 @@ AdvisorQuoteResetJsMetricsCollector(writeNow := true) {
         "residentTinyPayloadLengthMax", 0,
         "residentMutationAttemptCount", 0,
         "residentMutationSuccessCount", 0,
-        "residentMutationFallbackCount", 0
+        "residentMutationFallbackCount", 0,
+        "residentHealthCheckAttemptCount", 0,
+        "residentHealthCheckSuccessCount", 0,
+        "residentHealthCheckFallbackCount", 0,
+        "residentBootstrapByRoute", Map(),
+        "residentTinyCommandByRoute", Map(),
+        "fullInjectionByRoute", Map(),
+        "residentContextRouteFamily", "unknown"
     )
     advisorQuoteJsMetricOps := Map()
     if writeNow
@@ -72,12 +79,22 @@ AdvisorQuoteEnsureJsMetricCounterFields(target) {
         "residentTinyPayloadLengthMax",
         "residentMutationAttemptCount",
         "residentMutationSuccessCount",
-        "residentMutationFallbackCount"
+        "residentMutationFallbackCount",
+        "residentHealthCheckAttemptCount",
+        "residentHealthCheckSuccessCount",
+        "residentHealthCheckFallbackCount"
     ]
     for _, key in keys {
         if !target.Has(key)
             target[key] := 0
     }
+    mapKeys := ["residentBootstrapByRoute", "residentTinyCommandByRoute", "fullInjectionByRoute"]
+    for _, key in mapKeys {
+        if !target.Has(key) || !IsObject(target[key])
+            target[key] := Map()
+    }
+    if !target.Has("residentContextRouteFamily")
+        target["residentContextRouteFamily"] := "unknown"
 }
 
 AdvisorQuoteEnsureJsMetricRecord(op, args) {
@@ -121,7 +138,10 @@ AdvisorQuoteEnsureJsMetricRecord(op, args) {
             "residentTinyPayloadLengthMax", 0,
             "residentMutationAttemptCount", 0,
             "residentMutationSuccessCount", 0,
-            "residentMutationFallbackCount", 0
+            "residentMutationFallbackCount", 0,
+            "residentHealthCheckAttemptCount", 0,
+            "residentHealthCheckSuccessCount", 0,
+            "residentHealthCheckFallbackCount", 0
         )
     }
     AdvisorQuoteEnsureJsMetricCounterFields(advisorQuoteJsMetricOps[key])
@@ -147,6 +167,7 @@ AdvisorQuoteRecordJsInjectionMetric(op, args, attempt, attempts, renderedLength,
         AdvisorQuoteMetricMax(record, "renderedLengthMax", length)
 
         if submitted {
+            AdvisorQuoteRecordResidentRouteMetric("full_injection", AdvisorQuoteResidentRouteFamily(AdvisorQuoteGetLastStep()), "", false)
             AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "submittedCount")
             AdvisorQuoteMetricIncrement(record, "submittedCount")
             AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "fullOperatorInjectionSubmittedCount")
@@ -291,6 +312,58 @@ AdvisorQuoteRecordResidentMutationMetric(op, args, outcome, fallbackReason := ""
     }
 }
 
+
+AdvisorQuoteMetricIncrementNested(target, key, childKey, amount := 1) {
+    if !IsObject(target)
+        return
+    safeChild := AdvisorQuoteJsMetricSafeToken(childKey, "unknown")
+    if !target.Has(key) || !IsObject(target[key])
+        target[key] := Map()
+    current := target[key].Has(safeChild) ? Integer(target[key][safeChild]) : 0
+    target[key][safeChild] := current + Integer(amount)
+}
+
+AdvisorQuoteRecordResidentRouteMetric(kind, routeFamily := "", fallbackReason := "", writeNow := true) {
+    global advisorQuoteJsMetrics
+    try {
+        AdvisorQuoteEnsureJsMetricsCollector()
+        eventKind := AdvisorQuoteJsMetricSafeToken(kind, "unknown")
+        route := AdvisorQuoteJsMetricSafeToken(routeFamily, "unknown")
+        advisorQuoteJsMetrics["residentContextRouteFamily"] := route
+        if (eventKind = "health_attempt") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentHealthCheckAttemptCount")
+        } else if (eventKind = "health_success") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentHealthCheckSuccessCount")
+        } else if (eventKind = "health_fallback") {
+            AdvisorQuoteMetricIncrement(advisorQuoteJsMetrics, "residentHealthCheckFallbackCount")
+        } else if (eventKind = "route_bootstrap" || eventKind = "route_bootstrap_success" || eventKind = "route_bootstrap_fallback") {
+            AdvisorQuoteMetricIncrementNested(advisorQuoteJsMetrics, "residentBootstrapByRoute", route)
+        } else if (eventKind = "tiny_attempt" || eventKind = "tiny_success" || eventKind = "tiny_fallback") {
+            AdvisorQuoteMetricIncrementNested(advisorQuoteJsMetrics, "residentTinyCommandByRoute", route)
+        } else if (eventKind = "full_injection") {
+            AdvisorQuoteMetricIncrementNested(advisorQuoteJsMetrics, "fullInjectionByRoute", route)
+        }
+        if writeNow
+            AdvisorQuoteWriteJsMetricsFiles()
+    } catch as err {
+    }
+}
+
+AdvisorQuoteMetricMapJson(mapValue) {
+    if !IsObject(mapValue)
+        return "{}"
+    json := "{"
+    index := 0
+    for key, value in mapValue {
+        index += 1
+        if (index > 1)
+            json .= ", "
+        json .= '"' AdvisorQuoteJsonEscape(AdvisorQuoteJsMetricSafeToken(key, "unknown")) '": ' Integer(value)
+    }
+    json .= "}"
+    return json
+}
+
 AdvisorQuoteMetricIncrement(target, key, amount := 1) {
     current := (IsObject(target) && target.Has(key)) ? Integer(target[key]) : 0
     target[key] := current + Integer(amount)
@@ -424,6 +497,13 @@ AdvisorQuoteBuildJsMetricTotalsJson() {
         . '"residentMutationAttemptCount": ' Integer(advisorQuoteJsMetrics["residentMutationAttemptCount"]) ", "
         . '"residentMutationSuccessCount": ' Integer(advisorQuoteJsMetrics["residentMutationSuccessCount"]) ", "
         . '"residentMutationFallbackCount": ' Integer(advisorQuoteJsMetrics["residentMutationFallbackCount"]) ", "
+        . '"residentHealthCheckAttemptCount": ' Integer(advisorQuoteJsMetrics["residentHealthCheckAttemptCount"]) ", "
+        . '"residentHealthCheckSuccessCount": ' Integer(advisorQuoteJsMetrics["residentHealthCheckSuccessCount"]) ", "
+        . '"residentHealthCheckFallbackCount": ' Integer(advisorQuoteJsMetrics["residentHealthCheckFallbackCount"]) ", "
+        . '"residentBootstrapByRoute": ' AdvisorQuoteMetricMapJson(advisorQuoteJsMetrics["residentBootstrapByRoute"]) ", "
+        . '"residentTinyCommandByRoute": ' AdvisorQuoteMetricMapJson(advisorQuoteJsMetrics["residentTinyCommandByRoute"]) ", "
+        . '"fullInjectionByRoute": ' AdvisorQuoteMetricMapJson(advisorQuoteJsMetrics["fullInjectionByRoute"]) ", "
+        . '"residentContextRouteFamily": "' AdvisorQuoteJsonEscape(AdvisorQuoteJsMetricSafeToken(advisorQuoteJsMetrics["residentContextRouteFamily"], "unknown")) '", '
         . '"opGroupCount": ' Integer(advisorQuoteJsMetricOps.Count) ", "
         . '"residentRunnerEnabled": ' (AdvisorQuoteResidentRunnerEnabled() ? "true" : "false") ", "
         . '"residentOperatorTransportEnabled": ' (AdvisorQuoteResidentTransportEnabled() ? "true" : "false") ", "
@@ -466,7 +546,10 @@ AdvisorQuoteBuildJsMetricRecordJson(record, indent := "") {
         . '"residentTinyPayloadLengthMax": ' Integer(record["residentTinyPayloadLengthMax"]) ", "
         . '"residentMutationAttemptCount": ' Integer(record["residentMutationAttemptCount"]) ", "
         . '"residentMutationSuccessCount": ' Integer(record["residentMutationSuccessCount"]) ", "
-        . '"residentMutationFallbackCount": ' Integer(record["residentMutationFallbackCount"])
+        . '"residentMutationFallbackCount": ' Integer(record["residentMutationFallbackCount"]) ", "
+        . '"residentHealthCheckAttemptCount": ' Integer(record["residentHealthCheckAttemptCount"]) ", "
+        . '"residentHealthCheckSuccessCount": ' Integer(record["residentHealthCheckSuccessCount"]) ", "
+        . '"residentHealthCheckFallbackCount": ' Integer(record["residentHealthCheckFallbackCount"])
         . "}"
 }
 
@@ -530,6 +613,10 @@ AdvisorQuoteLogJsMetricsSummary(reason := "run-end") {
                 . ", residentMutationAttempts=" Integer(advisorQuoteJsMetrics["residentMutationAttemptCount"])
                 . ", residentMutationSuccesses=" Integer(advisorQuoteJsMetrics["residentMutationSuccessCount"])
                 . ", residentMutationFallbacks=" Integer(advisorQuoteJsMetrics["residentMutationFallbackCount"])
+                . ", residentHealthAttempts=" Integer(advisorQuoteJsMetrics["residentHealthCheckAttemptCount"])
+                . ", residentHealthSuccesses=" Integer(advisorQuoteJsMetrics["residentHealthCheckSuccessCount"])
+                . ", residentHealthFallbacks=" Integer(advisorQuoteJsMetrics["residentHealthCheckFallbackCount"])
+                . ", residentContextRouteFamily=" AdvisorQuoteJsMetricSafeToken(advisorQuoteJsMetrics["residentContextRouteFamily"], "unknown")
                 . ", residentRunnerEnabled=" (AdvisorQuoteResidentRunnerEnabled() ? "1" : "0")
                 . ", residentOperatorTransportEnabled=" (AdvisorQuoteResidentTransportEnabled() ? "1" : "0")
                 . ", residentMutationEnabled=" (AdvisorQuoteResidentMutationTransportEnabled() ? "1" : "0")
