@@ -34,6 +34,8 @@ for _, arg in A_Args {
 #Include ..\workflows\advisor\advisor_quote_customer_summary.ahk
 #Include ..\workflows\advisor\advisor_quote_product_overview.ahk
 #Include ..\workflows\advisor\advisor_quote_consumer_reports.ahk
+#Include ..\workflows\advisor\advisor_quote_rapport.ahk
+#Include ..\workflows\advisor\advisor_quote_rapport_vehicles.ahk
 #Include ..\workflows\advisor_quote_workflow.ahk
 
 if advisorQuoteHelperResidentTransportOnly {
