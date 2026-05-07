@@ -2008,10 +2008,19 @@ function testGenericOpsContract() {
   assert.strictEqual(runOperator('click_create_quotes_order_reports', { selectors: BASE_SELECTORS }, new FakeDocument([createButton('consentModalTrigger', 'Create Quotes', { disabled: true })])), 'DISABLED');
   assert.strictEqual(runOperator('click_create_quotes_order_reports', { selectors: BASE_SELECTORS }, new FakeDocument([createButton('consentModalTrigger', 'Create Quotes', { clickThrows: true })])), 'CLICK_FAILED');
 
-  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, gatherDataDoc()), 'OK');
+  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, startQuotingScopedAddProductDoc().doc), 'OK');
   assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, new FakeDocument()), 'NO_BUTTON');
-  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, new FakeDocument([createButton('quotesButton', 'Add Product', { disabled: true })])), 'DISABLED');
-  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, new FakeDocument([createButton('quotesButton', 'Add Product', { clickThrows: true })])), 'CLICK_FAILED');
+  const disabledStartAddDoc = startQuotingScopedAddProductDoc();
+  disabledStartAddDoc.scoped.disabled = true;
+  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, disabledStartAddDoc.doc), 'DISABLED');
+  const throwStartAddDoc = startQuotingScopedAddProductDoc();
+  throwStartAddDoc.scoped.clickThrows = true;
+  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, throwStartAddDoc.doc), 'CLICK_FAILED');
+  const uncheckedStartAddDoc = startQuotingScopedAddProductDoc({ autoChecked: false });
+  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, uncheckedStartAddDoc.doc), 'AUTO_NOT_SELECTED');
+  const broadSidebarOnlyAddProduct = createButton('addProduct', 'Add Product');
+  assert.strictEqual(runOperator('click_start_quoting_add_product', { selectors: BASE_SELECTORS }, new FakeDocument([broadSidebarOnlyAddProduct])), 'NO_BUTTON');
+  assert.strictEqual(broadSidebarOnlyAddProduct.clickCalls, 0);
 
   const clickTile = createProductOverviewTile();
   assert.strictEqual(runOperator('click_product_overview_tile', baseArgs(), productOverviewDoc([clickTile.outer]), 'https://advisorpro.allstate.com/#/apps/intel/102/overview'), 'OK');
@@ -2427,13 +2436,13 @@ function broadPotentialVehicleContainerDoc() {
   return { doc: pageDoc('Gather Data', [section]), section };
 }
 
-function startQuotingScopedAddProductDoc() {
+function startQuotingScopedAddProductDoc({ autoChecked = true } = {}) {
   const sidebar = createButton('addProduct', 'Add Product');
   const scoped = createButton('start-add-product', 'Add product');
   const section = new FakeElement('section', { text: 'Start Quoting Auto Add product' });
   section.appendChild(createCheckbox('ConsumerReports.Auto.Product-intel#102', {
     name: 'ConsumerReports.Auto.Product',
-    checked: true
+    checked: autoChecked
   }));
   section.appendChild(scoped);
   return { doc: pageDoc('Gather Data', [sidebar, section]), sidebar, scoped };
@@ -3078,6 +3087,18 @@ function testVehicleContracts() {
   assert.strictEqual(staleUnsafeStatus.result, 'UNSAFE');
   assert.strictEqual(staleUnsafeStatus.safeToCancel, '0');
   assert.strictEqual(staleUnsafeStatus.reason, 'expected-vehicles-not-satisfied');
+  const staleScopedMixedSectionDoc = confirmedVehicleCardsDoc([
+    '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
+  ]);
+  const staleScopedMixedRow = appendStaleVehicleRow(staleScopedMixedSectionDoc);
+  staleScopedMixedRow._text = 'Cars and Trucks CONFIRMED VEHICLES 2010 Nissan CUBE Edit Remove CONFIRMED POTENTIAL VEHICLES 2021 Mazda CX-30 3MVDMBAY1MM306549 Confirm Remove UNKNOWN VEHICLES Motorcycle/ORV Add Car or Truck INCOMPLETE Car/Truck Vehicle Type Year VIN Manufacturer Model Sub-Model';
+  const staleScopedMixedStatus = assertKeyBlock(runOperator('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleScopedMixedSectionDoc), ['result', 'safeToCancel', 'unsafeContext', 'reason']);
+  assert.strictEqual(staleScopedMixedStatus.result, 'FOUND');
+  assert.strictEqual(staleScopedMixedStatus.safeToCancel, '1');
+  assert.strictEqual(staleScopedMixedStatus.unsafeContext, '1');
+  assert.strictEqual(staleScopedMixedStatus.reason, 'safe');
   const staleDecoyDoc = confirmedVehicleCardsDoc([
     '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
   ]);

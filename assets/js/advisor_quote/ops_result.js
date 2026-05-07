@@ -2597,11 +2597,11 @@ copy(String((() => {
   const findStartQuotingAddProductLink = (source = {}) => {
     const selectors = getSelectorArgs(source);
     const section = findStartQuotingSection(source);
+    if (!section) return null;
     const stable = document.getElementById(selectors.quoteBlockAddProductId || 'quotesButton');
-    if (stable && visible(stable) && (!section || section.contains(stable)))
+    if (stable && visible(stable) && section.contains(stable))
       return stable;
-    const root = section || document;
-    return Array.from(root.querySelectorAll('button,a,[role=button]'))
+    return Array.from(section.querySelectorAll('button,a,[role=button]'))
       .filter(visible)
       .find((node) => startsWithTextToken(getText(node), 'Add product')) || null;
   };
@@ -3446,8 +3446,8 @@ copy(String((() => {
       const hasAdd = actions.some((action) => answerTextMatches([getText(action), safe(action.value)].join(' '), 'Add'));
       const looksLikeAddRow = text.includes('add car or truck') || text.includes('vehicle type') || hasAdd || controls.length >= 4;
       const broadVehicleSection = text.includes('confirmed vehicles') || text.includes('potential vehicles') || text.includes('start quoting');
+      if (looksLikeAddRow && hasCancel) return current;
       if (looksLikeAddRow && !broadVehicleSection) {
-        if (hasCancel) return current;
         if (!fallback) fallback = current;
       }
     }
@@ -3496,7 +3496,7 @@ copy(String((() => {
       if (!state.rowOpen) continue;
       const container = findVehicleRowContainer(row);
       const rowText = compact(getText(container), 220);
-      const lowerText = normLower(rowText);
+      const lowerText = normLower(getText(container));
       const cancelButton = rowScopedButton(container, 'Cancel');
       const addButtonState = rowScopedButtonState(container, 'Add');
       const addButton = addButtonState.target;
@@ -3507,15 +3507,23 @@ copy(String((() => {
       const subModelValidOptions = gatherAddRowSubModelValidOptions(row.subModel);
       const unsafeContext = lowerText.includes('confirmed vehicles')
         || lowerText.includes('potential vehicles')
+        || lowerText.includes('unknown vehicles')
+        || lowerText.includes('motorcycle')
+        || lowerText.includes('orv')
         || lowerText.includes('edit remove confirmed')
         || lowerText.includes('confirm remove');
       const rowIncomplete = state.rowIncomplete;
       const meaningfulVin = normalizeVehicleVin(vinValue).length >= 6;
+      const rowLooksLikeAddCarTruck = lowerText.includes('add car or truck');
+      const scopedEmptyAddCarTruckRecovery = rowLooksLikeAddCarTruck
+        && rowIncomplete
+        && cancelButton
+        && !meaningfulVin;
       let reason = 'safe';
       if (!allExpectedSatisfied) reason = 'expected-vehicles-not-satisfied';
       else if (!rowIncomplete) reason = 'row-not-incomplete';
       else if (!container) reason = 'row-container-not-found';
-      else if (unsafeContext) reason = 'unsafe-vehicle-section-context';
+      else if (unsafeContext && !scopedEmptyAddCarTruckRecovery) reason = 'unsafe-vehicle-section-context';
       else if (meaningfulVin) reason = 'vin-present';
       else if (!cancelButton) reason = 'cancel-button-not-scoped';
       const safeToCancel = reason === 'safe';
@@ -7332,6 +7340,9 @@ copy(String((() => {
     }
 
     case 'click_start_quoting_add_product': {
+      const status = buildStartQuotingStatus(args);
+      if (status.startQuotingSectionPresent !== '1') return 'NO_BUTTON';
+      if (status.autoProductPresent !== '1' || status.autoProductSelected !== '1') return 'AUTO_NOT_SELECTED';
       const btn = findStartQuotingAddProductLink(args);
       if (!btn) return 'NO_BUTTON';
       if (btn.disabled) return 'DISABLED';

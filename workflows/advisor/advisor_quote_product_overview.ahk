@@ -131,7 +131,8 @@ AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, beforeStatus, handoffPath
         return false
     }
 
-    if !AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &afterStatus, &afterReason) {
+    handoffReachedSelectProduct := false
+    if !AdvisorQuoteWaitForStartQuotingScopedHandoffReady(db, &afterStatus, &afterReason, &handoffReachedSelectProduct) {
         failureReason := "START_QUOTING_CREATE_QUOTES_DISABLED_AFTER_SCOPED_ADD_PRODUCT: " afterReason
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "start-quoting-create-quotes-still-disabled")
         AdvisorQuoteAppendLog(
@@ -141,6 +142,7 @@ AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, beforeStatus, handoffPath
                 . ", startQuotingScopedAddProductClicked=1"
                 . ", startQuotingScopedAddProductResult=OK"
                 . ", startQuotingCreateQuotesEnabledAfter=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(afterStatus) ? "1" : "0")
+                . ", handoffReachedSelectProduct=" (handoffReachedSelectProduct ? "1" : "0")
                 . ", failureReason=" failureReason
                 . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
                 . ", scan=" failureScanPath
@@ -154,10 +156,43 @@ AdvisorQuoteRunScopedStartQuotingAddProductHandoff(db, beforeStatus, handoffPath
         "startQuotingHandoffPath=" handoffPath
             . ", startQuotingScopedAddProductClicked=1"
             . ", startQuotingScopedAddProductResult=OK"
-            . ", startQuotingCreateQuotesEnabledAfter=1"
+            . ", startQuotingCreateQuotesEnabledAfter=" (AdvisorQuoteStartQuotingCreateQuotesEnabled(afterStatus) ? "1" : "0")
+            . ", handoffReachedSelectProduct=" (handoffReachedSelectProduct ? "1" : "0")
             . ", statusAfter=" AdvisorQuoteBuildGatherStartQuotingStatusDetail(afterStatus)
     )
     return true
+}
+
+AdvisorQuoteWaitForStartQuotingScopedHandoffReady(db, &statusOut, &reasonOut := "", &handoffReachedSelectProduct := false) {
+    start := A_TickCount
+    timeoutMs := db["timeouts"]["transitionMs"]
+    pollMs := db["timeouts"]["pollMs"]
+    statusOut := Map()
+    reasonOut := ""
+    handoffReachedSelectProduct := false
+    while ((A_TickCount - start) < timeoutMs) {
+        if StopRequested() {
+            reasonOut := "Stopped manually."
+            return false
+        }
+        if AdvisorQuoteIsOnSelectProductPage(db) {
+            handoffReachedSelectProduct := true
+            reasonOut := "Scoped Start Quoting Add Product transitioned to Select Product."
+            return true
+        }
+        statusOut := AdvisorQuoteGetGatherStartQuotingStatus(db)
+        AdvisorQuoteAppendLog(
+            "GATHER_START_QUOTING_STATUS",
+            AdvisorQuoteGetLastStep(),
+            "phase=after-scoped-add-product, " AdvisorQuoteBuildGatherStartQuotingStatusDetail(statusOut)
+        )
+        if AdvisorQuoteGatherStartQuotingStatusValid(statusOut, db, &reasonOut)
+            return true
+        Sleep(pollMs)
+    }
+    if (reasonOut = "")
+        reasonOut := "Scoped Start Quoting Add product did not enable Create Quotes or transition to Select Product."
+    return false
 }
 
 AdvisorQuoteWaitForStartQuotingCreateQuotesEnabled(db, &statusOut, &reasonOut := "") {
