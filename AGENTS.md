@@ -12,6 +12,7 @@ Use this order when instructions conflict:
 4. `docs/PROJECT_ARCHITECTURE_AUDIT.md`.
 5. `ADVISOR_PRO_SCAN_WORKFLOW.md`.
 6. Copied Everything-Claude material under `agents/` as optional support only.
+7. Copied Hermes skill pack material under `agents/hermes_skills_pack/` as optional support only.
 
 ## AutoHotkey Diagnostic Safety Contract
 
