@@ -2493,6 +2493,69 @@ copy(String((() => {
         .filter(visible)
         .find((el) => /continue/i.test(safe(el.innerText || el.textContent || el.value)));
   };
+  const selectProductControlSelected = (node) => {
+    if (!node) return false;
+    if (/^(INPUT|OPTION)$/i.test(safe(node.tagName)) && 'checked' in node && node.checked) return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-checked')) === 'true') return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-pressed')) === 'true') return true;
+    if (safe(node.getAttribute && node.getAttribute('aria-selected')) === 'true') return true;
+    if (/\b(selected|active|checked|current|chosen|pressed)\b/i.test(safe(node.className))) return true;
+    if (/^(selected|active|checked|on|true)$/i.test(safe(node.getAttribute && node.getAttribute('data-state')))) return true;
+    const checkedDescendant = node.querySelector && node.querySelector('input:checked,[aria-checked="true"],[aria-selected="true"],[aria-pressed="true"]');
+    return !!checkedDescendant;
+  };
+  const readSelectProductInsuredState = (questionText) => {
+    const namedRadios = Array.from(document.querySelectorAll('input[type=radio],input'))
+      .filter((el) => /CustomerCurrentInsured|currentInsured|currentlyInsured/i.test(`${safe(el.name)} ${safe(el.id)}`));
+    const yesRadio = namedRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'YES')) || null;
+    const noRadio = namedRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'NO')) || null;
+    const questionContainers = findQuestionContainers(questionText);
+    let yesControl = yesRadio;
+    let noControl = noRadio;
+    let detectionMethod = namedRadios.length ? 'name-radio' : '';
+    let controlType = namedRadios.length ? 'radio' : '';
+    for (const container of questionContainers) {
+      const nodes = Array.from(container.querySelectorAll('input[type=radio],button,a,[role=button],[role=radio],label,span,div'))
+        .filter((node) => visible(node) && node !== container)
+        .map((node) => ({ node, text: getText(node) || safe(node.value) || safe(node.getAttribute && node.getAttribute('aria-label')) }))
+        .filter(({ text }) => text && !isCompoundYesNoText(text) && text.length <= 32);
+      if (!yesControl) {
+        const yes = nodes.find(({ text }) => answerTextMatches(text, 'Yes'));
+        if (yes) yesControl = yes.node;
+      }
+      if (!noControl) {
+        const no = nodes.find(({ text }) => answerTextMatches(text, 'No'));
+        if (no) noControl = no.node;
+      }
+      if (yesControl || noControl) {
+        if (!detectionMethod) detectionMethod = 'question-scoped-semantic';
+        if (!controlType) controlType = (yesControl && /INPUT/i.test(safe(yesControl.tagName))) || (noControl && /INPUT/i.test(safe(noControl.tagName))) ? 'radio' : 'custom';
+        break;
+      }
+    }
+    const body = bodyText();
+    const questionPresent = body.includes(lower(questionText)) || namedRadios.length > 0 || questionContainers.length > 0;
+    const yesSelected = selectProductControlSelected(yesControl);
+    const noSelected = selectProductControlSelected(noControl);
+    const value = yesSelected ? 'YES' : (noSelected ? 'NO' : '');
+    const alertRequired = body.includes(lower(questionText)) && body.includes('this is required');
+    const required = questionPresent && (alertRequired || true);
+    return {
+      questionPresent,
+      yesControl,
+      noControl,
+      yesPresent: !!yesControl,
+      noPresent: !!noControl,
+      yesSelected,
+      noSelected,
+      answered: yesSelected || noSelected,
+      value,
+      required,
+      controlType: controlType || (questionPresent ? 'text' : ''),
+      detectionMethod: detectionMethod || (questionPresent ? 'question-text' : ''),
+      alertRequired
+    };
+  };
   const selectProductMissing = (status) => {
     const missing = [];
     if (status.ratingStatePresent !== '1') missing.push('ratingState');
@@ -2501,7 +2564,7 @@ copy(String((() => {
     else if (status.autoSelected !== '1') missing.push('autoProduct');
     if (status.effectiveDatePresent === '1' && status.effectiveDateFilled !== '1') missing.push('effectiveDate');
     if (status.currentAddressPresent === '1' && status.currentAddressSelected !== '1') missing.push('currentAddress');
-    if (status.insuredQuestionPresent === '1' && status.insuredYesSelected !== '1' && status.insuredNoSelected !== '1') missing.push('currentlyInsured');
+    if (status.insuredQuestionRequired === '1' && status.insuredQuestionAnswered !== '1') missing.push('currentlyInsured');
     if (status.continuePresent !== '1') missing.push('continue');
     else if (status.continueEnabled !== '1') missing.push('continueEnabled');
     return missing;
@@ -2514,18 +2577,9 @@ copy(String((() => {
     const continueBtn = findSelectProductContinueButton(source);
     const ratingState = readSelectState(ratingSelect);
     const product = readSelectState(productSelect);
-    const currentInsuredByName = readRadioGroupStateByName('SelectProduct.CustomerCurrentInsured');
-    const semanticCurrentInsured = readSemanticAnswerState(questionText);
-    const currentInsured = currentInsuredByName.selected
-      ? { value: currentInsuredByName.label || currentInsuredByName.value, selected: true, source: currentInsuredByName.source }
-      : semanticCurrentInsured;
-    const insuredRadios = Array.from(document.querySelectorAll('input[type=radio],input'))
-      .filter((el) => /CustomerCurrentInsured|currentInsured|currentlyInsured/i.test(`${safe(el.name)} ${safe(el.id)}`));
-    const yesRadio = insuredRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'YES')) || null;
-    const noRadio = insuredRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'NO')) || null;
-    const body = bodyText();
-    const insuredQuestionPresent = body.includes(lower(questionText)) || insuredRadios.length > 0;
-    const currentInsuredAlert = body.includes(lower(questionText)) && body.includes('this is required');
+    const insuredState = readSelectProductInsuredState(questionText);
+    const currentInsured = { value: insuredState.value, selected: insuredState.answered, source: insuredState.detectionMethod };
+    const currentInsuredAlert = insuredState.alertRequired;
     const ownOrRentByName = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
     const effectiveDate = findEffectiveDateInput();
     const currentAddress = readCurrentAddressState();
@@ -2545,11 +2599,15 @@ copy(String((() => {
       effectiveDateFilled: effectiveDate && safe(effectiveDate.value).trim() ? '1' : '0',
       currentAddressPresent: currentAddress.present ? '1' : '0',
       currentAddressSelected: currentAddress.selected ? '1' : '0',
-      insuredQuestionPresent: insuredQuestionPresent ? '1' : '0',
-      insuredYesPresent: yesRadio ? '1' : '0',
-      insuredNoPresent: noRadio ? '1' : '0',
-      insuredYesSelected: yesRadio && (yesRadio.checked || isSelectedNode(yesRadio)) ? '1' : '0',
-      insuredNoSelected: noRadio && (noRadio.checked || isSelectedNode(noRadio)) ? '1' : '0',
+      insuredQuestionPresent: insuredState.questionPresent ? '1' : '0',
+      insuredYesPresent: insuredState.yesPresent ? '1' : '0',
+      insuredNoPresent: insuredState.noPresent ? '1' : '0',
+      insuredYesSelected: insuredState.yesSelected ? '1' : '0',
+      insuredNoSelected: insuredState.noSelected ? '1' : '0',
+      insuredQuestionAnswered: insuredState.answered ? '1' : '0',
+      insuredQuestionRequired: insuredState.required ? '1' : '0',
+      insuredControlType: insuredState.controlType,
+      insuredDetectionMethod: insuredState.detectionMethod,
       currentInsuredValue: currentInsured.value,
       currentInsuredSelected: currentInsured.selected ? '1' : '0',
       currentInsuredSource: currentInsured.source,
@@ -2565,7 +2623,7 @@ copy(String((() => {
     const missing = selectProductMissing(status);
     status.missing = missing.join('|');
     if (status.routeFamily !== 'intel-select-product') status.result = 'NOT_SELECT_PRODUCT';
-    else if (status.insuredQuestionPresent === '1' && status.insuredYesSelected !== '1' && status.insuredNoSelected !== '1') status.result = 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED';
+    else if (status.insuredQuestionRequired === '1' && status.insuredQuestionAnswered !== '1') status.result = 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED';
     else if (status.continuePresent === '1' && status.continueEnabled !== '1') status.result = 'SELECT_PRODUCT_CONTINUE_DISABLED';
     else if (missing.length) status.result = 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING';
     else status.result = 'READY';
@@ -6843,7 +6901,7 @@ copy(String((() => {
       let currentInsuredSet = 'SKIP';
       let currentInsuredMethod = 'not-requested';
       const beforeStatus = buildSelectProductStatus(args);
-      if (safe(args.currentInsured) && beforeStatus.insuredQuestionPresent === '1' && beforeStatus.insuredYesSelected !== '1' && beforeStatus.insuredNoSelected !== '1') {
+      if (safe(args.currentInsured) && beforeStatus.insuredQuestionRequired === '1' && beforeStatus.insuredQuestionAnswered !== '1') {
         const radioResult = setRadioByName('SelectProduct.CustomerCurrentInsured', args.currentInsured);
         currentInsuredSet = radioResult.ok ? '1' : '0';
         currentInsuredMethod = radioResult.method;
@@ -6851,7 +6909,7 @@ copy(String((() => {
           const semanticTarget = findSemanticAnswerTarget(questionText, answerText);
           if (semanticTarget) { currentInsuredSet = clickCenterEl(semanticTarget) ? '1' : '0'; currentInsuredMethod = 'semantic-center'; }
         }
-      } else if (beforeStatus.insuredYesSelected === '1' || beforeStatus.insuredNoSelected === '1') {
+      } else if (beforeStatus.insuredQuestionAnswered === '1') {
         currentInsuredSet = '1';
         currentInsuredMethod = 'already-selected';
       }
@@ -6892,7 +6950,7 @@ copy(String((() => {
     case 'click_select_product_continue': {
       const status = buildSelectProductStatus(args);
       const continueBtn = findSelectProductContinueButton(args);
-      if (status.result !== 'READY') return lineResult({ result: status.result === 'NOT_SELECT_PRODUCT' ? 'SELECT_PRODUCT_FALLBACK_NOT_READY' : status.result, clicked: '0', continueEnabled: status.continueEnabled, missing: status.missing });
+      if (status.result !== 'READY') return lineResult({ ...status, result: status.result === 'NOT_SELECT_PRODUCT' ? 'SELECT_PRODUCT_FALLBACK_NOT_READY' : status.result, clicked: '0', continueEnabled: status.continueEnabled, missing: status.missing });
       if (!continueBtn) return lineResult({ result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING', clicked: '0', continueEnabled: '0', missing: 'continue' });
       if (isDisabledLike(continueBtn)) return lineResult({ result: 'SELECT_PRODUCT_CONTINUE_DISABLED', clicked: '0', continueEnabled: '0', missing: 'continueEnabled' });
       const clicked = clickCenterEl(continueBtn);

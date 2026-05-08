@@ -629,6 +629,55 @@ function selectProductDoc(extraNodes = []) {
   ]);
 }
 
+function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false, yesClickFails = false, includeEffectiveDate = true, includeCurrentAddress = true } = {}) {
+  const yesButton = createButton('custom-currently-insured-yes', 'Yes', {
+    className: yesSelected ? 'mesh-option selected' : 'mesh-option',
+    attributes: { role: 'button', 'aria-pressed': yesSelected ? 'true' : 'false' },
+    clickThrows: yesClickFails,
+    onClick: (el) => {
+      el.className = 'mesh-option selected';
+      el.setAttribute('aria-pressed', 'true');
+      const no = el.parentElement && el.parentElement.querySelector('#custom-currently-insured-no');
+      if (no) {
+        no.className = 'mesh-option';
+        no.setAttribute('aria-pressed', 'false');
+      }
+    }
+  });
+  const noButton = createButton('custom-currently-insured-no', 'No', {
+    className: noSelected ? 'mesh-option selected' : 'mesh-option',
+    attributes: { role: 'button', 'aria-pressed': noSelected ? 'true' : 'false' },
+    onClick: (el) => {
+      el.className = 'mesh-option selected';
+      el.setAttribute('aria-pressed', 'true');
+      const yes = el.parentElement && el.parentElement.querySelector('#custom-currently-insured-yes');
+      if (yes) {
+        yes.className = 'mesh-option';
+        yes.setAttribute('aria-pressed', 'false');
+      }
+    }
+  });
+  const question = new FakeElement('section', { className: 'mesh-question' });
+  question.appendChild(textNode('Is the customer currently insured?', 'span'));
+  question.appendChild(yesButton);
+  question.appendChild(noButton);
+  const nodes = [
+    createSelect('SelectProduct.Product', [
+      { value: '', text: 'Select One' },
+      { value: 'Auto', text: 'Auto', selected: true }
+    ]),
+    createSelect('SelectProduct.RatingState', [
+      { value: '', text: 'Select One' },
+      { value: 'FL', text: 'Florida', selected: true }
+    ]),
+    question,
+    createButton('selectProductContinue', 'Continue')
+  ];
+  if (includeEffectiveDate) nodes.push(createInput('SelectProduct.EffectiveDate', '05/08/2026'));
+  if (includeCurrentAddress) nodes.push(createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }));
+  return pageDoc('Select Product Is the customer currently insured? Yes No', nodes);
+}
+
 function gatherDataDoc(extraNodes = []) {
   return pageDoc('Gather Data add car vehicle details Start Quoting Auto Create Quotes & Order Reports', [
     ...createGatherDefaultsNodes(true, true),
@@ -1947,6 +1996,67 @@ function testReturnShapeContracts() {
   ]);
   assert.strictEqual(insuredRequiredStatus.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
   assert.ok(insuredRequiredStatus.missing.includes('currentlyInsured'));
+
+
+  const customInsuredDoc = selectProductCustomInsuredDoc();
+  const customInsuredStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), customInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'insuredQuestionPresent', 'insuredYesPresent', 'insuredNoPresent', 'insuredQuestionAnswered',
+    'insuredQuestionRequired', 'insuredControlType', 'insuredDetectionMethod', 'missing'
+  ]);
+  assert.strictEqual(customInsuredStatus.insuredQuestionPresent, '1');
+  assert.strictEqual(customInsuredStatus.insuredYesPresent, '1');
+  assert.strictEqual(customInsuredStatus.insuredNoPresent, '1');
+  assert.strictEqual(customInsuredStatus.insuredQuestionRequired, '1');
+  assert.strictEqual(customInsuredStatus.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
+
+  const defaultedCustomInsuredDoc = selectProductCustomInsuredDoc();
+  const defaultedCustomInsured = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
+    ratingState: 'FL',
+    productValue: 'Auto',
+    currentInsured: 'YES',
+    ownOrRent: 'OWN'
+  }), defaultedCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'currentInsuredSet', 'currentInsuredMethod', 'insuredYesSelected', 'insuredQuestionAnswered', 'insuredControlType', 'insuredDetectionMethod', 'missing'
+  ]);
+  assert.strictEqual(defaultedCustomInsured.result, 'OK');
+  assert.strictEqual(defaultedCustomInsured.currentInsuredSet, '1');
+  assert.strictEqual(defaultedCustomInsured.insuredYesSelected, '1');
+  assert.strictEqual(defaultedCustomInsured.insuredQuestionAnswered, '1');
+  assert.strictEqual(defaultedCustomInsuredDoc.getElementById('custom-currently-insured-yes').clickCalls, 1);
+
+  const alreadyAnsweredCustomInsuredDoc = selectProductCustomInsuredDoc({ yesSelected: true });
+  const alreadyAnsweredCustomInsured = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
+    ratingState: 'FL',
+    productValue: 'Auto',
+    currentInsured: 'YES',
+    ownOrRent: 'OWN'
+  }), alreadyAnsweredCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'currentInsuredSet', 'currentInsuredMethod', 'insuredYesSelected', 'insuredQuestionAnswered'
+  ]);
+  assert.strictEqual(alreadyAnsweredCustomInsured.result, 'OK');
+  assert.strictEqual(alreadyAnsweredCustomInsured.currentInsuredMethod, 'already-selected');
+  assert.strictEqual(alreadyAnsweredCustomInsuredDoc.getElementById('custom-currently-insured-yes').clickCalls, 0);
+
+  const readyCustomInsuredDoc = selectProductCustomInsuredDoc({ yesSelected: true });
+  const readyCustomClick = assertKeyBlock(runOperator('click_select_product_continue', baseArgs(), readyCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'clicked', 'continueEnabled', 'missing'
+  ]);
+  assert.strictEqual(readyCustomClick.result, 'OK');
+  assert.strictEqual(readyCustomClick.clicked, '1');
+  assert.strictEqual(readyCustomInsuredDoc.getElementById('selectProductContinue').clickCalls, 1);
+
+  const failedDefaultCustomInsuredDoc = selectProductCustomInsuredDoc({ yesClickFails: true });
+  const failedDefaultCustomInsured = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
+    ratingState: 'FL',
+    productValue: 'Auto',
+    currentInsured: 'YES',
+    ownOrRent: 'OWN'
+  }), failedDefaultCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'currentInsuredSet', 'insuredQuestionAnswered', 'missing'
+  ]);
+  assert.strictEqual(failedDefaultCustomInsured.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
+  assert.strictEqual(failedDefaultCustomInsured.currentInsuredSet, '0');
+  assert.ok(failedDefaultCustomInsured.missing.includes('currentlyInsured'));
 
   const participant = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',
