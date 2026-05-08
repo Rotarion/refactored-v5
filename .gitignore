@@ -35,6 +35,9 @@ conversations_raw_*.json
 # Logs / temp
 logs/
 *.log
+advisor_scan_latest.json
+advisor_js_injection_metrics_latest.json
+run_state.json
 *.tmp
 *.bak
 *.old
@@ -59,4 +62,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-agents/
+# Keep copied agent packs ignored by default, but allow the Hermes skill pack requested for this repo.
+agents/*
+!agents/hermes_skills_pack/
+!agents/hermes_skills_pack/**

@@ -1,0 +1,106 @@
+{
+  "pack_name": "Hermes Skills Pack",
+  "created": "2026-05-07",
+  "purpose": "Skill and instruction documents for a personalized operator-agent focused on insurance sales automation, AHK/browser workflows, sales intelligence, compliance, and backend architecture.",
+  "recommended_install_order": [
+    "HERMES_CUSTOM_INSTRUCTIONS_COPY_PASTE.txt",
+    "HERMES_MEMORY_SEED.md",
+    "AGENTS.md",
+    "skills/*/SKILL.md",
+    "templates/*.md"
+  ],
+  "skills": [
+    {
+      "order": 1,
+      "slug": "hermes-state-machine-workflow",
+      "name": "Hermes State-Machine Workflow Orchestrator",
+      "description": "Use when diagnosing, designing, or stabilizing multi-step workflows, quote flows, route transitions, UI state, recovery paths, or automation sequences.",
+      "path": "skills/hermes-state-machine-workflow/SKILL.md"
+    },
+    {
+      "order": 2,
+      "slug": "hermes-dom-react-automation",
+      "name": "Hermes DOM and React Automation Diagnostician",
+      "description": "Use when browser automation is brittle because of selectors, React controlled components, hydration timing, disabled fields, synthetic events, iframes, shadow DOM, or UI enablement problems.",
+      "path": "skills/hermes-dom-react-automation/SKILL.md"
+    },
+    {
+      "order": 3,
+      "slug": "hermes-reliability-observability",
+      "name": "Hermes Reliability and Observability Engineer",
+      "description": "Use when analyzing failures, logs, smoke tests, flaky automation, scan bundles, regressions, timing issues, or production readiness.",
+      "path": "skills/hermes-reliability-observability/SKILL.md"
+    },
+    {
+      "order": 4,
+      "slug": "hermes-prompt-to-code-architect",
+      "name": "Hermes Prompt-to-Code Architect",
+      "description": "Use when turning an idea into a Codex, Claude Code, or developer task with clear scope, contracts, tests, and rollback plan.",
+      "path": "skills/hermes-prompt-to-code-architect/SKILL.md"
+    },
+    {
+      "order": 5,
+      "slug": "hermes-sales-intelligence",
+      "name": "Hermes Sales Intelligence and Follow-Up Strategist",
+      "description": "Use when handling leads, objections, follow-ups, bilingual outreach, call prep, close probability, ghosting, pricing sensitivity, or next-best-action decisions.",
+      "path": "skills/hermes-sales-intelligence/SKILL.md"
+    },
+    {
+      "order": 6,
+      "slug": "hermes-insurance-quote-ops",
+      "name": "Hermes Insurance Quote Operations Specialist",
+      "description": "Use when organizing quoted leads, quote data, bundle potential, bind readiness, docs/payment status, renewal timing, and insurance workflow operations.",
+      "path": "skills/hermes-insurance-quote-ops/SKILL.md"
+    },
+    {
+      "order": 7,
+      "slug": "hermes-compliance-guardrails",
+      "name": "Hermes Compliance Guardrails",
+      "description": "Use when dealing with outreach, calls, texts, consent, DNC, TCPA, call recording, retention, disclosures, insurance compliance, or regulated workflow risk.",
+      "path": "skills/hermes-compliance-guardrails/SKILL.md"
+    },
+    {
+      "order": 8,
+      "slug": "hermes-backend-database-architecture",
+      "name": "Hermes Backend and Database Architect",
+      "description": "Use when designing durable systems, APIs, queues, schemas, auth, state storage, audit logs, SaaS migration, or replacing brittle desktop automation with services.",
+      "path": "skills/hermes-backend-database-architecture/SKILL.md"
+    },
+    {
+      "order": 9,
+      "slug": "hermes-ahk-orchestration",
+      "name": "Hermes AutoHotkey Orchestration Engineer",
+      "description": "Use when writing, refactoring, debugging, or planning AutoHotkey scripts, hotkeys, UI automation, clipboard workflows, window targeting, and script reliability.",
+      "path": "skills/hermes-ahk-orchestration/SKILL.md"
+    },
+    {
+      "order": 10,
+      "slug": "hermes-notion-crm-followup",
+      "name": "Hermes Notion CRM and Follow-Up Operator",
+      "description": "Use when managing quoted leads, Notion Kanban fields, follow-up dates, lead temperature, stage movement, and daily sales pipeline review.",
+      "path": "skills/hermes-notion-crm-followup/SKILL.md"
+    },
+    {
+      "order": 11,
+      "slug": "hermes-memory-context-hygiene",
+      "name": "Hermes Memory and Context Hygiene Manager",
+      "description": "Use when deciding what Hermes should remember, what belongs only in the current conversation, and how to keep agent memory compact but useful.",
+      "path": "skills/hermes-memory-context-hygiene/SKILL.md"
+    },
+    {
+      "order": 12,
+      "slug": "hermes-decision-filter",
+      "name": "Hermes Decision Filter and Anti-Distraction Enforcer",
+      "description": "Use when evaluating new ideas, features, refactors, business moves, automations, purchases, or side quests that may distract from the main bottleneck.",
+      "path": "skills/hermes-decision-filter/SKILL.md"
+    }
+  ],
+  "templates": [
+    "quote_workflow_diagnostic.md",
+    "codex_task_brief.md",
+    "sales_followup_prompt.md",
+    "compliance_review_prompt.md",
+    "postmortem_template.md",
+    "weekly_operator_review.md"
+  ]
+}
