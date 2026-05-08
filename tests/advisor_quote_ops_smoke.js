@@ -972,6 +972,23 @@ function testVehicleMatching() {
   assert.strictEqual(ambiguous.result, 'AMBIGUOUS');
 }
 
+function readRepoText(relativePath) {
+  return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
+}
+
+function testRapportAhkStaleRowCancelFailurePolicy() {
+  const rapportAhk = readRepoText('workflows/advisor/advisor_quote_rapport.ahk');
+  const vehicleAhk = readRepoText('workflows/advisor/advisor_quote_rapport_vehicles.ahk');
+
+  assert.match(rapportAhk, /AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe\([\s\S]*vehicleSatisfiedCount[\s\S]*&failureReason[\s\S]*&failureScanPath\)/);
+  assert.match(vehicleAhk, /RAPPORT_STALE_ROW_CANCEL_FAILED_DEFERRED_WITH_CONFIRMED_VEHICLE/);
+  assert.match(vehicleAhk, /RAPPORT_STALE_ROW_DEFERRED_FOR_PUBLIC_RECORD_CONFIRMATION/);
+  assert.match(vehicleAhk, /RAPPORT_NO_RATEABLE_VEHICLE_CONFIRMED/);
+  assert.match(vehicleAhk, /confirmedOrAddedVehicleCount[\s\S]*>[\s\S]*0[\s\S]*return true/);
+  assert.match(vehicleAhk, /potentialVehicleCount[\s\S]*>[\s\S]*0[\s\S]*return true/);
+  assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed[\s\S]*staleAddRowPresent[\s\S]*confirmedOrAdded > 0[\s\S]*vehicleWarningPresent[\s\S]*confirmedOrAdded > 0/);
+}
+
 function testRapportVinBackedPublicRecordVehiclePolicy() {
   const missingModelCard = createVehicleCard('Potential Vehicles 2024 Toyota Camry VIN FAK3VNAA000000001 Confirm Remove', 'confirm-public-vin-missing-model');
   const missingModelButton = missingModelCard.children[0];
@@ -4575,6 +4592,7 @@ function run() {
   testResultCalculation();
   testVehicleMatching();
   testRapportVinBackedPublicRecordVehiclePolicy();
+  testRapportAhkStaleRowCancelFailurePolicy();
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
   testResidentRunnerContracts();

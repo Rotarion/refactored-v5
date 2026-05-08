@@ -315,7 +315,7 @@ AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason
             return false
         }
         if AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(snapshot) {
-            if (AdvisorQuoteStatusInteger(snapshot, "potentialVehicleCount") > 0) {
+            if AdvisorQuoteRapportSnapshotHasPotentialVinBackedVehicle(snapshot) {
                 AdvisorQuoteAppendLog(
                     "RAPPORT_STALE_ROW_DEFERRED_FOR_PUBLIC_RECORD_CONFIRMATION",
                     AdvisorQuoteGetLastStep(),
@@ -1037,7 +1037,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
     }
 
-    if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, &failureReason, &failureScanPath)
+    if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, vehicleSatisfiedCount, &failureReason, &failureScanPath)
         return false
 
     finalRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()

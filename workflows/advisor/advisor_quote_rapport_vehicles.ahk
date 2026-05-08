@@ -386,6 +386,15 @@ AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehi
         && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1" || confirmedOrAdded > 0)
 }
 
+AdvisorQuoteRapportSnapshotHasPotentialVinBackedVehicle(snapshot) {
+    if !IsObject(snapshot)
+        return false
+    if (AdvisorQuoteStatusInteger(snapshot, "potentialVehicleCount") <= 0)
+        return false
+    potentialVehicles := AdvisorQuoteStatusValue(snapshot, "potentialVehicles")
+    return RegExMatch(potentialVehicles, "i)\bVIN\b|\b[A-HJ-NPR-Z0-9]{17}\b")
+}
+
 AdvisorQuoteRapportVehicleLedgerSummary(ledger) {
     if !(IsObject(ledger) && ledger.Has("items"))
         return ""
@@ -626,7 +635,7 @@ AdvisorQuoteBuildGatherStaleVehicleCancelDetail(status) {
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
 }
 
-AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehicles, staleDuplicateRowSeen := false, staleDuplicateRowDetails := "", &failureReason := "", &failureScanPath := "") {
+AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehicles, staleDuplicateRowSeen := false, staleDuplicateRowDetails := "", confirmedOrAddedVehicleCount := 0, &failureReason := "", &failureScanPath := "") {
     failureReason := ""
     failureScanPath := ""
     status := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
@@ -649,7 +658,33 @@ AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehicles, staleDuplicateR
     cancelStatus := AdvisorQuoteCancelStaleAddVehicleRow(true)
     AdvisorQuoteAppendLog("STALE_ADD_VEHICLE_ROW_CANCEL", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus))
     if (AdvisorQuoteStatusValue(cancelStatus, "result") != "CANCELLED") {
-        failureReason := "STALE_ADD_ROW_CANCEL_FAILED: " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+        latestSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+        latestConfirmedOrAddedCount := Max(Integer(confirmedOrAddedVehicleCount), AdvisorQuoteStatusInteger(latestSnapshot, "confirmedVehicleCount"))
+        if (latestConfirmedOrAddedCount > 0) {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ROW_CANCEL_FAILED_DEFERRED_WITH_CONFIRMED_VEHICLE",
+                AdvisorQuoteGetLastStep(),
+                "confirmedOrAddedVehicleCount=" latestConfirmedOrAddedCount
+                    . ", staleAddRowPresent=" AdvisorQuoteStatusValue(latestSnapshot, "staleAddRowPresent")
+                    . ", startQuotingSectionPresent=" AdvisorQuoteStatusValue(latestSnapshot, "startQuotingSectionPresent")
+                    . ", createQuotesEnabled=" AdvisorQuoteStatusValue(latestSnapshot, "createQuotesEnabled")
+                    . ", cancelResult=" AdvisorQuoteStatusValue(cancelStatus, "result")
+                    . ", cancelDetail=" AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+            )
+            return true
+        }
+        if AdvisorQuoteRapportSnapshotHasPotentialVinBackedVehicle(latestSnapshot) {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ROW_DEFERRED_FOR_PUBLIC_RECORD_CONFIRMATION",
+                AdvisorQuoteGetLastStep(),
+                "confirmedOrAddedVehicleCount=" latestConfirmedOrAddedCount
+                    . ", potentialVehicleCount=" AdvisorQuoteStatusValue(latestSnapshot, "potentialVehicleCount")
+                    . ", staleAddRowPresent=" AdvisorQuoteStatusValue(latestSnapshot, "staleAddRowPresent")
+                    . ", cancelResult=" AdvisorQuoteStatusValue(cancelStatus, "result")
+            )
+            return true
+        }
+        failureReason := "RAPPORT_NO_RATEABLE_VEHICLE_CONFIRMED: stale Add Car/Truck row cancellation failed and no confirmed/added vehicle or VIN-backed public-record card is available. " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "stale-add-row-cancel-failed")
         return false
     }
