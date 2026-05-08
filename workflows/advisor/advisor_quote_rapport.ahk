@@ -315,6 +315,16 @@ AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason
             return false
         }
         if AdvisorQuoteGatherSnapshotHasStaleAddVehicleRowBlocker(snapshot) {
+            if (AdvisorQuoteStatusInteger(snapshot, "potentialVehicleCount") > 0) {
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_STALE_ROW_DEFERRED_FOR_PUBLIC_RECORD_CONFIRMATION",
+                    AdvisorQuoteGetLastStep(),
+                    AdvisorQuoteBuildRapportSnapshotRouteDetail(snapshot, A_Index, "0")
+                        . ", potentialVehicleCount=" AdvisorQuoteStatusValue(snapshot, "potentialVehicleCount")
+                        . ", staleAddRowPresent=" AdvisorQuoteStatusValue(snapshot, "staleAddRowPresent")
+                )
+                return true
+            }
             staleStatus := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
             AdvisorQuoteAppendLog(
                 "RAPPORT_STALE_ADD_ROW_STATUS",
@@ -876,6 +886,13 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 case "ADDED":
                     vehicleSatisfiedCount += 1
                     satisfiedVehicles.Push(addedPlaceholderVehicle)
+                    AdvisorQuoteAppendLog(
+                        "RAPPORT_MODEL_PLACEHOLDER_TO_REACH_ASC",
+                        AdvisorQuoteGetLastStep(),
+                        "partialVehicle=" partialVehicle["displayKey"]
+                            . ", addedVehicle=" AdvisorQuoteVehicleLabel(addedPlaceholderVehicle)
+                            . ", exactModelMatchClaimed=0"
+                    )
                     AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "ADDED_MODEL_PLACEHOLDER", "MODEL_PLACEHOLDER_FALLBACK")
                     continue
                 case "SCRAP_MAKE_UNAVAILABLE":
@@ -1025,15 +1042,39 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
 
     finalRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
     if (AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent") = "1") {
-        failureReason := "RAPPORT_UNSAFE_ADD_ROW_REMAINS_BEFORE_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
-        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-unsafe-add-row-before-start-quoting")
-        return false
+        if (vehicleSatisfiedCount > 0 && AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent") = "1") {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_STALE_ROW_DEFERRED_WITH_CONFIRMED_VEHICLE",
+                AdvisorQuoteGetLastStep(),
+                "confirmedOrAddedVehicleCount=" vehicleSatisfiedCount
+                    . ", staleAddRowPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent")
+                    . ", startQuotingSectionPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent")
+                    . ", createQuotesEnabled=" AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
+                    . ", blockerCode=" AdvisorQuoteStatusValue(finalRapportSnapshot, "blockerCode")
+            )
+        } else {
+            failureReason := "RAPPORT_UNSAFE_ADD_ROW_REMAINS_BEFORE_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-unsafe-add-row-before-start-quoting")
+            return false
+        }
     }
     if (AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent") = "1"
         && AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled") != "1") {
-        failureReason := "RAPPORT_VEHICLE_WARNING_BLOCKS_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
-        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-warning-before-start-quoting")
-        return false
+        if (vehicleSatisfiedCount > 0 && AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent") = "1") {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_VEHICLE_WARNING_DEFERRED_WITH_CONFIRMED_VEHICLE",
+                AdvisorQuoteGetLastStep(),
+                "confirmedOrAddedVehicleCount=" vehicleSatisfiedCount
+                    . ", vehicleWarningText=" AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningText")
+                    . ", potentialVehicleCount=" AdvisorQuoteStatusValue(finalRapportSnapshot, "potentialVehicleCount")
+                    . ", startQuotingSectionPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent")
+                    . ", createQuotesEnabled=" AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
+            )
+        } else {
+            failureReason := "RAPPORT_VEHICLE_WARNING_BLOCKS_START_QUOTING: " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
+            failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-warning-before-start-quoting")
+            return false
+        }
     }
     if !AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(
         rapportLedger,

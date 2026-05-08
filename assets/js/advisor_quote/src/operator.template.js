@@ -1020,24 +1020,40 @@ copy(String((() => {
     const trimMatch = !!match.trim && haystack.includes(match.trim);
     const vinMatch = !!match.vin && haystack.includes(match.vin);
     const vinSuffixMatch = !vinMatch && !!match.vinSuffix && haystack.includes(match.vinSuffix);
+    const vinEvidence = vehicleVinEvidenceText(cardText);
+    const visibleVinBacked = !!vinEvidence;
     const vinBacked = !!(vinMatch || vinSuffixMatch);
     const modelFamilyRelated = vehicleModelFamilyRelated(haystack, match);
+    const exactFullVinMatch = !!(match.vin && vinMatch);
     const exactYearMakeVinMatch = !!(yearMatch && makeMatch && vinBacked);
-    const yearWindowVinMatch = !!(match.year && yearDelta !== null && Math.abs(yearDelta) === 1
-      && makeMatch && vinBacked && (modelMatch || modelFamilyRelated));
+    const yearWindowVinMatch = !!(match.year && yearDelta !== null && Math.abs(yearDelta) <= 2
+      && makeMatch && vinSuffixMatch);
+    const modelMissingOrUnsafe = !match.model && !(match.modelAliases || []).length && !(match.normalizedModelKeys || []).length;
+    const visiblePublicRecordMatch = !!(yearMatch && makeMatch && visibleVinBacked && modelMissingOrUnsafe && !exactFullVinMatch);
     let score = 0;
     if (yearMatch) score += 40;
     if (makeMatch) score += 30;
     if (modelMatch) score += 30;
     if (trimMatch) score += 10;
     if (vinBacked) score += 50;
+    if (exactFullVinMatch) score = Math.max(score, 160);
+    if (yearWindowVinMatch) score = Math.max(score, 130);
+    if (visiblePublicRecordMatch) score = Math.max(score, 120);
+    let matchPolicy = '';
+    if (exactFullVinMatch) matchPolicy = 'EXACT_FULL_VIN_ACCEPTED';
+    else if (yearWindowVinMatch) matchPolicy = 'VIN_SUFFIX_YEAR_WINDOW_ACCEPTED';
+    else if (visiblePublicRecordMatch) matchPolicy = 'VIN_VISIBLE_PUBLIC_RECORD_ACCEPTED';
     return {
       score,
       threshold: 90,
       yearMatch,
       yearDelta: yearDelta === null ? '' : String(yearDelta),
+      exactFullVinMatch,
       exactYearMakeVinMatch,
       yearWindowVinMatch,
+      visiblePublicRecordMatch,
+      publicVinEvidence: vinEvidence,
+      matchPolicy,
       makeMatch,
       modelMatch,
       modelFamilyRelated,
@@ -1124,12 +1140,13 @@ copy(String((() => {
     const removeButtons = Array.from((card && card.querySelectorAll('button,a,[role=button]')) || [])
       .filter((node) => visible(node) && answerTextMatches(getText(node), 'Remove'));
     const titleCount = vehicleTitleCount(cardText);
-    if (!safe(candidate && candidate.details && candidate.details.yearMatch))
+    const details = (candidate && candidate.details) || {};
+    const vinBackedPublicRecordAccepted = !!(details.exactFullVinMatch || details.yearWindowVinMatch || details.visiblePublicRecordMatch);
+    if (!safe(details.yearMatch) && !vinBackedPublicRecordAccepted)
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'year-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
-    if (!safe(candidate && candidate.details && candidate.details.makeMatch))
+    if (!safe(details.makeMatch) && !vinBackedPublicRecordAccepted)
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'make-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
-    if (!safe(candidate && candidate.details && candidate.details.modelMatch)
-      && !safe(candidate && candidate.details && candidate.details.exactYearMakeVinMatch))
+    if (!safe(details.modelMatch) && !safe(details.exactYearMakeVinMatch) && !vinBackedPublicRecordAccepted)
       return { ok: false, candidateScope: 'rejected', rejectedReason: 'model-mismatch', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
     if (text.includes('confirmed vehicles') && text.includes('potential vehicles'))
       return { ok: false, candidateScope: 'broad-section', rejectedReason: 'broad-container', confirmButtonCount: confirmButtons.length, vehicleTitleCount: titleCount };
@@ -6570,6 +6587,8 @@ copy(String((() => {
         matches: '1',
         cardText,
         score: String(candidate.details.score),
+        matchPolicy: candidate.details.matchPolicy || '',
+        publicVinEvidence: candidate.details.publicVinEvidence || '',
         candidateScope: 'single-card',
         confirmButtonCount: '1',
         vehicleTitleCount: String(entry.scope.vehicleTitleCount || 1),

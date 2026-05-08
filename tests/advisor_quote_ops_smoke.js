@@ -939,13 +939,13 @@ function createVehicleCard(text, confirmId) {
 }
 
 function testVehicleMatching() {
-  const teslaCard = createVehicleCard('2022 Tesla Model 3 Long Range 5YJ3E1EB5NF123456', 'confirm-tesla');
+  const teslaCard = createVehicleCard('2022 Tesla Model 3 Long Range FAK3VNTE000123456', 'confirm-tesla');
   const teslaDoc = new FakeDocument([teslaCard]);
   const confirmed = parseLines(runOperator('confirm_potential_vehicle', {
     year: '2022',
     make: 'Tesla',
     model: 'Model 3',
-    vin: '5YJ3E1EB5NF123456'
+    vin: 'FAK3VNTE000123456'
   }, teslaDoc));
   assert.strictEqual(confirmed.result, 'CONFIRMED');
 
@@ -970,6 +970,56 @@ function testVehicleMatching() {
     model: 'Model 3'
   }, ambiguousDoc));
   assert.strictEqual(ambiguous.result, 'AMBIGUOUS');
+}
+
+function testRapportVinBackedPublicRecordVehiclePolicy() {
+  const missingModelCard = createVehicleCard('Potential Vehicles 2024 Toyota Camry VIN FAK3VNAA000000001 Confirm Remove', 'confirm-public-vin-missing-model');
+  const missingModelButton = missingModelCard.children[0];
+  const missingModel = parseLines(runOperator('confirm_potential_vehicle', {
+    year: '2024',
+    make: 'Toyota',
+    model: ''
+  }, new FakeDocument([missingModelCard])));
+  assert.strictEqual(missingModel.result, 'CONFIRMED', JSON.stringify(missingModel));
+  assert.strictEqual(missingModel.matchPolicy, 'VIN_VISIBLE_PUBLIC_RECORD_ACCEPTED');
+  assert.strictEqual(missingModelButton.clickCalls, 1);
+
+  const mismatchCard = createVehicleCard('Potential Vehicles 2021 Honda Accord VIN FAK3VNBB000000002 Confirm Remove', 'confirm-public-vin-mismatch');
+  const mismatchButton = mismatchCard.children[0];
+  const mismatch = parseLines(runOperator('confirm_potential_vehicle', {
+    year: '2020',
+    make: 'Honda',
+    model: 'Civic',
+    vin: 'FAK3VNBB000000002'
+  }, new FakeDocument([mismatchCard])));
+  assert.strictEqual(mismatch.result, 'CONFIRMED', JSON.stringify(mismatch));
+  assert.strictEqual(mismatch.matchPolicy, 'EXACT_FULL_VIN_ACCEPTED');
+  assert.strictEqual(mismatchButton.clickCalls, 1);
+
+  const suffixCard = createVehicleCard('Potential Vehicles 2022 Ford Explorer VIN FAK3VNCC000000003 Confirm Remove', 'confirm-public-vin-suffix');
+  const suffixButton = suffixCard.children[0];
+  const suffix = parseLines(runOperator('confirm_potential_vehicle', {
+    year: '2020',
+    make: 'Ford',
+    model: 'Escape',
+    vinSuffix: '000003'
+  }, new FakeDocument([suffixCard])));
+  assert.strictEqual(suffix.result, 'CONFIRMED', JSON.stringify(suffix));
+  assert.strictEqual(suffix.matchPolicy, 'VIN_SUFFIX_YEAR_WINDOW_ACCEPTED');
+  assert.strictEqual(suffixButton.clickCalls, 1);
+
+  const unknownCard = textNode('Unknown Vehicles Unknown vehicle information unavailable', 'section');
+  const nonAutoCard = textNode('Motorcycle ORV public record vehicle deferred', 'section');
+  const autoCard = createVehicleCard('Potential Vehicles 2023 Subaru Outback VIN FAK3VNDD000000004 Confirm Remove', 'confirm-auto-with-deferred-sections');
+  const autoButton = autoCard.children[0];
+  const deferredSections = parseLines(runOperator('confirm_potential_vehicle', {
+    year: '2023',
+    make: 'Subaru',
+    model: ''
+  }, new FakeDocument([unknownCard, nonAutoCard, autoCard])));
+  assert.strictEqual(deferredSections.result, 'CONFIRMED', JSON.stringify(deferredSections));
+  assert.strictEqual(deferredSections.matchPolicy, 'VIN_VISIBLE_PUBLIC_RECORD_ACCEPTED');
+  assert.strictEqual(autoButton.clickCalls, 1);
 }
 
 function testDuplicateScoringRejectsWeakMatch() {
@@ -4524,6 +4574,7 @@ function run() {
   testClickHelperDoesNotDoubleSubmit();
   testResultCalculation();
   testVehicleMatching();
+  testRapportVinBackedPublicRecordVehiclePolicy();
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
   testResidentRunnerContracts();

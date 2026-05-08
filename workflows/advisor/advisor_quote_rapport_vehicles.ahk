@@ -379,10 +379,11 @@ AdvisorQuoteRapportVehicleLedgerSatisfiedCount(ledger) {
 }
 
 AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled) {
+    confirmedOrAdded := Integer(confirmedOrAddedVehicleCount)
     return AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger)
-        && (Integer(confirmedOrAddedVehicleCount) > 0 || Trim(String(createQuotesEnabled)) = "1")
-        && Trim(String(staleAddRowPresent)) != "1"
-        && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1")
+        && (confirmedOrAdded > 0 || Trim(String(createQuotesEnabled)) = "1")
+        && (Trim(String(staleAddRowPresent)) != "1" || confirmedOrAdded > 0)
+        && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1" || confirmedOrAdded > 0)
 }
 
 AdvisorQuoteRapportVehicleLedgerSummary(ledger) {
@@ -400,6 +401,17 @@ AdvisorQuoteLogGatherVehiclePolicy(policy) {
     ignored := IsObject(policy) && policy.Has("ignoredMissingYearVehicles") ? policy["ignoredMissingYearVehicles"] : []
     deferred := IsObject(policy) && policy.Has("deferredVinVehicles") ? policy["deferredVinVehicles"] : []
     blocking := IsObject(policy) && policy.Has("blockingMissingVehicleData") ? policy["blockingMissingVehicleData"] : []
+    for _, vehicle in ignored
+        AdvisorQuoteAppendLog("RAPPORT_UNKNOWN_VEHICLE_DEFERRED", AdvisorQuoteGetLastStep(), "vehicle=" AdvisorQuoteVehicleLabel(vehicle) . ", reason=missing-year")
+    for _, vehicle in deferred
+        AdvisorQuoteAppendLog("RAPPORT_UNKNOWN_VEHICLE_DEFERRED", AdvisorQuoteGetLastStep(), "vehicle=" AdvisorQuoteVehicleLabel(vehicle) . ", reason=vin-only-insufficient")
+    for _, vehicle in blocking {
+        vehicleText := StrLower(AdvisorQuoteVehicleLabel(vehicle))
+        if (InStr(vehicleText, "motorcycle") || InStr(vehicleText, "orv") || InStr(vehicleText, "atv"))
+            AdvisorQuoteAppendLog("RAPPORT_NON_AUTO_VEHICLE_DEFERRED", AdvisorQuoteGetLastStep(), "vehicle=" AdvisorQuoteVehicleLabel(vehicle) . ", reason=non-auto-section")
+        else
+            AdvisorQuoteAppendLog("RAPPORT_UNKNOWN_VEHICLE_DEFERRED", AdvisorQuoteGetLastStep(), "vehicle=" AdvisorQuoteVehicleLabel(vehicle) . ", reason=missing-safe-car-truck-evidence")
+    }
     AdvisorQuoteAppendLog(
         "GATHER_VEHICLE_POLICY",
         AdvisorQuoteGetLastStep(),
@@ -724,6 +736,8 @@ AdvisorQuoteConfirmPotentialVehicle(vehicle, db, &failureReason := "", &failureS
                     . ", model=" vehicle["model"]
                     . ", matches=" matches
                     . ", score=" score
+                    . ", matchPolicy=" AdvisorQuoteStatusValue(status, "matchPolicy")
+                    . ", publicVinEvidence=" AdvisorQuoteStatusValue(status, "publicVinEvidence")
                     . ", candidateScope=" candidateScope
                     . ", confirmClicked=" confirmClicked
                     . ", cardText=" cardText
