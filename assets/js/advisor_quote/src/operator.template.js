@@ -2556,19 +2556,23 @@ copy(String((() => {
       alertRequired
     };
   };
-  const selectProductMissing = (status) => {
+  const selectProductCoreMissing = (status) => {
     const missing = [];
     if (status.ratingStatePresent !== '1') missing.push('ratingState');
     else if (status.ratingStateSelected !== '1') missing.push('ratingStateSelected');
     if (status.productPresent !== '1') missing.push('product');
     else if (status.autoSelected !== '1') missing.push('autoProduct');
-    if (status.effectiveDatePresent === '1' && status.effectiveDateFilled !== '1') missing.push('effectiveDate');
-    if (status.currentAddressPresent === '1' && status.currentAddressSelected !== '1') missing.push('currentAddress');
-    if (status.insuredQuestionRequired === '1' && status.insuredQuestionAnswered !== '1') missing.push('currentlyInsured');
+    if (status.effectiveDatePresent !== '1' || status.effectiveDateFilled !== '1') missing.push('effectiveDate');
+    if (status.currentAddressPresent !== '1' || status.currentAddressSelected !== '1') missing.push('currentAddress');
     if (status.continuePresent !== '1') missing.push('continue');
     else if (status.continueEnabled !== '1') missing.push('continueEnabled');
     return missing;
   };
+  const selectProductCustomControlAmbiguous = (status) => (
+    status.insuredQuestionPresent === '1'
+    && status.insuredQuestionRequired === '1'
+    && status.insuredQuestionAnswered !== '1'
+  ) ? '1' : '0';
   const buildSelectProductStatus = (source = {}) => {
     const selectors = getSelectorArgs(source);
     const questionText = safe(source.currentInsuredQuestionText || 'Is the customer currently insured?');
@@ -2620,12 +2624,16 @@ copy(String((() => {
       continueEnabled: continueBtn && !isDisabledLike(continueBtn) ? '1' : '0',
       missing: ''
     };
-    const missing = selectProductMissing(status);
+    const missing = selectProductCoreMissing(status);
     status.missing = missing.join('|');
+    status.coreReady = missing.length ? '0' : '1';
+    status.customControlAmbiguous = selectProductCustomControlAmbiguous(status);
+    status.readinessTrace = status.coreReady === '1' && status.continueEnabled === '1'
+      ? 'SELECT_PRODUCT_CONTINUE_ENABLED_CORE_READY'
+      : '';
     if (status.routeFamily !== 'intel-select-product') status.result = 'NOT_SELECT_PRODUCT';
-    else if (status.insuredQuestionRequired === '1' && status.insuredQuestionAnswered !== '1') status.result = 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED';
     else if (status.continuePresent === '1' && status.continueEnabled !== '1') status.result = 'SELECT_PRODUCT_CONTINUE_DISABLED';
-    else if (missing.length) status.result = 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING';
+    else if (missing.length) status.result = 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING';
     else status.result = 'READY';
     return status;
   };
@@ -6954,7 +6962,15 @@ copy(String((() => {
       if (!continueBtn) return lineResult({ result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING', clicked: '0', continueEnabled: '0', missing: 'continue' });
       if (isDisabledLike(continueBtn)) return lineResult({ result: 'SELECT_PRODUCT_CONTINUE_DISABLED', clicked: '0', continueEnabled: '0', missing: 'continueEnabled' });
       const clicked = clickCenterEl(continueBtn);
-      return lineResult({ result: clicked ? 'OK' : 'CLICK_FAILED', clicked: clicked ? '1' : '0', continueEnabled: '1', missing: '', targetText: compact(getText(continueBtn), 80) });
+      return lineResult({
+        ...status,
+        result: clicked ? 'OK' : 'CLICK_FAILED',
+        clicked: clicked ? '1' : '0',
+        continueEnabled: '1',
+        missing: '',
+        readinessTrace: 'SELECT_PRODUCT_CLICK_CONTINUE_READY',
+        targetText: compact(getText(continueBtn), 80)
+      });
     }
 
     case 'select_product_status': {

@@ -624,12 +624,14 @@ function selectProductDoc(extraNodes = []) {
     ratingSelect,
     createRadio('insuredYes', 'SelectProduct.CustomerCurrentInsured', 'YES', { checked: true }),
     createRadio('ownHome', 'SelectProduct.CustomerOwnOrRent', 'OWN', { checked: true }),
+    createInput('SelectProduct.EffectiveDate', '05/08/2026'),
+    createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }),
     createButton('selectProductContinue', 'Continue'),
     ...extraNodes
   ]);
 }
 
-function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false, yesClickFails = false, includeEffectiveDate = true, includeCurrentAddress = true } = {}) {
+function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false, yesClickFails = false, includeEffectiveDate = true, includeCurrentAddress = true, continueDisabled = false, autoSelected = true } = {}) {
   const yesButton = createButton('custom-currently-insured-yes', 'Yes', {
     className: yesSelected ? 'mesh-option selected' : 'mesh-option',
     attributes: { role: 'button', 'aria-pressed': yesSelected ? 'true' : 'false' },
@@ -663,15 +665,15 @@ function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false
   question.appendChild(noButton);
   const nodes = [
     createSelect('SelectProduct.Product', [
-      { value: '', text: 'Select One' },
-      { value: 'Auto', text: 'Auto', selected: true }
+      { value: '', text: 'Select One', selected: !autoSelected },
+      { value: 'Auto', text: 'Auto', selected: autoSelected }
     ]),
     createSelect('SelectProduct.RatingState', [
       { value: '', text: 'Select One' },
       { value: 'FL', text: 'Florida', selected: true }
     ]),
     question,
-    createButton('selectProductContinue', 'Continue')
+    createButton('selectProductContinue', 'Continue', { disabled: continueDisabled })
   ];
   if (includeEffectiveDate) nodes.push(createInput('SelectProduct.EffectiveDate', '05/08/2026'));
   if (includeCurrentAddress) nodes.push(createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }));
@@ -1994,8 +1996,8 @@ function testReturnShapeContracts() {
   const insuredRequiredStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), insuredRequiredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'insuredQuestionPresent', 'insuredYesPresent', 'insuredYesSelected', 'missing'
   ]);
-  assert.strictEqual(insuredRequiredStatus.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
-  assert.ok(insuredRequiredStatus.missing.includes('currentlyInsured'));
+  assert.strictEqual(insuredRequiredStatus.result, 'READY');
+  assert.strictEqual(insuredRequiredStatus.missing, '');
 
 
   const customInsuredDoc = selectProductCustomInsuredDoc();
@@ -2007,7 +2009,8 @@ function testReturnShapeContracts() {
   assert.strictEqual(customInsuredStatus.insuredYesPresent, '1');
   assert.strictEqual(customInsuredStatus.insuredNoPresent, '1');
   assert.strictEqual(customInsuredStatus.insuredQuestionRequired, '1');
-  assert.strictEqual(customInsuredStatus.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
+  assert.strictEqual(customInsuredStatus.result, 'READY');
+  assert.strictEqual(customInsuredStatus.missing, '');
 
   const defaultedCustomInsuredDoc = selectProductCustomInsuredDoc();
   const defaultedCustomInsured = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
@@ -2054,9 +2057,39 @@ function testReturnShapeContracts() {
   }), failedDefaultCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'currentInsuredSet', 'insuredQuestionAnswered', 'missing'
   ]);
-  assert.strictEqual(failedDefaultCustomInsured.result, 'SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED');
+  assert.strictEqual(failedDefaultCustomInsured.result, 'OK');
   assert.strictEqual(failedDefaultCustomInsured.currentInsuredSet, '0');
-  assert.ok(failedDefaultCustomInsured.missing.includes('currentlyInsured'));
+  assert.strictEqual(failedDefaultCustomInsured.missing, '');
+
+  const ambiguousCoreReadyDoc = selectProductCustomInsuredDoc();
+  const ambiguousCoreReadyClick = assertKeyBlock(runOperator('click_select_product_continue', baseArgs(), ambiguousCoreReadyDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'clicked', 'continueEnabled', 'missing', 'readinessTrace', 'customControlAmbiguous'
+  ]);
+  assert.strictEqual(ambiguousCoreReadyClick.result, 'OK');
+  assert.strictEqual(ambiguousCoreReadyClick.clicked, '1');
+  assert.strictEqual(ambiguousCoreReadyClick.customControlAmbiguous, '1');
+  assert.strictEqual(ambiguousCoreReadyDoc.getElementById('selectProductContinue').clickCalls, 1);
+
+  const disabledContinueDoc = selectProductCustomInsuredDoc({ continueDisabled: true });
+  const disabledContinueStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), disabledContinueDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'continueEnabled', 'missing'
+  ]);
+  assert.strictEqual(disabledContinueStatus.result, 'SELECT_PRODUCT_CONTINUE_DISABLED');
+  assert.ok(disabledContinueStatus.missing.includes('continueEnabled'));
+
+  const missingAutoDoc = selectProductCustomInsuredDoc({ autoSelected: false });
+  const missingAutoStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), missingAutoDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'autoSelected', 'missing'
+  ]);
+  assert.strictEqual(missingAutoStatus.result, 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING');
+  assert.ok(missingAutoStatus.missing.includes('autoProduct'));
+
+  const missingDateDoc = selectProductCustomInsuredDoc({ includeEffectiveDate: false });
+  const missingDateStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), missingDateDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'effectiveDatePresent', 'missing'
+  ]);
+  assert.strictEqual(missingDateStatus.result, 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING');
+  assert.ok(missingDateStatus.missing.includes('effectiveDate'));
 
   const participant = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',

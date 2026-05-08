@@ -435,9 +435,15 @@ AdvisorQuoteHandleSelectProduct(db, &failureReason := "", &failureScanPath := ""
         AdvisorQuoteAppendLog("SELECT_PRODUCT_DEFAULTS_FAILED", AdvisorQuoteGetLastStep(), failureReason)
         return false
     }
+    if (AdvisorQuoteStatusValue(status, "readinessTrace") = "SELECT_PRODUCT_CONTINUE_ENABLED_CORE_READY")
+        AdvisorQuoteAppendLog("SELECT_PRODUCT_CONTINUE_ENABLED_CORE_READY", AdvisorQuoteGetLastStep(), "coreReady=" AdvisorQuoteStatusValue(status, "coreReady") . ", continueEnabled=" AdvisorQuoteStatusValue(status, "continueEnabled"))
+    if (AdvisorQuoteStatusValue(status, "customControlAmbiguous") = "1")
+        AdvisorQuoteAppendLog("SELECT_PRODUCT_CUSTOM_CONTROL_STATE_AMBIGUOUS_CONTINUING", AdvisorQuoteGetLastStep(), "insuredQuestionAnswered=" AdvisorQuoteStatusValue(status, "insuredQuestionAnswered") . ", ownOrRentSelected=" AdvisorQuoteStatusValue(status, "ownOrRentSelected"))
 
     clickStatus := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("click_select_product_continue", applyArgs, 1, 120))
     clickResult := AdvisorQuoteStatusValue(clickStatus, "result")
+    if (AdvisorQuoteStatusValue(clickStatus, "readinessTrace") = "SELECT_PRODUCT_CLICK_CONTINUE_READY")
+        AdvisorQuoteAppendLog("SELECT_PRODUCT_CLICK_CONTINUE_READY", AdvisorQuoteGetLastStep(), "clicked=" AdvisorQuoteStatusValue(clickStatus, "clicked") . ", continueEnabled=" AdvisorQuoteStatusValue(clickStatus, "continueEnabled"))
     AdvisorQuoteAppendLog("SELECT_PRODUCT_CONTINUE_CLICK", AdvisorQuoteGetLastStep(), "result=" clickResult . ", clicked=" AdvisorQuoteStatusValue(clickStatus, "clicked") . ", missing=" AdvisorQuoteStatusValue(clickStatus, "missing"))
     if (clickResult != "OK") {
         failureReason := clickResult
@@ -503,8 +509,12 @@ AdvisorQuoteBuildSelectProductStatusDetail(status) {
         . ", insuredQuestionRequired=" AdvisorQuoteStatusValue(status, "insuredQuestionRequired")
         . ", insuredControlType=" AdvisorQuoteStatusValue(status, "insuredControlType")
         . ", insuredDetectionMethod=" AdvisorQuoteStatusValue(status, "insuredDetectionMethod")
+        . ", ownOrRentSelected=" AdvisorQuoteStatusValue(status, "ownOrRentSelected")
         . ", continuePresent=" AdvisorQuoteStatusValue(status, "continuePresent")
         . ", continueEnabled=" AdvisorQuoteStatusValue(status, "continueEnabled")
+        . ", coreReady=" AdvisorQuoteStatusValue(status, "coreReady")
+        . ", customControlAmbiguous=" AdvisorQuoteStatusValue(status, "customControlAmbiguous")
+        . ", readinessTrace=" AdvisorQuoteStatusValue(status, "readinessTrace")
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
 }
 
@@ -587,16 +597,19 @@ AdvisorQuoteSelectProductStatusValid(status, db, afterContinue := false, &failur
     if (result = "READY")
         return true
     if (result != "") {
-        failureReason := result
+        if (result = "SELECT_PRODUCT_CONTINUE_DISABLED")
+            failureReason := "SELECT_PRODUCT_CONTINUE_DISABLED"
+        else if (result = "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING")
+            failureReason := "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING"
+        else
+            failureReason := result
         return false
     }
     missing := AdvisorQuoteStatusValue(status, "missing")
-    if InStr(missing, "currentlyInsured")
-        failureReason := "SELECT_PRODUCT_CURRENTLY_INSURED_REQUIRED"
-    else if InStr(missing, "continueEnabled")
+    if InStr(missing, "continueEnabled")
         failureReason := "SELECT_PRODUCT_CONTINUE_DISABLED"
     else if (missing != "")
-        failureReason := "SELECT_PRODUCT_REQUIRED_FIELDS_MISSING"
+        failureReason := "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING"
     else
         failureReason := "SELECT_PRODUCT_FALLBACK_NOT_READY"
     return false
