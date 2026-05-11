@@ -10,6 +10,15 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Landing quote button: `button#group2_Quoting_button`
 - Begin quoting continue button: `button#PrimaryApplicant-Continue-button`
 
+## Read-Only Snapshot Observer
+
+- Runtime flag: `advisorSnapshotObserverEnabled := true`
+- Observer helper: `AdvisorQuoteCaptureStateSnapshotObserver(checkpointName, metadata := "")`
+- The observer is read-only and non-fatal. It invokes only `advisor_state_snapshot`; snapshot failures are written as failed envelopes and must not stop the quote workflow.
+- Per-run snapshots are written to `logs\advisor_state_snapshots\runs\<runId>\` as `001_<checkpoint>.json`, `002_<checkpoint>.json`, and so on.
+- The per-run summary is `logs\advisor_state_snapshots\runs\<runId>\run_summary.json`.
+- Summary fields include snapshot counts, last route/url/checkpoint/confidence, blocker and unsafe-reason evidence, conservative terminal disposition codes for duplicate/current-customer, ASC product error, and unknown-unsafe states, plus `reachedCoverages` when the snapshot route is `COVERAGES`.
+
 ## Prospect And Duplicate Handling
 
 - Prospect fields are filled from the normalized clipboard lead profile.

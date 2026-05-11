@@ -4,6 +4,23 @@ global advisorQuoteScanBundlePath := ""
 global advisorQuoteScanBundleItems := []
 global advisorQuoteScanCount := 0
 global advisorQuoteWriteIndividualScanArchives := false
+global advisorSnapshotObserverEnabled := true
+global advisorQuoteSnapshotObserverRunId := ""
+global advisorQuoteSnapshotObserverStartedAt := ""
+global advisorQuoteSnapshotObserverSequence := 0
+global advisorQuoteSnapshotObserverSnapshotCount := 0
+global advisorQuoteSnapshotObserverFailedSnapshotCount := 0
+global advisorQuoteSnapshotObserverReachedCoverages := false
+global advisorQuoteSnapshotObserverLastRoute := ""
+global advisorQuoteSnapshotObserverLastUrl := ""
+global advisorQuoteSnapshotObserverLastCheckpointName := ""
+global advisorQuoteSnapshotObserverLastConfidence := ""
+global advisorQuoteSnapshotObserverLastUnsafeReason := ""
+global advisorQuoteSnapshotObserverLastBlockersRaw := "[]"
+global advisorQuoteSnapshotObserverTerminalDispositionCode := ""
+global advisorQuoteSnapshotObserverTerminalDispositionLabel := ""
+global advisorQuoteSnapshotObserverHumanReviewRequired := false
+global advisorQuoteSnapshotObserverLatestSnapshotPath := ""
 global advisorQuoteProductOverviewAutoPending := false
 global advisorQuoteProductOverviewAutoVerified := false
 global advisorQuoteProductTileAutoSelectedOnOverview := false
@@ -40,6 +57,7 @@ RunAdvisorQuoteWorkflowFromClipboard() {
 
     BeginAutomationRun()
     AdvisorQuoteInitTrace(profile)
+    AdvisorQuoteCaptureStateSnapshotObserver("workflow_start")
     db := GetAdvisorQuoteWorkflowDb()
     result := RunAdvisorQuoteWorkflow(profile, db)
 
@@ -51,11 +69,13 @@ RunAdvisorQuoteWorkflowFromClipboard() {
 
     AdvisorQuoteLogJsMetricsSummary(AdvisorQuoteResultOk(result) ? "success" : "fail")
     if !AdvisorQuoteResultOk(result) {
+        AdvisorQuoteCaptureStateSnapshotObserver("workflow_failure", "state=" AdvisorQuoteResultValue(result, "state") ", reason=" AdvisorQuoteResultValue(result, "reason"))
         AdvisorQuoteAppendLog("FAIL", AdvisorQuoteResultValue(result, "state"), AdvisorQuoteFormatResultForLog(result))
         MsgBox(AdvisorQuoteFormatResultMessage(result))
     } else {
         AdvisorQuoteAppendLog("SUCCESS", AdvisorQuoteResultValue(result, "state"), AdvisorQuoteResultValue(result, "reason"))
     }
+    AdvisorQuoteCaptureStateSnapshotObserver("workflow_end", "ok=" (AdvisorQuoteResultOk(result) ? "1" : "0") ", state=" AdvisorQuoteResultValue(result, "state"))
     return result
 }
 
@@ -75,23 +95,32 @@ RunAdvisorQuoteWorkflow(profile, db) {
     result := AdvisorQuoteRunRequiredState(profile, db, "DUPLICATE")
     if !AdvisorQuoteResultOk(result)
         return result
+    AdvisorQuoteCaptureStateSnapshotObserver("after_entry_create_or_search", "state=" AdvisorQuoteResultValue(result, "state") ", observedState=" AdvisorQuoteResultValue(result, "observedState"))
 
+    AdvisorQuoteCaptureStateSnapshotObserver("customer_summary_prefill_gate")
     result := AdvisorQuoteRunRequiredState(profile, db, "CUSTOMER_SUMMARY_OVERVIEW")
     if !AdvisorQuoteResultOk(result)
         return result
+    AdvisorQuoteCaptureStateSnapshotObserver("after_start_prefill", "observedState=" AdvisorQuoteResultValue(result, "observedState"))
 
+    AdvisorQuoteCaptureStateSnapshotObserver("product_overview")
     result := AdvisorQuoteRunRequiredState(profile, db, "PRODUCT_OVERVIEW")
     if !AdvisorQuoteResultOk(result)
         return result
+    AdvisorQuoteCaptureStateSnapshotObserver("after_product_overview_action", "observedState=" AdvisorQuoteResultValue(result, "observedState"))
 
+    AdvisorQuoteCaptureStateSnapshotObserver("rapport_arrived")
     result := AdvisorQuoteRunRequiredState(profile, db, "RAPPORT")
     if !AdvisorQuoteResultOk(result)
         return result
 
+    AdvisorQuoteCaptureStateSnapshotObserver("select_product")
     result := AdvisorQuoteRunRequiredState(profile, db, "SELECT_PRODUCT")
     if !AdvisorQuoteResultOk(result)
         return result
+    AdvisorQuoteCaptureStateSnapshotObserver("after_select_product_action", "observedState=" AdvisorQuoteResultValue(result, "observedState"))
 
+    AdvisorQuoteCaptureStateSnapshotObserver("asc_product_arrived")
     result := AdvisorQuoteRunRequiredState(profile, db, "CONSUMER_REPORTS")
     if !AdvisorQuoteResultOk(result)
         return result
@@ -108,6 +137,7 @@ RunAdvisorQuoteWorkflow(profile, db) {
     if !AdvisorQuoteResultOk(result)
         return result
 
+    AdvisorQuoteCaptureStateSnapshotObserver("coverages_arrived", "observedState=" AdvisorQuoteResultValue(result, "observedState"))
     AdvisorQuoteSetStep("DONE", "Advisor quote workflow reached quote-ready state.")
     return AdvisorQuoteResultOkValue("DONE", "DONE", "Workflow reached first quote page.")
 }
@@ -2338,6 +2368,7 @@ AdvisorQuoteInitTrace(profile) {
     global advisorQuoteProductTileAutoSelectedOnOverview, advisorQuoteProductOverviewSaved, advisorQuoteGatherAutoCommitted, advisorQuoteProductTileRecoveryAttempted
     AdvisorQuoteResetConsoleBridge()
     AdvisorQuoteInitScanBundle()
+    AdvisorQuoteResetSnapshotObserverRun()
     AdvisorQuoteResetJsMetricsCollector()
     advisorQuoteProductOverviewAutoPending := false
     advisorQuoteProductOverviewAutoVerified := false
@@ -2440,31 +2471,12 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
     step := "ADVISOR_STATE_SNAPSHOT_TEST"
     AdvisorQuoteSetStep(step, "Read-only advisor_state_snapshot capture.")
 
-    raw := ""
-    errorCode := ""
-    retryAttempted := false
-    retryReason := ""
-    retrySucceeded := false
-    try {
-        raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName), 1, 0)))
-    } catch as err {
-        errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotDebug", step, err)
-    }
-
-    retryReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
-    if (retryReason != "") {
-        retryAttempted := true
-        AdvisorQuoteResetConsoleBridge()
-        try {
-            raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName, "retry", "1"), 1, 0)))
-            retrySucceeded := AdvisorQuoteStateSnapshotEffectiveError(raw) = ""
-        } catch as err {
-            errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotDebug", step, err)
-        }
-        retryFailureReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
-        if (retryFailureReason != "" && errorCode = "")
-            errorCode := retryFailureReason
-    }
+    capture := AdvisorQuoteCaptureStateSnapshotRaw(sourceName, "AdvisorQuoteCaptureStateSnapshotDebug", step)
+    raw := capture["raw"]
+    errorCode := capture["errorCode"]
+    retryAttempted := capture["retryAttempted"]
+    retryReason := capture["retryReason"]
+    retrySucceeded := capture["retrySucceeded"]
 
     captureJson := AdvisorQuoteBuildStateSnapshotCaptureJson(raw, sourceName, errorCode, retryAttempted, retryReason, retrySucceeded)
     stamp := FormatTime(A_Now, "yyyyMMdd_HHmmss") . "_" . Format("{:03}", A_MSec)
@@ -2511,6 +2523,309 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
         "latestWriteOk", latestOk ? "1" : "0",
         "archiveWriteOk", archiveOk ? "1" : "0"
     )
+}
+
+AdvisorQuoteCaptureStateSnapshotRaw(sourceName := "", functionName := "AdvisorQuoteCaptureStateSnapshotRaw", stepLabel := "") {
+    raw := ""
+    errorCode := ""
+    retryAttempted := false
+    retryReason := ""
+    retrySucceeded := false
+    step := Trim(String(stepLabel ?? ""))
+    if (step = "")
+        step := AdvisorQuoteGetLastStep()
+
+    try {
+        raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName), 1, 0)))
+    } catch as err {
+        errorCode := AdvisorQuoteFormatStateSnapshotException(functionName, step, err)
+    }
+
+    retryReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
+    if (retryReason != "") {
+        retryAttempted := true
+        AdvisorQuoteResetConsoleBridge()
+        try {
+            raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName, "retry", "1"), 1, 0)))
+            retrySucceeded := AdvisorQuoteStateSnapshotEffectiveError(raw) = ""
+        } catch as err {
+            errorCode := AdvisorQuoteFormatStateSnapshotException(functionName, step, err)
+        }
+        retryFailureReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
+        if (retryFailureReason != "" && errorCode = "")
+            errorCode := retryFailureReason
+    }
+
+    return Map(
+        "raw", raw,
+        "errorCode", errorCode,
+        "retryAttempted", retryAttempted,
+        "retryReason", retryReason,
+        "retrySucceeded", retrySucceeded
+    )
+}
+
+AdvisorQuoteCaptureStateSnapshotObserver(checkpointName, metadata := "") {
+    global advisorSnapshotObserverEnabled
+    if (advisorSnapshotObserverEnabled != true)
+        return Map("skipped", "1", "reason", "observer-disabled")
+
+    try {
+        AdvisorQuoteEnsureSnapshotObserverInitialized()
+        capture := AdvisorQuoteCaptureStateSnapshotRaw("snapshot-observer", "AdvisorQuoteCaptureStateSnapshotObserver", AdvisorQuoteGetLastStep())
+        return AdvisorQuoteSaveStateSnapshotObserverCapture(checkpointName, metadata, capture)
+    } catch as err {
+        try {
+            AdvisorQuoteEnsureSnapshotObserverInitialized()
+            errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotObserver", AdvisorQuoteGetLastStep(), err)
+            capture := Map(
+                "raw", "",
+                "errorCode", errorCode,
+                "retryAttempted", false,
+                "retryReason", "",
+                "retrySucceeded", false
+            )
+            return AdvisorQuoteSaveStateSnapshotObserverCapture(checkpointName, metadata, capture)
+        } catch as nestedErr {
+            try AdvisorQuoteAppendLog("ADVISOR_STATE_SNAPSHOT_OBSERVER_ERROR", AdvisorQuoteGetLastStep(), AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotObserver", AdvisorQuoteGetLastStep(), nestedErr))
+            return Map("result", "ERROR", "error", "observer-capture-and-error-write-failed")
+        }
+    }
+}
+
+AdvisorQuoteEnsureSnapshotObserverInitialized() {
+    global advisorQuoteRunId, advisorQuoteRunStartedAt
+    global advisorQuoteSnapshotObserverRunId, advisorQuoteSnapshotObserverStartedAt
+    global advisorQuoteSnapshotObserverSequence, advisorQuoteSnapshotObserverSnapshotCount, advisorQuoteSnapshotObserverFailedSnapshotCount
+    global advisorQuoteSnapshotObserverReachedCoverages, advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl
+    global advisorQuoteSnapshotObserverLastCheckpointName, advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason
+    global advisorQuoteSnapshotObserverLastBlockersRaw, advisorQuoteSnapshotObserverTerminalDispositionCode
+    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+
+    if (Trim(String(advisorQuoteSnapshotObserverRunId ?? "")) != "")
+        return
+
+    runId := Trim(String(advisorQuoteRunId ?? ""))
+    if (runId = "")
+        runId := "observer-" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . "_" . Format("{:03}", A_MSec)
+    advisorQuoteSnapshotObserverRunId := AdvisorQuoteSanitizeScanToken(runId)
+    if (advisorQuoteSnapshotObserverRunId = "")
+        advisorQuoteSnapshotObserverRunId := "observer-" . FormatTime(A_Now, "yyyyMMdd-HHmmss")
+    advisorQuoteSnapshotObserverStartedAt := Trim(String(advisorQuoteRunStartedAt ?? ""))
+    if (advisorQuoteSnapshotObserverStartedAt = "")
+        advisorQuoteSnapshotObserverStartedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+    advisorQuoteSnapshotObserverSequence := 0
+    advisorQuoteSnapshotObserverSnapshotCount := 0
+    advisorQuoteSnapshotObserverFailedSnapshotCount := 0
+    advisorQuoteSnapshotObserverReachedCoverages := false
+    advisorQuoteSnapshotObserverLastRoute := ""
+    advisorQuoteSnapshotObserverLastUrl := ""
+    advisorQuoteSnapshotObserverLastCheckpointName := ""
+    advisorQuoteSnapshotObserverLastConfidence := ""
+    advisorQuoteSnapshotObserverLastUnsafeReason := ""
+    advisorQuoteSnapshotObserverLastBlockersRaw := "[]"
+    advisorQuoteSnapshotObserverTerminalDispositionCode := ""
+    advisorQuoteSnapshotObserverTerminalDispositionLabel := ""
+    advisorQuoteSnapshotObserverHumanReviewRequired := false
+    advisorQuoteSnapshotObserverLatestSnapshotPath := ""
+}
+
+AdvisorQuoteResetSnapshotObserverRun() {
+    global advisorQuoteSnapshotObserverRunId
+    advisorQuoteSnapshotObserverRunId := ""
+    AdvisorQuoteEnsureSnapshotObserverInitialized()
+}
+
+AdvisorQuoteSaveStateSnapshotObserverCapture(checkpointName, metadata, capture) {
+    global logsRoot
+    global advisorQuoteSnapshotObserverRunId, advisorQuoteSnapshotObserverSequence
+    global advisorQuoteSnapshotObserverSnapshotCount, advisorQuoteSnapshotObserverFailedSnapshotCount
+
+    AdvisorQuoteEnsureSnapshotObserverInitialized()
+    advisorQuoteSnapshotObserverSequence += 1
+    advisorQuoteSnapshotObserverSnapshotCount += 1
+    sequence := advisorQuoteSnapshotObserverSequence
+    raw := IsObject(capture) && capture.Has("raw") ? capture["raw"] : ""
+    errorCode := IsObject(capture) && capture.Has("errorCode") ? capture["errorCode"] : ""
+    retryAttempted := IsObject(capture) && capture.Has("retryAttempted") ? capture["retryAttempted"] : false
+    retryReason := IsObject(capture) && capture.Has("retryReason") ? capture["retryReason"] : ""
+    retrySucceeded := IsObject(capture) && capture.Has("retrySucceeded") ? capture["retrySucceeded"] : false
+    effectiveError := AdvisorQuoteStateSnapshotEffectiveError(raw, errorCode)
+    if (effectiveError != "")
+        advisorQuoteSnapshotObserverFailedSnapshotCount += 1
+
+    envelopeJson := AdvisorQuoteBuildStateSnapshotObserverEnvelopeJson(raw, checkpointName, metadata, sequence, effectiveError, retryAttempted, retryReason, retrySucceeded)
+    safeCheckpoint := AdvisorQuoteSanitizeScanToken(checkpointName)
+    if (safeCheckpoint = "")
+        safeCheckpoint := "checkpoint"
+    runDir := logsRoot "\advisor_state_snapshots\runs\" advisorQuoteSnapshotObserverRunId
+    snapshotPath := runDir "\" Format("{:03}", sequence) "_" safeCheckpoint ".json"
+    writeOk := AdvisorQuoteTryWriteUtf8Atomic(snapshotPath, envelopeJson, "advisor-state-snapshot-observer")
+    AdvisorQuoteUpdateStateSnapshotObserverSummary(raw, checkpointName, sequence, effectiveError, snapshotPath)
+    summaryPath := AdvisorQuoteWriteStateSnapshotObserverSummary()
+
+    route := AdvisorQuoteExtractJsonString(raw, "route")
+    AdvisorQuoteAppendLog(
+        "ADVISOR_STATE_SNAPSHOT_OBSERVER",
+        AdvisorQuoteGetLastStep(),
+        "result=" ((effectiveError = "" && writeOk) ? "OK" : "ERROR")
+            . ", checkpointName=" checkpointName
+            . ", sequence=" sequence
+            . ", op=advisor_state_snapshot"
+            . ", route=" route
+            . ", retryAttempted=" (retryAttempted ? "1" : "0")
+            . ", retryReason=" retryReason
+            . ", retrySucceeded=" (retrySucceeded ? "1" : "0")
+            . ", error=" effectiveError
+            . ", snapshotPath=" snapshotPath
+            . ", summaryPath=" summaryPath
+    )
+
+    return Map(
+        "result", (effectiveError = "" && writeOk) ? "OK" : "ERROR",
+        "op", "advisor_state_snapshot",
+        "route", route,
+        "error", effectiveError,
+        "path", snapshotPath,
+        "summaryPath", summaryPath,
+        "writeOk", writeOk ? "1" : "0"
+    )
+}
+
+AdvisorQuoteBuildStateSnapshotObserverEnvelopeJson(rawSnapshotJson, checkpointName, metadata, sequence, errorCode := "", retryAttempted := false, retryReason := "", retrySucceeded := false) {
+    global advisorQuoteSnapshotObserverRunId
+
+    raw := Trim(String(rawSnapshotJson ?? ""))
+    rawIsJson := AdvisorQuoteLooksLikeJsonPayload(raw)
+    capturedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+    url := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "url") : ""
+    route := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "route") : ""
+    confidence := rawIsJson ? AdvisorQuoteExtractJsonNumber(raw, "confidence") : ""
+    allowedNextActions := rawIsJson ? AdvisorQuoteExtractJsonArrayRaw(raw, "allowedNextActions") : "[]"
+    blockers := rawIsJson ? AdvisorQuoteExtractJsonArrayRaw(raw, "blockers") : "[]"
+    unsafeReasonRaw := rawIsJson ? AdvisorQuoteExtractJsonNullableStringRaw(raw, "unsafeReason") : "null"
+    rawPayload := rawIsJson ? raw : "null"
+    effectiveError := AdvisorQuoteStateSnapshotEffectiveError(raw, errorCode)
+
+    json := "{`n"
+        . '  "ok": ' (effectiveError = "" ? "true" : "false") ",`n"
+        . '  "capturedAt": "' AdvisorQuoteJsonEscape(capturedAt) '",`n'
+        . '  "runId": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverRunId) '",`n'
+        . '  "sequence": ' Integer(sequence) ",`n"
+        . '  "checkpointName": "' AdvisorQuoteJsonEscape(checkpointName) '",`n'
+        . '  "source": "snapshot-observer",`n'
+        . '  "op": "advisor_state_snapshot",`n'
+        . '  "url": "' AdvisorQuoteJsonEscape(url) '",`n'
+        . '  "route": "' AdvisorQuoteJsonEscape(route) '",`n'
+        . '  "confidence": ' (confidence != "" ? confidence : "null") ",`n"
+        . '  "allowedNextActions": ' allowedNextActions ",`n"
+        . '  "unsafeReason": ' unsafeReasonRaw ",`n"
+        . '  "blockers": ' blockers ",`n"
+        . '  "retryAttempted": ' (retryAttempted ? "true" : "false") ",`n"
+        . '  "retryReason": "' AdvisorQuoteJsonEscape(retryReason) '",`n'
+        . '  "retrySucceeded": ' (retrySucceeded ? "true" : "false") ",`n"
+        . '  "error": ' (effectiveError = "" ? "null" : ('"' AdvisorQuoteJsonEscape(effectiveError) '"')) ",`n"
+        . '  "metadata": ' AdvisorQuoteObserverMetadataJson(metadata) ",`n"
+        . '  "rawAdvisorStateSnapshot": ' rawPayload "`n"
+        . "}`n"
+    return json
+}
+
+AdvisorQuoteObserverMetadataJson(metadata) {
+    if !IsObject(metadata)
+        return '"' AdvisorQuoteJsonEscape(metadata) '"'
+    if (Type(metadata) = "Array") {
+        json := "["
+        for index, value in metadata {
+            if (index > 1)
+                json .= ", "
+            json .= '"' AdvisorQuoteJsonEscape(value) '"'
+        }
+        json .= "]"
+        return json
+    }
+    json := "{"
+    first := true
+    for key, value in metadata {
+        if !first
+            json .= ", "
+        first := false
+        json .= '"' AdvisorQuoteJsonEscape(key) '": "' AdvisorQuoteJsonEscape(value) '"'
+    }
+    json .= "}"
+    return json
+}
+
+AdvisorQuoteUpdateStateSnapshotObserverSummary(rawSnapshotJson, checkpointName, sequence, errorCode, snapshotPath) {
+    global advisorQuoteSnapshotObserverReachedCoverages, advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl
+    global advisorQuoteSnapshotObserverLastCheckpointName, advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason
+    global advisorQuoteSnapshotObserverLastBlockersRaw, advisorQuoteSnapshotObserverTerminalDispositionCode
+    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+
+    raw := Trim(String(rawSnapshotJson ?? ""))
+    rawIsJson := AdvisorQuoteLooksLikeJsonPayload(raw)
+    route := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "route") : ""
+    advisorQuoteSnapshotObserverLastRoute := route
+    advisorQuoteSnapshotObserverLastUrl := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "url") : ""
+    advisorQuoteSnapshotObserverLastCheckpointName := checkpointName
+    advisorQuoteSnapshotObserverLastConfidence := rawIsJson ? AdvisorQuoteExtractJsonNumber(raw, "confidence") : ""
+    advisorQuoteSnapshotObserverLastUnsafeReason := rawIsJson ? AdvisorQuoteExtractJsonNullableString(raw, "unsafeReason") : ""
+    advisorQuoteSnapshotObserverLastBlockersRaw := rawIsJson ? AdvisorQuoteExtractJsonArrayRaw(raw, "blockers") : "[]"
+    advisorQuoteSnapshotObserverLatestSnapshotPath := snapshotPath
+
+    if (route = "COVERAGES")
+        advisorQuoteSnapshotObserverReachedCoverages := true
+
+    if (route = "DUPLICATE_CURRENT_CUSTOMER") {
+        advisorQuoteSnapshotObserverTerminalDispositionCode := "PA_EXISTS_AS"
+        advisorQuoteSnapshotObserverTerminalDispositionLabel := "PA Exists AS"
+        advisorQuoteSnapshotObserverHumanReviewRequired := true
+    } else if (route = "ASC_PRODUCT_ERROR") {
+        advisorQuoteSnapshotObserverTerminalDispositionCode := "ASC_PRODUCT_ERROR"
+        advisorQuoteSnapshotObserverTerminalDispositionLabel := "ASC Product Error"
+        advisorQuoteSnapshotObserverHumanReviewRequired := true
+    } else if (route = "UNKNOWN_UNSAFE") {
+        advisorQuoteSnapshotObserverTerminalDispositionCode := "UNKNOWN_UNSAFE"
+        advisorQuoteSnapshotObserverTerminalDispositionLabel := "Unknown Unsafe"
+        advisorQuoteSnapshotObserverHumanReviewRequired := true
+    }
+}
+
+AdvisorQuoteWriteStateSnapshotObserverSummary() {
+    global logsRoot, advisorQuoteSnapshotObserverRunId
+    summaryPath := logsRoot "\advisor_state_snapshots\runs\" advisorQuoteSnapshotObserverRunId "\run_summary.json"
+    AdvisorQuoteTryWriteUtf8Atomic(summaryPath, AdvisorQuoteBuildStateSnapshotObserverSummaryJson(), "advisor-state-snapshot-observer-summary")
+    return summaryPath
+}
+
+AdvisorQuoteBuildStateSnapshotObserverSummaryJson() {
+    global advisorQuoteSnapshotObserverRunId, advisorQuoteSnapshotObserverStartedAt, advisorQuoteSnapshotObserverSnapshotCount
+    global advisorQuoteSnapshotObserverFailedSnapshotCount, advisorQuoteSnapshotObserverReachedCoverages
+    global advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl, advisorQuoteSnapshotObserverLastCheckpointName
+    global advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason, advisorQuoteSnapshotObserverLastBlockersRaw
+    global advisorQuoteSnapshotObserverTerminalDispositionCode, advisorQuoteSnapshotObserverTerminalDispositionLabel
+    global advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+
+    updatedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+    json := "{`n"
+        . '  "runId": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverRunId) '",`n'
+        . '  "startedAt": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverStartedAt) '",`n'
+        . '  "updatedAt": "' AdvisorQuoteJsonEscape(updatedAt) '",`n'
+        . '  "snapshotCount": ' Integer(advisorQuoteSnapshotObserverSnapshotCount) ",`n"
+        . '  "failedSnapshotCount": ' Integer(advisorQuoteSnapshotObserverFailedSnapshotCount) ",`n"
+        . '  "reachedCoverages": ' (advisorQuoteSnapshotObserverReachedCoverages ? "true" : "false") ",`n"
+        . '  "lastRoute": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLastRoute) '",`n'
+        . '  "lastUrl": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLastUrl) '",`n'
+        . '  "lastCheckpointName": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLastCheckpointName) '",`n'
+        . '  "lastConfidence": ' (advisorQuoteSnapshotObserverLastConfidence != "" ? advisorQuoteSnapshotObserverLastConfidence : "null") ",`n"
+        . '  "lastUnsafeReason": ' (advisorQuoteSnapshotObserverLastUnsafeReason = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLastUnsafeReason) '"')) ",`n"
+        . '  "lastBlockers": ' (Trim(String(advisorQuoteSnapshotObserverLastBlockersRaw ?? "")) != "" ? advisorQuoteSnapshotObserverLastBlockersRaw : "[]") ",`n"
+        . '  "terminalDispositionCode": ' (advisorQuoteSnapshotObserverTerminalDispositionCode = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverTerminalDispositionCode) '"')) ",`n"
+        . '  "terminalDispositionLabel": ' (advisorQuoteSnapshotObserverTerminalDispositionLabel = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverTerminalDispositionLabel) '"')) ",`n"
+        . '  "humanReviewRequired": ' (advisorQuoteSnapshotObserverHumanReviewRequired ? "true" : "false") ",`n"
+        . '  "latestSnapshotPath": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLatestSnapshotPath) '"`n'
+        . "}`n"
+    return json
 }
 
 AdvisorQuoteFormatStateSnapshotException(functionName, stepLabel, err) {
@@ -2615,6 +2930,15 @@ AdvisorQuoteExtractJsonNullableStringRaw(json, key) {
     if RegExMatch(String(json ?? ""), pattern, &m)
         return m[1]
     return "null"
+}
+
+AdvisorQuoteExtractJsonNullableString(json, key) {
+    raw := AdvisorQuoteExtractJsonNullableStringRaw(json, key)
+    if (raw = "null" || raw = "")
+        return ""
+    if (SubStr(raw, 1, 1) = '"' && SubStr(raw, StrLen(raw), 1) = '"')
+        return AdvisorQuoteJsonUnescapeBasic(SubStr(raw, 2, StrLen(raw) - 2))
+    return raw
 }
 
 AdvisorQuoteInitScanBundle(runId := "") {

@@ -601,10 +601,12 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
     }
 
+    AdvisorQuoteCaptureStateSnapshotObserver("before_gather_defaults")
     if !AdvisorQuoteFillGatherDefaults(profile, db, &failureReason) {
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "gather-defaults-failed")
         return false
     }
+    AdvisorQuoteCaptureStateSnapshotObserver("after_gather_defaults")
 
     vehiclePolicy := AdvisorQuoteClassifyGatherVehicles(profile)
     AdvisorQuoteLogGatherVehiclePolicy(vehiclePolicy)
@@ -615,6 +617,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     if !AdvisorQuoteResolveGatherSnapshotBlockers(actionableVehicles, db, &failureReason, &failureScanPath)
         return false
 
+    AdvisorQuoteCaptureStateSnapshotObserver("before_vehicle_confirmation", "actionableVehicles=" actionableVehicles.Length ", partialYearMakeVehicles=" partialYearMakeVehicles.Length)
     if (rapportLedger["rateableCount"] = 0) {
         failureReason := "NO_RATEABLE_VEHICLES"
         AdvisorQuoteAppendLog(
@@ -1099,6 +1102,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", createQuotesEnabled=" AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
             . ", startQuotingAllowed=1"
     )
+    AdvisorQuoteCaptureStateSnapshotObserver("after_vehicle_confirmation", "confirmedOrAddedVehicleCount=" vehicleSatisfiedCount ", ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger))
 
     startQuotingStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
     AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))
@@ -1170,6 +1174,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 . ", startQuotingScopedAddProductClicked=0"
         )
 
+        AdvisorQuoteCaptureStateSnapshotObserver("rapport_before_continue", "startQuotingHandoffPath=create-quotes-enabled")
         clickResult := AdvisorQuoteClickCreateQuotesOrderReports(db)
         AdvisorQuoteAppendLog("GATHER_START_QUOTING_CREATE_QUOTES_CLICK", AdvisorQuoteGetLastStep(), "result=" clickResult)
         if (clickResult != "OK") {
@@ -1622,4 +1627,3 @@ AdvisorQuoteExpectedDriverNamesText(profile, selectedSpouseName := "") {
         names.Push(Trim(String(selectedSpouseName)))
     return JoinArray(names, "||")
 }
-
