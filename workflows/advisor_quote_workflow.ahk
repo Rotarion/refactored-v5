@@ -2432,6 +2432,131 @@ AdvisorQuoteSaveScanSnapshot(scanJson, label := "", reason := "") {
     return latestOk ? latestPath : ""
 }
 
+AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
+    global logsRoot
+
+    step := "ADVISOR_STATE_SNAPSHOT_TEST"
+    AdvisorQuoteSetStep(step, "Read-only advisor_state_snapshot capture.")
+
+    raw := ""
+    errorCode := ""
+    try {
+        raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName), 1, 0)))
+    } catch as err {
+        errorCode := "exception:" err.Message
+    }
+
+    if (Trim(raw) = "" && errorCode = "")
+        errorCode := "empty-result-or-bridge-unavailable"
+
+    captureJson := AdvisorQuoteBuildStateSnapshotCaptureJson(raw, sourceName, errorCode)
+    stamp := FormatTime(A_Now, "yyyyMMdd_HHmmss") . "_" . Format("{:03}", A_MSec)
+    latestPath := logsRoot "\advisor_state_snapshot_latest.json"
+    archivePath := logsRoot "\advisor_state_snapshots\advisor_state_snapshot_" stamp ".json"
+    latestOk := AdvisorQuoteTryWriteUtf8Atomic(latestPath, captureJson, "advisor-state-snapshot-latest")
+    archiveOk := AdvisorQuoteTryWriteUtf8Atomic(archivePath, captureJson, "advisor-state-snapshot-archive")
+
+    route := AdvisorQuoteExtractJsonString(raw, "route")
+    confidence := AdvisorQuoteExtractJsonNumber(raw, "confidence")
+    unsafeReason := AdvisorQuoteExtractJsonString(raw, "unsafeReason")
+    url := AdvisorQuoteExtractJsonString(raw, "url")
+    effectiveError := AdvisorQuoteStateSnapshotEffectiveError(raw, errorCode)
+    result := (effectiveError = "" && latestOk && archiveOk) ? "OK" : ((effectiveError != "") ? "ERROR" : "WRITE_FAILED")
+
+    AdvisorQuoteAppendLog(
+        "ADVISOR_STATE_SNAPSHOT_CAPTURE",
+        step,
+        "result=" result
+            . ", op=advisor_state_snapshot"
+            . ", route=" route
+            . ", confidence=" confidence
+            . ", error=" effectiveError
+            . ", latestPath=" latestPath
+            . ", archivePath=" archivePath
+    )
+
+    return Map(
+        "result", result,
+        "op", "advisor_state_snapshot",
+        "route", route,
+        "confidence", confidence,
+        "unsafeReason", unsafeReason,
+        "url", url,
+        "error", effectiveError,
+        "latestPath", latestPath,
+        "archivePath", archivePath,
+        "latestWriteOk", latestOk ? "1" : "0",
+        "archiveWriteOk", archiveOk ? "1" : "0"
+    )
+}
+
+AdvisorQuoteBuildStateSnapshotCaptureJson(rawSnapshotJson, sourceName := "", errorCode := "") {
+    raw := Trim(String(rawSnapshotJson ?? ""))
+    rawIsJson := AdvisorQuoteLooksLikeJsonPayload(raw)
+    capturedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+    url := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "url") : ""
+    route := rawIsJson ? AdvisorQuoteExtractJsonString(raw, "route") : ""
+    confidence := rawIsJson ? AdvisorQuoteExtractJsonNumber(raw, "confidence") : ""
+    allowedNextActions := rawIsJson ? AdvisorQuoteExtractJsonArrayRaw(raw, "allowedNextActions") : "[]"
+    unsafeReasonRaw := rawIsJson ? AdvisorQuoteExtractJsonNullableStringRaw(raw, "unsafeReason") : "null"
+    effectiveError := AdvisorQuoteStateSnapshotEffectiveError(raw, errorCode)
+    okText := (effectiveError = "") ? "true" : "false"
+    rawPayload := rawIsJson ? raw : "null"
+    rawTextPayload := (!rawIsJson && raw != "") ? ('"' AdvisorQuoteJsonEscape(raw) '"') : "null"
+
+    json := "{`n"
+        . '  "ok": ' okText ",`n"
+        . '  "capturedAt": "' AdvisorQuoteJsonEscape(capturedAt) '",`n'
+        . '  "source": "' AdvisorQuoteJsonEscape(sourceName) '",`n'
+        . '  "op": "advisor_state_snapshot",`n'
+        . '  "url": "' AdvisorQuoteJsonEscape(url) '",`n'
+        . '  "route": "' AdvisorQuoteJsonEscape(route) '",`n'
+        . '  "confidence": ' (confidence != "" ? confidence : "null") ",`n"
+        . '  "allowedNextActions": ' allowedNextActions ",`n"
+        . '  "unsafeReason": ' unsafeReasonRaw ",`n"
+        . '  "error": ' (effectiveError = "" ? "null" : ('"' AdvisorQuoteJsonEscape(effectiveError) '"')) ",`n"
+        . '  "rawAdvisorStateSnapshot": ' rawPayload ",`n"
+        . '  "rawText": ' rawTextPayload "`n"
+        . "}`n"
+    return json
+}
+
+AdvisorQuoteStateSnapshotEffectiveError(rawSnapshotJson, errorCode := "") {
+    raw := Trim(String(rawSnapshotJson ?? ""))
+    effectiveError := Trim(String(errorCode ?? ""))
+    if (effectiveError != "")
+        return effectiveError
+    if (raw = "")
+        return "empty-result-or-bridge-unavailable"
+    if !AdvisorQuoteLooksLikeJsonPayload(raw)
+        return "invalid-json-result"
+    url := StrLower(AdvisorQuoteExtractJsonString(raw, "url"))
+    if !InStr(url, "advisorpro.allstate.com")
+        return "advisor-pro-not-active"
+    return ""
+}
+
+AdvisorQuoteExtractJsonNumber(json, key) {
+    pattern := '"' key '"\s*:\s*(-?\d+(?:\.\d+)?)'
+    if RegExMatch(String(json ?? ""), pattern, &m)
+        return m[1]
+    return ""
+}
+
+AdvisorQuoteExtractJsonArrayRaw(json, key) {
+    pattern := 's)"' key '"\s*:\s*(\[[^\]]*\])'
+    if RegExMatch(String(json ?? ""), pattern, &m)
+        return m[1]
+    return "[]"
+}
+
+AdvisorQuoteExtractJsonNullableStringRaw(json, key) {
+    pattern := 's)"' key '"\s*:\s*(null|"((?:\\.|[^"\\])*)")'
+    if RegExMatch(String(json ?? ""), pattern, &m)
+        return m[1]
+    return "null"
+}
+
 AdvisorQuoteInitScanBundle(runId := "") {
     global logsRoot, advisorQuoteRunId, advisorQuoteRunStartedAt, advisorQuoteScanBundlePath
     global advisorQuoteScanBundleItems, advisorQuoteScanCount

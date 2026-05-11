@@ -6,6 +6,7 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 
 - Hotkey: `Ctrl+Alt+-` / AHK `^!-`
 - AHK entry: `RunAdvisorQuoteWorkflowFromClipboard()`
+- Read-only state snapshot debug hotkey: `Ctrl+Alt+Shift+S` / AHK `^!+s`
 - Landing quote button: `button#group2_Quoting_button`
 - Begin quoting continue button: `button#PrimaryApplicant-Continue-button`
 

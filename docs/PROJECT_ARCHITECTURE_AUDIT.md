@@ -21,6 +21,7 @@ This document replaces the older one-off audits, migration plans, patch notes, s
 - Production bootstrap: `main.ahk`
 - Advisor quote workflow hotkey: `Ctrl+Alt+-` / `^!-`
 - Advisor quote entry function: `RunAdvisorQuoteWorkflowFromClipboard()`
+- Advisor read-only state snapshot debug hotkey: `Ctrl+Alt+Shift+S` / `^!+s`
 - Emergency stop: `Esc`
 - Exit: `F1`
 - Configuration UI: `Ctrl+Alt+1`
@@ -72,7 +73,7 @@ workflows/
   single_lead_create.ahk
 ```
 
-Generated runtime artifacts belong under `logs/`. Advisor scan snapshots are written under `logs/advisor_scans/` with `logs/advisor_scan_latest.json` as the latest pointer.
+Generated runtime artifacts belong under `logs/`. Advisor scan snapshots are written under `logs/advisor_scans/` with `logs/advisor_scan_latest.json` as the latest pointer. The read-only Advisor state snapshot debug capture writes `logs/advisor_state_snapshot_latest.json` and timestamped archives under `logs/advisor_state_snapshots/`.
 
 ## Include Order
 

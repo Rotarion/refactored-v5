@@ -131,6 +131,27 @@ F1::ExitApp
     )
 }
 
+^!+s:: {
+    BeginAutomationRun()
+    result := AdvisorQuoteCaptureStateSnapshotDebug("Ctrl+Alt+Shift+S")
+    status := AdvisorQuoteStatusValue(result, "result")
+    route := AdvisorQuoteStatusValue(result, "route")
+    confidence := AdvisorQuoteStatusValue(result, "confidence")
+    errorText := AdvisorQuoteStatusValue(result, "error")
+    latestPath := AdvisorQuoteStatusValue(result, "latestPath")
+
+    message := "Advisor snapshot " status
+    if (route != "")
+        message .= "`nroute=" route
+    if (confidence != "")
+        message .= " confidence=" confidence
+    if (errorText != "")
+        message .= "`n" errorText
+    message .= "`n" latestPath
+    ToolTip(message)
+    SetTimer(ClearStopToolTip, -1800)
+}
+
 ^!+r:: {
     BeginAutomationRun()
     result := AdvisorQuoteRunReadOnlyRunnerPilotSelfTest()
