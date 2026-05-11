@@ -397,6 +397,8 @@ AdvisorQuoteHandleSelectProduct(db, &failureReason := "", &failureScanPath := ""
         "ownOrRent", db["defaults"]["ownOrRent"],
         "currentInsuredQuestionText", db["texts"]["selectProductCurrentInsuredQuestion"],
         "currentInsuredAnswerText", db["texts"]["selectProductAnswerYesText"],
+        "ownRentQuestionText", "Does the customer own or rent?",
+        "ownRentAnswerText", "Own",
         "texts", db["texts"],
         "selectors", db["selectors"]
     )
@@ -481,7 +483,8 @@ AdvisorQuoteGetSelectProductStatus(db) {
         "selectProductProductId", db["selectors"]["selectProductProductId"],
         "selectProductRatingStateId", db["selectors"]["selectProductRatingStateId"],
         "selectProductContinueId", db["selectors"]["selectProductContinueId"],
-        "currentInsuredQuestionText", db["texts"]["selectProductCurrentInsuredQuestion"]
+        "currentInsuredQuestionText", db["texts"]["selectProductCurrentInsuredQuestion"],
+        "ownRentQuestionText", "Does the customer own or rent?"
     )
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("select_product_status", args, 2, 120))
 }
@@ -510,6 +513,12 @@ AdvisorQuoteBuildSelectProductStatusDetail(status) {
         . ", insuredControlType=" AdvisorQuoteStatusValue(status, "insuredControlType")
         . ", insuredDetectionMethod=" AdvisorQuoteStatusValue(status, "insuredDetectionMethod")
         . ", ownOrRentSelected=" AdvisorQuoteStatusValue(status, "ownOrRentSelected")
+        . ", ownRentQuestionPresent=" AdvisorQuoteStatusValue(status, "ownRentQuestionPresent")
+        . ", ownRentQuestionRequired=" AdvisorQuoteStatusValue(status, "ownRentQuestionRequired")
+        . ", ownRentOwnPresent=" AdvisorQuoteStatusValue(status, "ownRentOwnPresent")
+        . ", ownRentRentPresent=" AdvisorQuoteStatusValue(status, "ownRentRentPresent")
+        . ", ownRentOwnSelected=" AdvisorQuoteStatusValue(status, "ownRentOwnSelected")
+        . ", ownRentRentSelected=" AdvisorQuoteStatusValue(status, "ownRentRentSelected")
         . ", continuePresent=" AdvisorQuoteStatusValue(status, "continuePresent")
         . ", continueEnabled=" AdvisorQuoteStatusValue(status, "continueEnabled")
         . ", coreReady=" AdvisorQuoteStatusValue(status, "coreReady")
@@ -599,20 +608,31 @@ AdvisorQuoteSelectProductStatusValid(status, db, afterContinue := false, &failur
     if (result != "") {
         if (result = "SELECT_PRODUCT_CONTINUE_DISABLED")
             failureReason := "SELECT_PRODUCT_CONTINUE_DISABLED"
+        else if InStr(result, "SELECT_PRODUCT_MISSING_")
+            failureReason := result
         else if (result = "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING")
-            failureReason := "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING"
+            failureReason := AdvisorQuoteSelectProductMissingFailureReason(status)
         else
             failureReason := result
         return false
     }
     missing := AdvisorQuoteStatusValue(status, "missing")
-    if InStr(missing, "continueEnabled")
+    if InStr(missing, "SELECT_PRODUCT_CONTINUE_DISABLED")
         failureReason := "SELECT_PRODUCT_CONTINUE_DISABLED"
     else if (missing != "")
-        failureReason := "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING"
+        failureReason := AdvisorQuoteSelectProductMissingFailureReason(status)
     else
         failureReason := "SELECT_PRODUCT_FALLBACK_NOT_READY"
     return false
+}
+
+AdvisorQuoteSelectProductMissingFailureReason(status) {
+    missing := AdvisorQuoteStatusValue(status, "missing")
+    if (missing = "")
+        return "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING"
+    if !InStr(missing, "|")
+        return missing
+    return "SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING: " missing
 }
 
 AdvisorQuoteHandleProductOverview(db) {
@@ -749,4 +769,3 @@ AdvisorQuoteHandleProductOverview(db) {
     )
     return ""
 }
-

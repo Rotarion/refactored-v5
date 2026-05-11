@@ -518,7 +518,7 @@ function assertAdvisorStateSnapshot(raw) {
   const parsed = JSON.parse(raw);
   for (const key of [
     'ok', 'op', 'ts', 'url', 'route', 'confidence', 'anchors', 'blockers',
-    'product', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
+    'product', 'selectProduct', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
   ])
     assert.ok(Object.prototype.hasOwnProperty.call(parsed, key), `snapshot missing ${key}`);
   assert.strictEqual(parsed.ok, true);
@@ -531,6 +531,11 @@ function assertAdvisorStateSnapshot(raw) {
   assert.ok(Array.isArray(parsed.anchors));
   assert.ok(Array.isArray(parsed.blockers));
   assert.deepStrictEqual(Object.keys(parsed.product), ['autoVisible', 'autoSelected', 'saveContinueVisible']);
+  assert.deepStrictEqual(Object.keys(parsed.selectProduct), [
+    'present', 'ratingState', 'product', 'productText', 'effectiveDate', 'currentAddressPresent',
+    'currentlyInsuredAnswer', 'ownRentAnswer', 'continueVisible', 'continueEnabled', 'missingRequired'
+  ]);
+  assert.ok(Array.isArray(parsed.selectProduct.missingRequired));
   assert.deepStrictEqual(Object.keys(parsed.prefillGate), ['present', 'startHereVisible']);
   assert.deepStrictEqual(Object.keys(parsed.rapport), ['present', 'vehicleCount', 'driverCount', 'staleAddVehicleRow']);
   assert.deepStrictEqual(Object.keys(parsed.iframe), ['present', 'count', 'hints']);
@@ -704,6 +709,54 @@ function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false
   if (includeEffectiveDate) nodes.push(createInput('SelectProduct.EffectiveDate', '05/08/2026'));
   if (includeCurrentAddress) nodes.push(createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }));
   return pageDoc('Select Product Is the customer currently insured? Yes No', nodes);
+}
+
+function selectProductChoiceQuestion(questionText, choices) {
+  const question = new FakeElement('section', { className: 'mesh-question' });
+  question.appendChild(textNode(questionText, 'span'));
+  const buttons = {};
+  for (const choice of choices) {
+    const button = createButton(choice.id, choice.text, {
+      className: choice.selected ? 'mesh-option selected' : 'mesh-option',
+      attributes: { role: 'button', 'aria-pressed': choice.selected ? 'true' : 'false' },
+      onClick: (el) => {
+        for (const other of Object.values(buttons)) {
+          other.className = 'mesh-option';
+          other.setAttribute('aria-pressed', 'false');
+        }
+        el.className = 'mesh-option selected';
+        el.setAttribute('aria-pressed', 'true');
+      }
+    });
+    buttons[choice.id] = button;
+    question.appendChild(button);
+  }
+  return question;
+}
+
+function selectProductObservedLiveDoc() {
+  return pageDoc('Select Product Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Current Address', [
+    textNode('Select Product', 'h1'),
+    createSelect('SelectProduct.RatingState', [
+      { value: '', text: 'Select One' },
+      { value: 'FL', text: 'Florida', selected: true }
+    ]),
+    createSelect('SelectProduct.Product', [
+      { value: '', text: 'Select One' },
+      { value: 'AUTO', text: 'Auto', selected: true }
+    ]),
+    createInput('SelectProduct.EffectiveDate', '05/11/2026'),
+    createRadio('SelectProduct.CurrentAddress', 'SelectProduct.CurrentAddress', 'current', { checked: true }),
+    selectProductChoiceQuestion('Is the customer currently insured?', [
+      { id: 'observed-currently-insured-yes', text: 'Yes' },
+      { id: 'observed-currently-insured-no', text: 'No' }
+    ]),
+    selectProductChoiceQuestion('Does the customer own or rent?', [
+      { id: 'observed-own-rent-own', text: 'Own' },
+      { id: 'observed-own-rent-rent', text: 'Rent' }
+    ]),
+    createButton('selectProductContinue', 'Continue')
+  ]);
 }
 
 function gatherDataDoc(extraNodes = []) {
@@ -2022,8 +2075,8 @@ function testReturnShapeContracts() {
   const insuredRequiredStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), insuredRequiredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'insuredQuestionPresent', 'insuredYesPresent', 'insuredYesSelected', 'missing'
   ]);
-  assert.strictEqual(insuredRequiredStatus.result, 'READY');
-  assert.strictEqual(insuredRequiredStatus.missing, '');
+  assert.strictEqual(insuredRequiredStatus.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
+  assert.strictEqual(insuredRequiredStatus.missing, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
 
 
   const customInsuredDoc = selectProductCustomInsuredDoc();
@@ -2035,8 +2088,8 @@ function testReturnShapeContracts() {
   assert.strictEqual(customInsuredStatus.insuredYesPresent, '1');
   assert.strictEqual(customInsuredStatus.insuredNoPresent, '1');
   assert.strictEqual(customInsuredStatus.insuredQuestionRequired, '1');
-  assert.strictEqual(customInsuredStatus.result, 'READY');
-  assert.strictEqual(customInsuredStatus.missing, '');
+  assert.strictEqual(customInsuredStatus.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
+  assert.strictEqual(customInsuredStatus.missing, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
 
   const defaultedCustomInsuredDoc = selectProductCustomInsuredDoc();
   const defaultedCustomInsured = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
@@ -2083,39 +2136,68 @@ function testReturnShapeContracts() {
   }), failedDefaultCustomInsuredDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'currentInsuredSet', 'insuredQuestionAnswered', 'missing'
   ]);
-  assert.strictEqual(failedDefaultCustomInsured.result, 'OK');
+  assert.strictEqual(failedDefaultCustomInsured.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
   assert.strictEqual(failedDefaultCustomInsured.currentInsuredSet, '0');
-  assert.strictEqual(failedDefaultCustomInsured.missing, '');
+  assert.strictEqual(failedDefaultCustomInsured.missing, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
 
   const ambiguousCoreReadyDoc = selectProductCustomInsuredDoc();
   const ambiguousCoreReadyClick = assertKeyBlock(runOperator('click_select_product_continue', baseArgs(), ambiguousCoreReadyDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'clicked', 'continueEnabled', 'missing', 'readinessTrace', 'customControlAmbiguous'
   ]);
-  assert.strictEqual(ambiguousCoreReadyClick.result, 'OK');
-  assert.strictEqual(ambiguousCoreReadyClick.clicked, '1');
+  assert.strictEqual(ambiguousCoreReadyClick.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
+  assert.strictEqual(ambiguousCoreReadyClick.clicked, '0');
   assert.strictEqual(ambiguousCoreReadyClick.customControlAmbiguous, '1');
-  assert.strictEqual(ambiguousCoreReadyDoc.getElementById('selectProductContinue').clickCalls, 1);
+  assert.strictEqual(ambiguousCoreReadyDoc.getElementById('selectProductContinue').clickCalls, 0);
 
   const disabledContinueDoc = selectProductCustomInsuredDoc({ continueDisabled: true });
   const disabledContinueStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), disabledContinueDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'continueEnabled', 'missing'
   ]);
   assert.strictEqual(disabledContinueStatus.result, 'SELECT_PRODUCT_CONTINUE_DISABLED');
-  assert.ok(disabledContinueStatus.missing.includes('continueEnabled'));
+  assert.ok(disabledContinueStatus.missing.includes('SELECT_PRODUCT_CONTINUE_DISABLED'));
 
   const missingAutoDoc = selectProductCustomInsuredDoc({ autoSelected: false });
   const missingAutoStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), missingAutoDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'autoSelected', 'missing'
   ]);
-  assert.strictEqual(missingAutoStatus.result, 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING');
-  assert.ok(missingAutoStatus.missing.includes('autoProduct'));
+  assert.strictEqual(missingAutoStatus.result, 'SELECT_PRODUCT_MISSING_PRODUCT');
+  assert.ok(missingAutoStatus.missing.includes('SELECT_PRODUCT_MISSING_PRODUCT'));
 
   const missingDateDoc = selectProductCustomInsuredDoc({ includeEffectiveDate: false });
   const missingDateStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), missingDateDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'effectiveDatePresent', 'missing'
   ]);
-  assert.strictEqual(missingDateStatus.result, 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING');
-  assert.ok(missingDateStatus.missing.includes('effectiveDate'));
+  assert.strictEqual(missingDateStatus.result, 'SELECT_PRODUCT_MISSING_EFFECTIVE_DATE');
+  assert.ok(missingDateStatus.missing.includes('SELECT_PRODUCT_MISSING_EFFECTIVE_DATE'));
+
+  const observedLiveDoc = selectProductObservedLiveDoc();
+  const observedLiveStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), observedLiveDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'routeFamily', 'ratingStateValue', 'productValue', 'productText', 'effectiveDateFilled',
+    'currentAddressPresent', 'currentAddressSelected', 'insuredQuestionPresent', 'ownRentQuestionPresent',
+    'ownRentOwnPresent', 'ownRentRentPresent', 'continueEnabled', 'missing'
+  ]);
+  assert.strictEqual(observedLiveStatus.routeFamily, 'intel-select-product');
+  assert.strictEqual(observedLiveStatus.currentAddressPresent, '1');
+  assert.strictEqual(observedLiveStatus.currentAddressSelected, '1');
+  assert.strictEqual(observedLiveStatus.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
+  assert.ok(observedLiveStatus.missing.includes('SELECT_PRODUCT_MISSING_CURRENTLY_INSURED'));
+  assert.ok(observedLiveStatus.missing.includes('SELECT_PRODUCT_MISSING_OWN_RENT'));
+
+  const observedDefaulted = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
+    ratingState: 'FL',
+    productValue: 'AUTO',
+    currentInsured: 'YES',
+    ownOrRent: 'OWN'
+  }), observedLiveDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'currentInsuredSet', 'currentInsuredMethod', 'ownOrRentSet', 'ownOrRentMethod',
+    'insuredQuestionAnswered', 'ownOrRentSelected', 'missing'
+  ]);
+  assert.strictEqual(observedDefaulted.result, 'OK');
+  assert.strictEqual(observedDefaulted.currentInsuredSet, '1');
+  assert.strictEqual(observedDefaulted.ownOrRentSet, '1');
+  assert.strictEqual(observedDefaulted.insuredQuestionAnswered, '1');
+  assert.strictEqual(observedDefaulted.ownOrRentSelected, '1');
+  assert.strictEqual(observedDefaulted.missing, '');
 
   const participant = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',
@@ -4532,6 +4614,23 @@ function testAdvisorStateSnapshotContracts() {
   assert.strictEqual(rapport.rapport.present, true);
   assert.strictEqual(typeof rapport.rapport.vehicleCount, 'number');
   assert.ok(rapport.allowedNextActions.includes('inspect_rapport'));
+
+  const selectProduct = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    fixtureScenario('snapshot-select-product-live-prefilled')
+  ));
+  assert.strictEqual(selectProduct.route, 'SELECT_PRODUCT');
+  assert.notStrictEqual(selectProduct.route, 'ADVISOR_OTHER');
+  assert.strictEqual(selectProduct.selectProduct.present, true);
+  assert.strictEqual(selectProduct.selectProduct.ratingState, 'FL');
+  assert.strictEqual(selectProduct.selectProduct.product, 'AUTO');
+  assert.strictEqual(selectProduct.selectProduct.productText, 'Auto');
+  assert.strictEqual(selectProduct.selectProduct.effectiveDate, '05/11/2026');
+  assert.strictEqual(selectProduct.selectProduct.currentAddressPresent, true);
+  assert.ok(selectProduct.selectProduct.missingRequired.includes('SELECT_PRODUCT_MISSING_CURRENTLY_INSURED'));
+  assert.ok(selectProduct.selectProduct.missingRequired.includes('SELECT_PRODUCT_MISSING_OWN_RENT'));
+  assert.ok(selectProduct.allowedNextActions.includes('answer_select_product'));
 
   const entryStart = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',

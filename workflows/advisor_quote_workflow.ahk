@@ -20,6 +20,8 @@ global advisorQuoteSnapshotObserverLastBlockersRaw := "[]"
 global advisorQuoteSnapshotObserverTerminalDispositionCode := ""
 global advisorQuoteSnapshotObserverTerminalDispositionLabel := ""
 global advisorQuoteSnapshotObserverHumanReviewRequired := false
+global advisorQuoteSnapshotObserverFailureCode := ""
+global advisorQuoteSnapshotObserverFailureReason := ""
 global advisorQuoteSnapshotObserverLatestSnapshotPath := ""
 global advisorQuoteProductOverviewAutoPending := false
 global advisorQuoteProductOverviewAutoVerified := false
@@ -2600,7 +2602,8 @@ AdvisorQuoteEnsureSnapshotObserverInitialized() {
     global advisorQuoteSnapshotObserverReachedCoverages, advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl
     global advisorQuoteSnapshotObserverLastCheckpointName, advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason
     global advisorQuoteSnapshotObserverLastBlockersRaw, advisorQuoteSnapshotObserverTerminalDispositionCode
-    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired
+    global advisorQuoteSnapshotObserverFailureCode, advisorQuoteSnapshotObserverFailureReason, advisorQuoteSnapshotObserverLatestSnapshotPath
 
     if (Trim(String(advisorQuoteSnapshotObserverRunId ?? "")) != "")
         return
@@ -2627,6 +2630,8 @@ AdvisorQuoteEnsureSnapshotObserverInitialized() {
     advisorQuoteSnapshotObserverTerminalDispositionCode := ""
     advisorQuoteSnapshotObserverTerminalDispositionLabel := ""
     advisorQuoteSnapshotObserverHumanReviewRequired := false
+    advisorQuoteSnapshotObserverFailureCode := ""
+    advisorQuoteSnapshotObserverFailureReason := ""
     advisorQuoteSnapshotObserverLatestSnapshotPath := ""
 }
 
@@ -2661,7 +2666,7 @@ AdvisorQuoteSaveStateSnapshotObserverCapture(checkpointName, metadata, capture) 
     runDir := logsRoot "\advisor_state_snapshots\runs\" advisorQuoteSnapshotObserverRunId
     snapshotPath := runDir "\" Format("{:03}", sequence) "_" safeCheckpoint ".json"
     writeOk := AdvisorQuoteTryWriteUtf8Atomic(snapshotPath, envelopeJson, "advisor-state-snapshot-observer")
-    AdvisorQuoteUpdateStateSnapshotObserverSummary(raw, checkpointName, sequence, effectiveError, snapshotPath)
+    AdvisorQuoteUpdateStateSnapshotObserverSummary(raw, checkpointName, metadata, sequence, effectiveError, snapshotPath)
     summaryPath := AdvisorQuoteWriteStateSnapshotObserverSummary()
 
     route := AdvisorQuoteExtractJsonString(raw, "route")
@@ -2756,11 +2761,12 @@ AdvisorQuoteObserverMetadataJson(metadata) {
     return json
 }
 
-AdvisorQuoteUpdateStateSnapshotObserverSummary(rawSnapshotJson, checkpointName, sequence, errorCode, snapshotPath) {
+AdvisorQuoteUpdateStateSnapshotObserverSummary(rawSnapshotJson, checkpointName, metadata, sequence, errorCode, snapshotPath) {
     global advisorQuoteSnapshotObserverReachedCoverages, advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl
     global advisorQuoteSnapshotObserverLastCheckpointName, advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason
     global advisorQuoteSnapshotObserverLastBlockersRaw, advisorQuoteSnapshotObserverTerminalDispositionCode
-    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+    global advisorQuoteSnapshotObserverTerminalDispositionLabel, advisorQuoteSnapshotObserverHumanReviewRequired
+    global advisorQuoteSnapshotObserverFailureCode, advisorQuoteSnapshotObserverFailureReason, advisorQuoteSnapshotObserverLatestSnapshotPath
 
     raw := Trim(String(rawSnapshotJson ?? ""))
     rawIsJson := AdvisorQuoteLooksLikeJsonPayload(raw)
@@ -2772,6 +2778,17 @@ AdvisorQuoteUpdateStateSnapshotObserverSummary(rawSnapshotJson, checkpointName, 
     advisorQuoteSnapshotObserverLastUnsafeReason := rawIsJson ? AdvisorQuoteExtractJsonNullableString(raw, "unsafeReason") : ""
     advisorQuoteSnapshotObserverLastBlockersRaw := rawIsJson ? AdvisorQuoteExtractJsonArrayRaw(raw, "blockers") : "[]"
     advisorQuoteSnapshotObserverLatestSnapshotPath := snapshotPath
+
+    if (Trim(String(checkpointName ?? "")) = "workflow_failure") {
+        failureReason := AdvisorQuoteObserverMetadataValue(metadata, "reason")
+        if (failureReason != "") {
+            advisorQuoteSnapshotObserverFailureReason := failureReason
+            advisorQuoteSnapshotObserverFailureCode := AdvisorQuoteObserverFailureCodeFromReason(failureReason)
+            advisorQuoteSnapshotObserverHumanReviewRequired := true
+            if (advisorQuoteSnapshotObserverLastUnsafeReason = "")
+                advisorQuoteSnapshotObserverLastUnsafeReason := "workflow_failure: " failureReason
+        }
+    }
 
     if (route = "COVERAGES")
         advisorQuoteSnapshotObserverReachedCoverages := true
@@ -2791,6 +2808,30 @@ AdvisorQuoteUpdateStateSnapshotObserverSummary(rawSnapshotJson, checkpointName, 
     }
 }
 
+AdvisorQuoteObserverMetadataValue(metadata, key) {
+    if IsObject(metadata) {
+        if metadata.Has(key)
+            return Trim(String(metadata[key]))
+        return ""
+    }
+    text := Trim(String(metadata ?? ""))
+    if (text = "")
+        return ""
+    pattern := "(?:^|,\s*)" key "=([^,]+)"
+    if RegExMatch(text, pattern, &m)
+        return Trim(String(m[1]))
+    return ""
+}
+
+AdvisorQuoteObserverFailureCodeFromReason(reason) {
+    text := Trim(String(reason ?? ""))
+    if (text = "")
+        return ""
+    if RegExMatch(text, "([A-Z][A-Z0-9_]+)", &m)
+        return m[1]
+    return text
+}
+
 AdvisorQuoteWriteStateSnapshotObserverSummary() {
     global logsRoot, advisorQuoteSnapshotObserverRunId
     summaryPath := logsRoot "\advisor_state_snapshots\runs\" advisorQuoteSnapshotObserverRunId "\run_summary.json"
@@ -2804,7 +2845,8 @@ AdvisorQuoteBuildStateSnapshotObserverSummaryJson() {
     global advisorQuoteSnapshotObserverLastRoute, advisorQuoteSnapshotObserverLastUrl, advisorQuoteSnapshotObserverLastCheckpointName
     global advisorQuoteSnapshotObserverLastConfidence, advisorQuoteSnapshotObserverLastUnsafeReason, advisorQuoteSnapshotObserverLastBlockersRaw
     global advisorQuoteSnapshotObserverTerminalDispositionCode, advisorQuoteSnapshotObserverTerminalDispositionLabel
-    global advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverLatestSnapshotPath
+    global advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverFailureCode
+    global advisorQuoteSnapshotObserverFailureReason, advisorQuoteSnapshotObserverLatestSnapshotPath
 
     updatedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
     json := "{`n"
@@ -2822,6 +2864,8 @@ AdvisorQuoteBuildStateSnapshotObserverSummaryJson() {
         . '  "lastBlockers": ' (Trim(String(advisorQuoteSnapshotObserverLastBlockersRaw ?? "")) != "" ? advisorQuoteSnapshotObserverLastBlockersRaw : "[]") ",`n"
         . '  "terminalDispositionCode": ' (advisorQuoteSnapshotObserverTerminalDispositionCode = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverTerminalDispositionCode) '"')) ",`n"
         . '  "terminalDispositionLabel": ' (advisorQuoteSnapshotObserverTerminalDispositionLabel = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverTerminalDispositionLabel) '"')) ",`n"
+        . '  "failureCode": ' (advisorQuoteSnapshotObserverFailureCode = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverFailureCode) '"')) ",`n"
+        . '  "failureReason": ' (advisorQuoteSnapshotObserverFailureReason = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverFailureReason) '"')) ",`n"
         . '  "humanReviewRequired": ' (advisorQuoteSnapshotObserverHumanReviewRequired ? "true" : "false") ",`n"
         . '  "latestSnapshotPath": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLatestSnapshotPath) '"`n'
         . "}`n"

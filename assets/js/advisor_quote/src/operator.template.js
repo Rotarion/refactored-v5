@@ -203,14 +203,19 @@ copy(String((() => {
   };
   const isSelectProductFormPage = (source = {}) => {
     const url = pageUrl();
+    const urlLower = lower(url);
     const text = bodyText();
     const urls = getUrlArgs(source);
     const texts = getTextArgs(source);
     const selectors = getSelectorArgs(source);
-    const hasFormControls = hasStableVisible(selectors.selectProductProductId)
-      || hasStableVisible(selectors.selectProductRatingStateId)
-      || hasStableVisible(selectors.selectProductContinueId);
-    const byUrl = !!urls.selectProductContains && url.includes(urls.selectProductContains);
+    const hasFormControls = hasStableVisible(selectors.selectProductProductId || 'SelectProduct.Product')
+      || hasStableVisible(selectors.selectProductRatingStateId || 'SelectProduct.RatingState')
+      || hasStableVisible(selectors.selectProductContinueId || 'selectProductContinue')
+      || hasStableVisible('SelectProduct.Product')
+      || hasStableVisible('SelectProduct.RatingState')
+      || hasStableVisible('selectProductContinue');
+    const configuredNeedle = lower(urls.selectProductContains || '');
+    const byUrl = urlLower.includes('/selectproduct') || (!!configuredNeedle && urlLower.includes(configuredNeedle));
     const byText = includesText(text, texts.productOverviewHeading || 'Select Product') && hasFormControls;
     return !isProductOverviewPage(source) && (byUrl || byText);
   };
@@ -2475,12 +2480,12 @@ copy(String((() => {
       evidence: match.reason || 'select-product-subnav'
     });
   };
-  const selectProductRouteFamily = () => (/\/apps\/intel\/[^/]+\/selectProduct/i.test(pageUrl()) || bodyText().includes('select product')) ? 'intel-select-product' : 'unknown';
+  const selectProductRouteFamily = (source = {}) => isSelectProductFormPage(source) ? 'intel-select-product' : 'unknown';
   const findEffectiveDateInput = () => findByStableId('SelectProduct.EffectiveDate')
     || document.querySelector('input[id*="EffectiveDate"],input[name*="EffectiveDate"],input[placeholder*="Effective" i],input[aria-label*="Effective" i]');
   const findCurrentAddressControls = () => Array.from(document.querySelectorAll('input[type=radio],input[type=checkbox],button,[role=button],label'))
     .filter(visible)
-    .filter((el) => /current[-_\s]*address|same[-_\s]*address|use[-_\s]*this[-_\s]*address/i.test(`${safe(el.id)} ${safe(el.name)} ${safe(el.value)} ${readInputLabel(el)} ${getText(el)}`));
+    .filter((el) => /current[^a-z0-9]*address|same[^a-z0-9]*address|use[^a-z0-9]*this[^a-z0-9]*address/i.test(`${safe(el.id)} ${safe(el.name)} ${safe(el.value)} ${readInputLabel(el)} ${getText(el)}`));
   const readCurrentAddressState = () => {
     const controls = findCurrentAddressControls();
     const selected = controls.some((el) => isSelectedNode(el) || el.checked || /selected|checked|active/i.test(`${safe(el.className)} ${safe(el.getAttribute && el.getAttribute('aria-checked'))}`));
@@ -2504,68 +2509,132 @@ copy(String((() => {
     const checkedDescendant = node.querySelector && node.querySelector('input:checked,[aria-checked="true"],[aria-selected="true"],[aria-pressed="true"]');
     return !!checkedDescendant;
   };
-  const readSelectProductInsuredState = (questionText) => {
+  const readSelectProductChoiceState = (questionText, choices, namePattern) => {
     const namedRadios = Array.from(document.querySelectorAll('input[type=radio],input'))
-      .filter((el) => /CustomerCurrentInsured|currentInsured|currentlyInsured/i.test(`${safe(el.name)} ${safe(el.id)}`));
-    const yesRadio = namedRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'YES')) || null;
-    const noRadio = namedRadios.find((el) => answerValueMatches(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`, 'NO')) || null;
+      .filter((el) => namePattern.test(`${safe(el.name)} ${safe(el.id)}`));
     const questionContainers = findQuestionContainers(questionText);
-    let yesControl = yesRadio;
-    let noControl = noRadio;
+    const controls = {};
+    for (const choice of choices) {
+      controls[choice.key] = namedRadios.find((el) => {
+        const evidence = `${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)}`;
+        return answerValueMatches(evidence, choice.value) || answerTextMatches(evidence, choice.text);
+      }) || null;
+    }
     let detectionMethod = namedRadios.length ? 'name-radio' : '';
     let controlType = namedRadios.length ? 'radio' : '';
     for (const container of questionContainers) {
       const nodes = Array.from(container.querySelectorAll('input[type=radio],button,a,[role=button],[role=radio],label,span,div'))
         .filter((node) => visible(node) && node !== container)
         .map((node) => ({ node, text: getText(node) || safe(node.value) || safe(node.getAttribute && node.getAttribute('aria-label')) }))
-        .filter(({ text }) => text && !isCompoundYesNoText(text) && text.length <= 32);
-      if (!yesControl) {
-        const yes = nodes.find(({ text }) => answerTextMatches(text, 'Yes'));
-        if (yes) yesControl = yes.node;
+        .filter(({ text }) => text && text.length <= 40);
+      for (const choice of choices) {
+        if (controls[choice.key])
+          continue;
+        const found = nodes.find(({ text }) => answerTextMatches(text, choice.text));
+        if (found)
+          controls[choice.key] = found.node;
       }
-      if (!noControl) {
-        const no = nodes.find(({ text }) => answerTextMatches(text, 'No'));
-        if (no) noControl = no.node;
-      }
-      if (yesControl || noControl) {
+      if (choices.some((choice) => controls[choice.key])) {
         if (!detectionMethod) detectionMethod = 'question-scoped-semantic';
-        if (!controlType) controlType = (yesControl && /INPUT/i.test(safe(yesControl.tagName))) || (noControl && /INPUT/i.test(safe(noControl.tagName))) ? 'radio' : 'custom';
+        if (!controlType) controlType = choices.some((choice) => controls[choice.key] && /INPUT/i.test(safe(controls[choice.key].tagName))) ? 'radio' : 'custom';
         break;
       }
     }
     const body = bodyText();
     const questionPresent = body.includes(lower(questionText)) || namedRadios.length > 0 || questionContainers.length > 0;
-    const yesSelected = selectProductControlSelected(yesControl);
-    const noSelected = selectProductControlSelected(noControl);
-    const value = yesSelected ? 'YES' : (noSelected ? 'NO' : '');
+    let selectedChoice = null;
+    for (const choice of choices) {
+      if (selectProductControlSelected(controls[choice.key])) {
+        selectedChoice = choice;
+        break;
+      }
+    }
     const alertRequired = body.includes(lower(questionText)) && body.includes('this is required');
     const required = questionPresent && (alertRequired || true);
     return {
       questionPresent,
-      yesControl,
-      noControl,
-      yesPresent: !!yesControl,
-      noPresent: !!noControl,
-      yesSelected,
-      noSelected,
-      answered: yesSelected || noSelected,
-      value,
+      controls,
+      answered: !!selectedChoice,
+      value: selectedChoice ? selectedChoice.value : '',
+      label: selectedChoice ? selectedChoice.text : '',
       required,
       controlType: controlType || (questionPresent ? 'text' : ''),
       detectionMethod: detectionMethod || (questionPresent ? 'question-text' : ''),
       alertRequired
     };
   };
+  const readSelectProductInsuredState = (questionText) => {
+    const state = readSelectProductChoiceState(questionText, [
+      { key: 'yes', value: 'YES', text: 'Yes' },
+      { key: 'no', value: 'NO', text: 'No' }
+    ], /CustomerCurrentInsured|currentInsured|currentlyInsured/i);
+    return {
+      ...state,
+      yesControl: state.controls.yes || null,
+      noControl: state.controls.no || null,
+      yesPresent: !!state.controls.yes,
+      noPresent: !!state.controls.no,
+      yesSelected: selectProductControlSelected(state.controls.yes),
+      noSelected: selectProductControlSelected(state.controls.no)
+    };
+  };
+  const readSelectProductOwnRentState = (questionText) => {
+    const state = readSelectProductChoiceState(questionText, [
+      { key: 'own', value: 'OWN', text: 'Own' },
+      { key: 'rent', value: 'RENT', text: 'Rent' }
+    ], /CustomerOwnOrRent|ownOrRent|ownRent|rentOwn/i);
+    return {
+      ...state,
+      ownControl: state.controls.own || null,
+      rentControl: state.controls.rent || null,
+      ownPresent: !!state.controls.own,
+      rentPresent: !!state.controls.rent,
+      ownSelected: selectProductControlSelected(state.controls.own),
+      rentSelected: selectProductControlSelected(state.controls.rent)
+    };
+  };
+  const selectProductOwnRentAnswerText = (value) => {
+    const normalized = normUpper(value);
+    if (normalized === 'OWN' || normalized === 'OWNER' || normalized === 'OWNED') return 'Own';
+    if (normalized === 'RENT' || normalized === 'RENTER' || normalized === 'RENTED') return 'Rent';
+    return safe(value || 'Own');
+  };
+  const selectProductMissingCode = (field) => {
+    switch (field) {
+      case 'ratingState':
+      case 'ratingStateSelected':
+        return 'SELECT_PRODUCT_MISSING_RATING_STATE';
+      case 'product':
+      case 'autoProduct':
+        return 'SELECT_PRODUCT_MISSING_PRODUCT';
+      case 'effectiveDate':
+        return 'SELECT_PRODUCT_MISSING_EFFECTIVE_DATE';
+      case 'currentAddress':
+        return 'SELECT_PRODUCT_MISSING_CURRENT_ADDRESS';
+      case 'currentlyInsured':
+        return 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED';
+      case 'ownRent':
+        return 'SELECT_PRODUCT_MISSING_OWN_RENT';
+      case 'continue':
+        return 'SELECT_PRODUCT_MISSING_CONTINUE';
+      case 'continueEnabled':
+        return 'SELECT_PRODUCT_CONTINUE_DISABLED';
+      default:
+        return `SELECT_PRODUCT_MISSING_${normUpper(field || 'FIELD')}`;
+    }
+  };
   const selectProductCoreMissing = (status) => {
     const missing = [];
-    if (status.ratingStatePresent !== '1') missing.push('ratingState');
-    else if (status.ratingStateSelected !== '1') missing.push('ratingStateSelected');
-    if (status.productPresent !== '1') missing.push('product');
-    else if (status.autoSelected !== '1') missing.push('autoProduct');
-    if (status.effectiveDatePresent !== '1' || status.effectiveDateFilled !== '1') missing.push('effectiveDate');
-    if (status.currentAddressPresent !== '1' || status.currentAddressSelected !== '1') missing.push('currentAddress');
-    if (status.continuePresent !== '1') missing.push('continue');
-    else if (status.continueEnabled !== '1') missing.push('continueEnabled');
+    if (status.ratingStatePresent !== '1') missing.push(selectProductMissingCode('ratingState'));
+    else if (status.ratingStateSelected !== '1') missing.push(selectProductMissingCode('ratingStateSelected'));
+    if (status.productPresent !== '1') missing.push(selectProductMissingCode('product'));
+    else if (status.autoSelected !== '1') missing.push(selectProductMissingCode('autoProduct'));
+    if (status.effectiveDatePresent !== '1' || status.effectiveDateFilled !== '1') missing.push(selectProductMissingCode('effectiveDate'));
+    if (status.currentAddressPresent !== '1' || status.currentAddressSelected !== '1') missing.push(selectProductMissingCode('currentAddress'));
+    if (status.insuredQuestionPresent === '1' && status.insuredQuestionRequired === '1' && status.insuredQuestionAnswered !== '1') missing.push(selectProductMissingCode('currentlyInsured'));
+    if (status.ownRentQuestionPresent === '1' && status.ownRentQuestionRequired === '1' && status.ownOrRentSelected !== '1') missing.push(selectProductMissingCode('ownRent'));
+    if (status.continuePresent !== '1') missing.push(selectProductMissingCode('continue'));
+    else if (status.continueEnabled !== '1') missing.push(selectProductMissingCode('continueEnabled'));
     return missing;
   };
   const selectProductCustomControlAmbiguous = (status) => (
@@ -2584,12 +2653,13 @@ copy(String((() => {
     const insuredState = readSelectProductInsuredState(questionText);
     const currentInsured = { value: insuredState.value, selected: insuredState.answered, source: insuredState.detectionMethod };
     const currentInsuredAlert = insuredState.alertRequired;
-    const ownOrRentByName = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
+    const ownRentQuestionText = safe(source.ownRentQuestionText || 'Does the customer own or rent?');
+    const ownOrRentState = readSelectProductOwnRentState(ownRentQuestionText);
     const effectiveDate = findEffectiveDateInput();
     const currentAddress = readCurrentAddressState();
     const status = {
       result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING',
-      routeFamily: selectProductRouteFamily(),
+      routeFamily: selectProductRouteFamily(source),
       ratingStatePresent: ratingSelect ? '1' : '0',
       ratingStateSelected: ratingState.value || ratingState.text ? '1' : '0',
       ratingStateValue: ratingState.value,
@@ -2616,9 +2686,15 @@ copy(String((() => {
       currentInsuredSelected: currentInsured.selected ? '1' : '0',
       currentInsuredSource: currentInsured.source,
       currentInsuredAlert: currentInsuredAlert ? '1' : '0',
-      ownOrRentValue: ownOrRentByName.label || ownOrRentByName.value,
-      ownOrRentSelected: ownOrRentByName.selected ? '1' : '0',
-      ownOrRentSource: ownOrRentByName.source,
+      ownRentQuestionPresent: ownOrRentState.questionPresent ? '1' : '0',
+      ownRentQuestionRequired: ownOrRentState.required ? '1' : '0',
+      ownRentOwnPresent: ownOrRentState.ownPresent ? '1' : '0',
+      ownRentRentPresent: ownOrRentState.rentPresent ? '1' : '0',
+      ownRentOwnSelected: ownOrRentState.ownSelected ? '1' : '0',
+      ownRentRentSelected: ownOrRentState.rentSelected ? '1' : '0',
+      ownOrRentValue: ownOrRentState.label || ownOrRentState.value,
+      ownOrRentSelected: ownOrRentState.answered ? '1' : '0',
+      ownOrRentSource: ownOrRentState.detectionMethod,
       alerts: collectVisibleAlerts().join(' || '),
       continuePresent: continueBtn ? '1' : '0',
       continueEnabled: continueBtn && !isDisabledLike(continueBtn) ? '1' : '0',
@@ -2633,7 +2709,7 @@ copy(String((() => {
       : '';
     if (status.routeFamily !== 'intel-select-product') status.result = 'NOT_SELECT_PRODUCT';
     else if (status.continuePresent === '1' && status.continueEnabled !== '1') status.result = 'SELECT_PRODUCT_CONTINUE_DISABLED';
-    else if (missing.length) status.result = 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING';
+    else if (missing.length) status.result = missing[0] || 'SELECT_PRODUCT_CORE_REQUIRED_FIELDS_MISSING';
     else status.result = 'READY';
     return status;
   };
@@ -5026,6 +5102,24 @@ copy(String((() => {
     }
     return rapport;
   };
+  const readAdvisorSelectProductSnapshotState = (source = {}) => {
+    const status = buildSelectProductStatus(source);
+    const present = isSelectProductFormPage(source) || status.routeFamily === 'intel-select-product';
+    const missingRequired = safe(status.missing).split('|').map((item) => item.trim()).filter(Boolean);
+    return {
+      present,
+      ratingState: status.ratingStateValue || status.ratingStateText || '',
+      product: status.productValue || '',
+      productText: status.productText || '',
+      effectiveDate: status.effectiveDateFilled === '1' ? safe((findEffectiveDateInput() || {}).value) : '',
+      currentAddressPresent: status.currentAddressPresent === '1' && status.currentAddressSelected === '1',
+      currentlyInsuredAnswer: status.insuredQuestionAnswered === '1' ? (status.currentInsuredValue || null) : null,
+      ownRentAnswer: status.ownOrRentSelected === '1' ? (status.ownOrRentValue || null) : null,
+      continueVisible: status.continuePresent === '1',
+      continueEnabled: status.continueEnabled === '1',
+      missingRequired
+    };
+  };
   const advisorStateBlockers = (source = {}) => {
     const blockers = [];
     const alerts = collectVisibleAlerts().map((item) => compact(item, 180)).filter(Boolean);
@@ -5071,7 +5165,16 @@ copy(String((() => {
     if (url.includes('/coverage') || /\bcoverages?\b/i.test(text)) return 'COVERAGES';
     return '';
   };
-  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers) => {
+  const advisorSelectProductDefaultActionAvailable = (selectProduct) => {
+    if (!selectProduct || !selectProduct.present) return false;
+    if (!selectProduct.continueVisible) return false;
+    const safeDefaultMissing = new Set([
+      'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED',
+      'SELECT_PRODUCT_MISSING_OWN_RENT'
+    ]);
+    return (selectProduct.missingRequired || []).every((item) => safeDefaultMissing.has(item));
+  };
+  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers, selectProduct) => {
     if (blockers.length) return [];
     switch (route) {
       case 'CUSTOMER_SUMMARY_PREFILL_GATE':
@@ -5081,7 +5184,7 @@ copy(String((() => {
         if (product.autoSelected && product.saveContinueVisible) return ['continue_to_gather_data'];
         return [];
       case 'SELECT_PRODUCT':
-        return ['answer_select_product'];
+        return advisorSelectProductDefaultActionAvailable(selectProduct) ? ['answer_select_product'] : [];
       case 'RAPPORT':
         return rapport.present ? advisorStateUnique(['inspect_rapport', rapport.vehicleCount > 0 ? 'confirm_vehicles' : '', advisorStateHasActionText(/create quotes|save\s*&\s*continue|continue/i) ? 'continue_from_rapport' : '']) : [];
       case 'CONSUMER_REPORTS':
@@ -5105,6 +5208,7 @@ copy(String((() => {
     const product = readAdvisorProductSnapshotState(source);
     const prefillGate = readAdvisorPrefillGateSnapshotState(source);
     const rapport = readAdvisorRapportSnapshotState(source);
+    const selectProduct = readAdvisorSelectProductSnapshotState(source);
     const iframe = readAdvisorIframeSnapshotState();
     const blockers = advisorStateBlockers(source);
     const anchors = [];
@@ -5143,9 +5247,11 @@ copy(String((() => {
       anchors.push('url:/apps/intel/102/overview', 'text:Select Product', product.autoVisible ? 'product:Auto' : '');
     } else if (isSelectProductFormPage(source)) {
       route = 'SELECT_PRODUCT';
-      confidence = 0.88;
-      unsafeReason = null;
-      anchors.push('url:/selectProduct', 'control:SelectProduct.Product', 'control:selectProductContinue');
+      confidence = selectProduct.product || selectProduct.ratingState ? 0.92 : 0.84;
+      unsafeReason = selectProduct.missingRequired.length
+        ? `Select Product missing required fields: ${selectProduct.missingRequired.join('|')}`
+        : null;
+      anchors.push('url:/selectProduct', 'heading:Select Product', 'control:SelectProduct.Product', 'control:selectProductContinue');
     } else if (isGatherDataPage(source)) {
       route = 'RAPPORT';
       confidence = 0.88;
@@ -5178,7 +5284,9 @@ copy(String((() => {
       unsafeReason = `Blocking UI or alert evidence is present: ${blockers.join(' | ')}`;
     }
 
-    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers);
+    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers, selectProduct);
+    if (route === 'SELECT_PRODUCT' && allowedNextActions.includes('answer_select_product'))
+      unsafeReason = null;
     if (!allowedNextActions.length && route !== 'UNKNOWN_UNSAFE' && !unsafeReason)
       unsafeReason = `Recognized ${route}, but no safe next action is clear from read-only evidence.`;
 
@@ -5192,6 +5300,7 @@ copy(String((() => {
       anchors: advisorStateUnique(anchors).slice(0, 14),
       blockers,
       product,
+      selectProduct,
       prefillGate,
       rapport,
       iframe,
@@ -7197,9 +7306,21 @@ copy(String((() => {
       let ownOrRentSet = 'SKIP';
       let ownOrRentMethod = 'not-requested';
       if (safe(args.ownOrRent)) {
-        const ownOrRentState = readRadioGroupStateByName('SelectProduct.CustomerOwnOrRent');
-        if (ownOrRentState.selected) { ownOrRentSet = '1'; ownOrRentMethod = 'already-selected'; }
-        else { const ownOrRentResult = setRadioByName('SelectProduct.CustomerOwnOrRent', args.ownOrRent); ownOrRentSet = ownOrRentResult.ok ? '1' : '0'; ownOrRentMethod = ownOrRentResult.method; }
+        const ownRentQuestionText = safe(args.ownRentQuestionText || 'Does the customer own or rent?');
+        const ownOrRentState = readSelectProductOwnRentState(ownRentQuestionText);
+        if (ownOrRentState.answered) { ownOrRentSet = '1'; ownOrRentMethod = 'already-selected'; }
+        else {
+          const ownOrRentResult = setRadioByName('SelectProduct.CustomerOwnOrRent', args.ownOrRent);
+          ownOrRentSet = ownOrRentResult.ok ? '1' : '0';
+          ownOrRentMethod = ownOrRentResult.method;
+          if (!ownOrRentResult.ok) {
+            const answerText = safe(args.ownRentAnswerText || selectProductOwnRentAnswerText(args.ownOrRent));
+            const answerKey = normUpper(args.ownOrRent).startsWith('RENT') ? 'rentControl' : 'ownControl';
+            const scopedTarget = ownOrRentState[answerKey] ? (findClickableTarget(ownOrRentState[answerKey]) || ownOrRentState[answerKey]) : null;
+            const semanticTarget = scopedTarget || findSemanticAnswerTarget(ownRentQuestionText, answerText);
+            if (semanticTarget) { ownOrRentSet = clickCenterEl(semanticTarget) ? '1' : '0'; ownOrRentMethod = scopedTarget ? 'question-scoped-semantic' : 'semantic-center'; }
+          }
+        }
       }
 
       const afterStatus = buildSelectProductStatus(args);
@@ -7231,8 +7352,8 @@ copy(String((() => {
       const status = buildSelectProductStatus(args);
       const continueBtn = findSelectProductContinueButton(args);
       if (status.result !== 'READY') return lineResult({ ...status, result: status.result === 'NOT_SELECT_PRODUCT' ? 'SELECT_PRODUCT_FALLBACK_NOT_READY' : status.result, clicked: '0', continueEnabled: status.continueEnabled, missing: status.missing });
-      if (!continueBtn) return lineResult({ result: 'SELECT_PRODUCT_REQUIRED_FIELDS_MISSING', clicked: '0', continueEnabled: '0', missing: 'continue' });
-      if (isDisabledLike(continueBtn)) return lineResult({ result: 'SELECT_PRODUCT_CONTINUE_DISABLED', clicked: '0', continueEnabled: '0', missing: 'continueEnabled' });
+      if (!continueBtn) return lineResult({ result: 'SELECT_PRODUCT_MISSING_CONTINUE', clicked: '0', continueEnabled: '0', missing: 'SELECT_PRODUCT_MISSING_CONTINUE' });
+      if (isDisabledLike(continueBtn)) return lineResult({ result: 'SELECT_PRODUCT_CONTINUE_DISABLED', clicked: '0', continueEnabled: '0', missing: 'SELECT_PRODUCT_CONTINUE_DISABLED' });
       const clicked = clickCenterEl(continueBtn);
       return lineResult({
         ...status,
