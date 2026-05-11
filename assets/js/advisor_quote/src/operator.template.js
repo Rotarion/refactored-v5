@@ -5039,10 +5039,35 @@ copy(String((() => {
     .filter(visible)
     .map((node) => `heading:${compact(getText(node), 100)}`)
     .filter((value) => value !== 'heading:');
+  const advisorStateVisibleHeadingTexts = () => Array.from(document.querySelectorAll('h1,h2,h3,[role=heading]'))
+    .filter(visible)
+    .map((node) => compact(getText(node), 120))
+    .filter(Boolean);
+  const advisorStateEntryStartInfo = () => {
+    const url = lower(pageUrl());
+    const text = bodyText();
+    const actions = advisorStateVisibleActions().map((entry) => entry.text).join(' | ');
+    const headings = advisorStateVisibleHeadingTexts().join(' | ');
+    const visibleEvidence = `${actions} | ${headings}`;
+    const startUrl = url.includes('/apps/intel/102/start');
+    const duplicateEvidence = /\b(duplicate|current customer|existing customer|existing profile|view customer)\b/i.test(visibleEvidence)
+      || /\b(this prospect may already exist|existing profile|current customer|existing customer|view customer)\b/i.test(text);
+    const entryEvidence = /\b(begin quoting|create new prospect|current home address)\b/i.test(visibleEvidence)
+      || /\b(begin quoting|create new prospect|current home address)\b/i.test(text);
+    return {
+      present: startUrl || (url.includes('/apps/intel/102/') && entryEvidence),
+      startUrl,
+      duplicateEvidence,
+      entryEvidence,
+      visibleEvidence: compact(visibleEvidence, 240)
+    };
+  };
   const advisorStateAscPageKind = () => {
     const url = lower(pageUrl());
     const text = bodyText();
-    if (url.includes('/purchase') || /\b(purchase|payment|bind policy|checkout)\b/i.test(text)) return 'PURCHASE';
+    const headings = advisorStateVisibleHeadingTexts().join(' | ');
+    if (url.includes('/purchase') || url.includes('/payment') || url.includes('/checkout')) return 'PURCHASE';
+    if (url.includes('/apps/ascproduct/') && /\b(purchase|payment|bind policy|checkout)\b/i.test(headings)) return 'PURCHASE';
     if (url.includes('/coverage') || /\bcoverages?\b/i.test(text)) return 'COVERAGES';
     return '';
   };
@@ -5066,6 +5091,8 @@ copy(String((() => {
       case 'PURCHASE':
         return ['review_purchase'];
       case 'ADVISOR_OTHER':
+      case 'ENTRY_CREATE_FORM':
+      case 'DUPLICATE_CURRENT_CUSTOMER':
         return ['human_review_required'];
       default:
         return [];
@@ -5089,9 +5116,17 @@ copy(String((() => {
     let confidence = 0.1;
     let unsafeReason = 'Low confidence: unsupported page from read-only evidence.';
     const customerStatus = customerSummaryOverviewStatus(source);
+    const entryStart = advisorStateEntryStartInfo();
     const ascKind = advisorStateAscPageKind();
 
-    if (customerStatus.result === 'DETECTED' && prefillGate.startHereVisible) {
+    if (entryStart.present) {
+      route = entryStart.duplicateEvidence ? 'DUPLICATE_CURRENT_CUSTOMER' : 'ENTRY_CREATE_FORM';
+      confidence = entryStart.startUrl ? 0.84 : 0.68;
+      unsafeReason = entryStart.duplicateEvidence
+        ? 'Advisor entry/start page has duplicate or current-customer evidence; human review is required before choosing a next action.'
+        : 'Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect.';
+      anchors.push(entryStart.startUrl ? 'url:/apps/intel/102/start' : 'url:/apps/intel/102/', entryStart.entryEvidence ? 'text:entry-start-actions' : '', entryStart.duplicateEvidence ? 'text:duplicate-current-customer' : '', entryStart.visibleEvidence);
+    } else if (customerStatus.result === 'DETECTED' && prefillGate.startHereVisible) {
       route = 'CUSTOMER_SUMMARY_PREFILL_GATE';
       confidence = 0.93;
       unsafeReason = null;

@@ -2442,16 +2442,31 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
 
     raw := ""
     errorCode := ""
+    retryAttempted := false
+    retryReason := ""
+    retrySucceeded := false
     try {
         raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName), 1, 0)))
     } catch as err {
         errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotDebug", step, err)
     }
 
-    if (Trim(raw) = "" && errorCode = "")
-        errorCode := "empty-result-or-bridge-unavailable"
+    retryReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
+    if (retryReason != "") {
+        retryAttempted := true
+        AdvisorQuoteResetConsoleBridge()
+        try {
+            raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName, "retry", "1"), 1, 0)))
+            retrySucceeded := AdvisorQuoteStateSnapshotEffectiveError(raw) = ""
+        } catch as err {
+            errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotDebug", step, err)
+        }
+        retryFailureReason := AdvisorQuoteStateSnapshotRetryReason(raw, errorCode)
+        if (retryFailureReason != "" && errorCode = "")
+            errorCode := retryFailureReason
+    }
 
-    captureJson := AdvisorQuoteBuildStateSnapshotCaptureJson(raw, sourceName, errorCode)
+    captureJson := AdvisorQuoteBuildStateSnapshotCaptureJson(raw, sourceName, errorCode, retryAttempted, retryReason, retrySucceeded)
     stamp := FormatTime(A_Now, "yyyyMMdd_HHmmss") . "_" . Format("{:03}", A_MSec)
     latestPath := logsRoot "\advisor_state_snapshot_latest.json"
     archivePath := logsRoot "\advisor_state_snapshots\advisor_state_snapshot_" stamp ".json"
@@ -2473,6 +2488,9 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
             . ", route=" route
             . ", confidence=" confidence
             . ", error=" effectiveError
+            . ", retryAttempted=" (retryAttempted ? "1" : "0")
+            . ", retryReason=" retryReason
+            . ", retrySucceeded=" (retrySucceeded ? "1" : "0")
             . ", latestPath=" latestPath
             . ", archivePath=" archivePath
     )
@@ -2485,6 +2503,9 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
         "unsafeReason", unsafeReason,
         "url", url,
         "error", effectiveError,
+        "retryAttempted", retryAttempted ? "1" : "0",
+        "retryReason", retryReason,
+        "retrySucceeded", retrySucceeded ? "1" : "0",
         "latestPath", latestPath,
         "archivePath", archivePath,
         "latestWriteOk", latestOk ? "1" : "0",
@@ -2514,7 +2535,7 @@ AdvisorQuoteFormatStateSnapshotException(functionName, stepLabel, err) {
     return detail
 }
 
-AdvisorQuoteBuildStateSnapshotCaptureJson(rawSnapshotJson, sourceName := "", errorCode := "") {
+AdvisorQuoteBuildStateSnapshotCaptureJson(rawSnapshotJson, sourceName := "", errorCode := "", retryAttempted := false, retryReason := "", retrySucceeded := false) {
     raw := Trim(String(rawSnapshotJson ?? ""))
     rawIsJson := AdvisorQuoteLooksLikeJsonPayload(raw)
     capturedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
@@ -2539,6 +2560,9 @@ AdvisorQuoteBuildStateSnapshotCaptureJson(rawSnapshotJson, sourceName := "", err
         . '  "allowedNextActions": ' allowedNextActions ",`n"
         . '  "unsafeReason": ' unsafeReasonRaw ",`n"
         . '  "error": ' (effectiveError = "" ? "null" : ('"' AdvisorQuoteJsonEscape(effectiveError) '"')) ",`n"
+        . '  "retryAttempted": ' (retryAttempted ? "true" : "false") ",`n"
+        . '  "retryReason": "' AdvisorQuoteJsonEscape(retryReason) '",`n'
+        . '  "retrySucceeded": ' (retrySucceeded ? "true" : "false") ",`n"
         . '  "rawAdvisorStateSnapshot": ' rawPayload ",`n"
         . '  "rawText": ' rawTextPayload "`n"
         . "}`n"
@@ -2557,6 +2581,18 @@ AdvisorQuoteStateSnapshotEffectiveError(rawSnapshotJson, errorCode := "") {
     url := StrLower(AdvisorQuoteExtractJsonString(raw, "url"))
     if !InStr(url, "advisorpro.allstate.com")
         return "advisor-pro-not-active"
+    return ""
+}
+
+AdvisorQuoteStateSnapshotRetryReason(rawSnapshotJson, errorCode := "") {
+    if (Trim(String(errorCode ?? "")) != "")
+        return ""
+    raw := Trim(String(rawSnapshotJson ?? ""))
+    if (raw = "")
+        return "empty-result-or-bridge-unavailable"
+    lowerRaw := StrLower(raw)
+    if (InStr(lowerRaw, "bridge-unavailable") || InStr(lowerRaw, "bridge unavailable"))
+        return "bridge-unavailable"
     return ""
 }
 

@@ -4533,6 +4533,44 @@ function testAdvisorStateSnapshotContracts() {
   assert.strictEqual(typeof rapport.rapport.vehicleCount, 'number');
   assert.ok(rapport.allowedNextActions.includes('inspect_rapport'));
 
+  const entryStart = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    pageDoc('Begin Quoting Create New Prospect Current Home Address Purchase Payment Checkout', [
+      textNode('Begin Quoting', 'h1'),
+      createButton('PrimaryApplicant-Continue-button', 'Create New Prospect')
+    ]),
+    'https://advisorpro.allstate.com/#/apps/intel/102/start'
+  ));
+  assert.strictEqual(entryStart.route, 'ENTRY_CREATE_FORM');
+  assert.ok(!entryStart.allowedNextActions.includes('review_purchase'));
+  assert.ok(entryStart.allowedNextActions.includes('human_review_required'));
+  assert.ok(entryStart.unsafeReason.includes('entry/start'));
+
+  const duplicateStart = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    pageDoc('Begin Quoting Create New Prospect Existing Profile View Customer Current Home Address', [
+      textNode('Begin Quoting', 'h1'),
+      createButton('view-customer', 'View Customer')
+    ]),
+    'https://advisorpro.allstate.com/#/apps/intel/102/start'
+  ));
+  assert.strictEqual(duplicateStart.route, 'DUPLICATE_CURRENT_CUSTOMER');
+  assert.ok(!duplicateStart.allowedNextActions.includes('review_purchase'));
+  assert.ok(duplicateStart.unsafeReason.includes('duplicate'));
+
+  const purchase = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    pageDoc('Purchase Payment Checkout', [
+      textNode('Purchase', 'h1')
+    ]),
+    'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/purchase'
+  ));
+  assert.strictEqual(purchase.route, 'PURCHASE');
+  assert.ok(purchase.allowedNextActions.includes('review_purchase'));
+
   const unknown = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',
     args,
