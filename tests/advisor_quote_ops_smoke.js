@@ -514,6 +514,32 @@ function assertKeyBlock(raw, requiredKeys) {
   return parsed;
 }
 
+function assertAdvisorStateSnapshot(raw) {
+  const parsed = JSON.parse(raw);
+  for (const key of [
+    'ok', 'op', 'ts', 'url', 'route', 'confidence', 'anchors', 'blockers',
+    'product', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
+  ])
+    assert.ok(Object.prototype.hasOwnProperty.call(parsed, key), `snapshot missing ${key}`);
+  assert.strictEqual(parsed.ok, true);
+  assert.strictEqual(parsed.op, 'advisor_state_snapshot');
+  assert.strictEqual(typeof parsed.ts, 'string');
+  assert.strictEqual(typeof parsed.url, 'string');
+  assert.strictEqual(typeof parsed.route, 'string');
+  assert.strictEqual(typeof parsed.confidence, 'number');
+  assert.ok(parsed.confidence >= 0 && parsed.confidence <= 1);
+  assert.ok(Array.isArray(parsed.anchors));
+  assert.ok(Array.isArray(parsed.blockers));
+  assert.deepStrictEqual(Object.keys(parsed.product), ['autoVisible', 'autoSelected', 'saveContinueVisible']);
+  assert.deepStrictEqual(Object.keys(parsed.prefillGate), ['present', 'startHereVisible']);
+  assert.deepStrictEqual(Object.keys(parsed.rapport), ['present', 'vehicleCount', 'driverCount', 'staleAddVehicleRow']);
+  assert.deepStrictEqual(Object.keys(parsed.iframe), ['present', 'count', 'hints']);
+  assert.ok(Array.isArray(parsed.iframe.hints));
+  assert.ok(Array.isArray(parsed.allowedNextActions));
+  assert.ok(parsed.unsafeReason === null || typeof parsed.unsafeReason === 'string');
+  return parsed;
+}
+
 function runnerPayloadFromLines(parsed) {
   const lineCount = Number(parsed.payloadLineCount || 0);
   const lines = [];
@@ -4468,6 +4494,56 @@ function testDriverAndModalContracts() {
   assert.strictEqual(assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, createVehicleModalDoc()), ['result']).result, 'OK');
 }
 
+function testAdvisorStateSnapshotContracts() {
+  const args = baseArgs();
+
+  const selectedOverview = productOverviewLiveTileGridDoc({ selected: true });
+  const overview = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    selectedOverview.doc,
+    'https://advisorpro.allstate.com/#/apps/intel/102/overview'
+  ));
+  assert.strictEqual(overview.route, 'PRODUCT_OVERVIEW');
+  assert.strictEqual(overview.product.autoVisible, true);
+  assert.strictEqual(overview.product.autoSelected, true);
+  assert.strictEqual(overview.product.saveContinueVisible, true);
+  assert.ok(overview.allowedNextActions.includes('continue_to_gather_data'));
+  assert.strictEqual(overview.unsafeReason, null);
+
+  const customerSummary = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    customerSummaryStartHereClickDoc(),
+    'https://advisorpro.allstate.com/#/apps/customer-summary/123/overview'
+  ));
+  assert.strictEqual(customerSummary.route, 'CUSTOMER_SUMMARY_PREFILL_GATE');
+  assert.strictEqual(customerSummary.prefillGate.present, true);
+  assert.strictEqual(customerSummary.prefillGate.startHereVisible, true);
+  assert.ok(customerSummary.allowedNextActions.includes('start_prefill'));
+
+  const rapport = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    gatherDataDoc(),
+    'https://advisorpro.allstate.com/#/apps/intel/102/rapport'
+  ));
+  assert.strictEqual(rapport.route, 'RAPPORT');
+  assert.strictEqual(rapport.rapport.present, true);
+  assert.strictEqual(typeof rapport.rapport.vehicleCount, 'number');
+  assert.ok(rapport.allowedNextActions.includes('inspect_rapport'));
+
+  const unknown = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    pageDoc('Unsupported external page'),
+    'https://example.test/unsupported'
+  ));
+  assert.strictEqual(unknown.route, 'UNKNOWN_UNSAFE');
+  assert.deepStrictEqual(unknown.allowedNextActions, []);
+  assert.ok(unknown.unsafeReason);
+}
+
 function testAdvisorActiveModalSnapshotContracts() {
   const requiredKeys = [
     'result', 'routeFamily', 'url', 'activeModalType', 'activePanelType', 'saveGate',
@@ -4753,6 +4829,7 @@ function run() {
   testDuplicateMovedAddressContracts();
   testAscReconciliationContracts();
   testDriverAndModalContracts();
+  testAdvisorStateSnapshotContracts();
   testAdvisorActiveModalSnapshotContracts();
   testGatherRapportSnapshotContracts();
   testAscDriversVehiclesSnapshotContracts();

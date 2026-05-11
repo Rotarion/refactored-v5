@@ -4932,6 +4932,238 @@ copy(String((() => {
       };
     }
   };
+  const advisorStateUnique = (values) => {
+    const seen = new Set();
+    return values
+      .map((value) => compact(value, 160))
+      .filter(Boolean)
+      .filter((value) => {
+        const key = normLower(value);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
+  const advisorStateActionText = (node) => compact(getText(node) || safe(node && node.value) || safe(node && node.getAttribute && node.getAttribute('aria-label')), 160);
+  const advisorStateVisibleActions = () => Array.from(document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]'))
+    .filter(visible)
+    .map((node) => ({
+      node,
+      text: advisorStateActionText(node),
+      id: safe(node.id),
+      disabled: isDisabledLike(node)
+    }))
+    .filter((entry) => entry.text || entry.id);
+  const advisorStateHasActionText = (pattern) => advisorStateVisibleActions()
+    .some((entry) => !entry.disabled && pattern.test(entry.text));
+  const readAdvisorProductSnapshotState = (source = {}) => {
+    const product = {
+      autoVisible: false,
+      autoSelected: false,
+      saveContinueVisible: false
+    };
+    if (isProductOverviewPage(source)) {
+      const state = readOverviewProductTileState(source);
+      product.autoVisible = state.present === '1';
+      product.autoSelected = state.selected === '1';
+      product.saveContinueVisible = advisorStateHasActionText(/save\s*&\s*continue\s*to\s*gather\s*data/i);
+      return product;
+    }
+    if (isSelectProductFormPage(source)) {
+      const selectors = getSelectorArgs(source);
+      const productSelect = findByStableId(selectors.selectProductProductId || 'SelectProduct.Product');
+      const selected = readSelectState(productSelect);
+      product.autoVisible = !!productSelect && Array.from(productSelect.options || [])
+        .some((option) => matchesNormalizedValue(option.value, 'AUTO') || matchesNormalizedValue(option.text || option.innerText, 'Auto'));
+      product.autoSelected = !!productSelect && (matchesNormalizedValue(selected.value, 'AUTO') || matchesNormalizedValue(selected.text, 'Auto'));
+      product.saveContinueVisible = !!(findByStableId(selectors.selectProductContinueId || 'selectProductContinue') || advisorStateHasActionText(/^continue$/i));
+    }
+    return product;
+  };
+  const readAdvisorPrefillGateSnapshotState = (source = {}) => {
+    const status = customerSummaryOverviewStatus(source);
+    const target = findCustomerSummaryStartHereTarget(source).target;
+    const present = status.urlMatched === '1' && (status.startHereMatched === '1' || status.summaryAnchorMatched === '1');
+    return {
+      present,
+      startHereVisible: !!(target && visible(target))
+    };
+  };
+  const readAdvisorIframeSnapshotState = () => {
+    const frames = Array.from(document.querySelectorAll('iframe')).filter(visible);
+    return {
+      present: frames.length > 0,
+      count: frames.length,
+      hints: frames.slice(0, 5).map((frame) => compact([
+        safe(frame.id),
+        safe(frame.name),
+        safe(frame.title),
+        safe(frame.getAttribute && frame.getAttribute('src'))
+      ].filter(Boolean).join(' | '), 160)).filter(Boolean)
+    };
+  };
+  const readAdvisorRapportSnapshotState = (source = {}) => {
+    const rapport = {
+      present: false,
+      vehicleCount: null,
+      driverCount: null,
+      staleAddVehicleRow: null
+    };
+    if (isGatherDataPage(source)) {
+      const gather = readGatherRapportSnapshotFields(source);
+      rapport.present = gather.result === 'OK';
+      rapport.vehicleCount = Number(gather.confirmedVehicleCount || 0) + Number(gather.potentialVehicleCount || 0);
+      rapport.driverCount = null;
+      rapport.staleAddVehicleRow = gather.staleAddRowPresent === '1';
+      return rapport;
+    }
+    if (isDriversAndVehiclesPage(source)) {
+      const asc = readAscDriversVehiclesSnapshotFields(source);
+      rapport.present = asc.result === 'OK';
+      rapport.vehicleCount = Number(asc.vehicleCount || 0);
+      rapport.driverCount = Number(asc.driverCount || 0);
+      rapport.staleAddVehicleRow = null;
+    }
+    return rapport;
+  };
+  const advisorStateBlockers = (source = {}) => {
+    const blockers = [];
+    const alerts = collectVisibleAlerts().map((item) => compact(item, 180)).filter(Boolean);
+    blockers.push(...alerts.map((item) => `alert:${item}`));
+    const active = readAdvisorActiveModalStatusFields(source);
+    if (active.activeModalType && active.activeModalType !== 'NONE' && active.activeModalType !== 'INCIDENTS')
+      blockers.push(`active:${active.activeModalType}${active.modalTitle ? ':' + active.modalTitle : ''}`);
+    return advisorStateUnique(blockers).slice(0, 8);
+  };
+  const advisorStateHeadingAnchors = () => Array.from(document.querySelectorAll('h1,h2,h3,[role=heading]'))
+    .filter(visible)
+    .map((node) => `heading:${compact(getText(node), 100)}`)
+    .filter((value) => value !== 'heading:');
+  const advisorStateAscPageKind = () => {
+    const url = lower(pageUrl());
+    const text = bodyText();
+    if (url.includes('/purchase') || /\b(purchase|payment|bind policy|checkout)\b/i.test(text)) return 'PURCHASE';
+    if (url.includes('/coverage') || /\bcoverages?\b/i.test(text)) return 'COVERAGES';
+    return '';
+  };
+  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers) => {
+    if (blockers.length) return [];
+    switch (route) {
+      case 'CUSTOMER_SUMMARY_PREFILL_GATE':
+        return prefillGate.startHereVisible ? ['start_prefill'] : [];
+      case 'PRODUCT_OVERVIEW':
+        if (product.autoVisible && !product.autoSelected) return ['select_auto_product'];
+        if (product.autoSelected && product.saveContinueVisible) return ['continue_to_gather_data'];
+        return [];
+      case 'SELECT_PRODUCT':
+        return ['answer_select_product'];
+      case 'RAPPORT':
+        return rapport.present ? advisorStateUnique(['inspect_rapport', rapport.vehicleCount > 0 ? 'confirm_vehicles' : '', advisorStateHasActionText(/create quotes|save\s*&\s*continue|continue/i) ? 'continue_from_rapport' : '']) : [];
+      case 'CONSUMER_REPORTS':
+        return ['review_consumer_reports'];
+      case 'COVERAGES':
+        return ['review_coverages'];
+      case 'PURCHASE':
+        return ['review_purchase'];
+      case 'ADVISOR_OTHER':
+        return ['human_review_required'];
+      default:
+        return [];
+    }
+  };
+  const advisorStateSnapshot = (source = {}) => {
+    const url = pageUrl();
+    const text = bodyText();
+    const title = compact(document.title || '', 120);
+    const product = readAdvisorProductSnapshotState(source);
+    const prefillGate = readAdvisorPrefillGateSnapshotState(source);
+    const rapport = readAdvisorRapportSnapshotState(source);
+    const iframe = readAdvisorIframeSnapshotState();
+    const blockers = advisorStateBlockers(source);
+    const anchors = [];
+    if (url) anchors.push(`url:${compact(url, 140)}`);
+    if (title) anchors.push(`title:${title}`);
+    anchors.push(...advisorStateHeadingAnchors());
+
+    let route = 'UNKNOWN_UNSAFE';
+    let confidence = 0.1;
+    let unsafeReason = 'Low confidence: unsupported page from read-only evidence.';
+    const customerStatus = customerSummaryOverviewStatus(source);
+    const ascKind = advisorStateAscPageKind();
+
+    if (customerStatus.result === 'DETECTED' && prefillGate.startHereVisible) {
+      route = 'CUSTOMER_SUMMARY_PREFILL_GATE';
+      confidence = 0.93;
+      unsafeReason = null;
+      anchors.push('url:/apps/customer-summary/', 'text:START HERE', customerStatus.evidence);
+    } else if (customerStatus.result === 'PARTIAL') {
+      route = 'ADVISOR_OTHER';
+      confidence = 0.55;
+      unsafeReason = 'Customer summary evidence is incomplete; human review is required before choosing a next action.';
+      anchors.push('partial:customer-summary', customerStatus.evidence);
+    } else if (isProductOverviewPage(source)) {
+      route = 'PRODUCT_OVERVIEW';
+      confidence = product.autoVisible ? 0.92 : 0.82;
+      unsafeReason = product.autoVisible ? null : 'Product overview detected, but the Auto product tile was not resolved.';
+      anchors.push('url:/apps/intel/102/overview', 'text:Select Product', product.autoVisible ? 'product:Auto' : '');
+    } else if (isSelectProductFormPage(source)) {
+      route = 'SELECT_PRODUCT';
+      confidence = 0.88;
+      unsafeReason = null;
+      anchors.push('url:/selectProduct', 'control:SelectProduct.Product', 'control:selectProductContinue');
+    } else if (isGatherDataPage(source)) {
+      route = 'RAPPORT';
+      confidence = 0.88;
+      unsafeReason = null;
+      anchors.push('url:/apps/intel/102/rapport', 'text:Gather Data', rapport.present ? 'snapshot:gather_rapport' : '');
+    } else if (isConsumerReportsPage(source)) {
+      route = 'CONSUMER_REPORTS';
+      confidence = 0.86;
+      unsafeReason = null;
+      anchors.push('url:/apps/ASCPRODUCT/', 'text:order consumer reports');
+    } else if (ascKind) {
+      route = ascKind;
+      confidence = 0.82;
+      unsafeReason = null;
+      anchors.push('url:/apps/ASCPRODUCT/', ascKind === 'PURCHASE' ? 'text:purchase' : 'text:coverages');
+    } else if (isDriversAndVehiclesPage(source) || isIncidentsPage(source) || isQuoteLandingPage(source) || isAscProductPage(source)) {
+      route = 'ADVISOR_OTHER';
+      confidence = 0.68;
+      unsafeReason = 'Advisor Pro ASC page recognized, but this snapshot does not expose a supported top-level route for it yet.';
+      anchors.push('url:/apps/ASCPRODUCT/', isDriversAndVehiclesPage(source) ? 'text:Drivers and vehicles' : '', isIncidentsPage(source) ? 'text:Incidents' : '');
+    } else if (url.includes('advisorpro.allstate.com') || text.includes('allstate advisor pro')) {
+      route = 'ADVISOR_OTHER';
+      confidence = 0.45;
+      unsafeReason = 'Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence.';
+      anchors.push('advisorpro-origin');
+    }
+
+    if (blockers.length) {
+      confidence = Math.min(confidence, 0.78);
+      unsafeReason = `Blocking UI or alert evidence is present: ${blockers.join(' | ')}`;
+    }
+
+    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers);
+    if (!allowedNextActions.length && route !== 'UNKNOWN_UNSAFE' && !unsafeReason)
+      unsafeReason = `Recognized ${route}, but no safe next action is clear from read-only evidence.`;
+
+    return {
+      ok: true,
+      op: 'advisor_state_snapshot',
+      ts: new Date().toISOString(),
+      url,
+      route,
+      confidence: Number(confidence.toFixed(2)),
+      anchors: advisorStateUnique(anchors).slice(0, 14),
+      blockers,
+      product,
+      prefillGate,
+      rapport,
+      iframe,
+      allowedNextActions,
+      unsafeReason
+    };
+  };
   const escapeRegexText = (value) => safe(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const vinPatternCompatible = (vinValue, optionText) => {
     const vin = normalizeVehicleVin(vinValue);
@@ -5281,6 +5513,7 @@ copy(String((() => {
   ]);
   const advisorRunnerAllowedReadOnlyStatusOps = Object.freeze([
     'detect_state',
+    'advisor_state_snapshot',
     'gather_rapport_snapshot',
     'gather_start_quoting_status',
     'gather_confirmed_vehicles_status',
@@ -6756,6 +6989,10 @@ copy(String((() => {
 
     case 'advisor_active_modal_status': {
       return linesOut(readAdvisorActiveModalStatusFields(args));
+    }
+
+    case 'advisor_state_snapshot': {
+      return JSON.stringify(advisorStateSnapshot(args));
     }
 
     case 'gather_rapport_snapshot': {
