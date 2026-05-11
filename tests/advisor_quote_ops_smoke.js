@@ -365,6 +365,12 @@ function createSelect(id, options, extra = {}) {
   return new FakeElement('select', Object.assign({ id, options }, extra));
 }
 
+function createCurrentAddressSelect({ value = 'current-address-guid', text = '201 N 66TH TER, HOLLYWOOD, FL, 33024', selected = true } = {}) {
+  return createSelect('SelectProduct.CurrentAddress', [
+    { value, text, selected }
+  ], { name: 'SelectProduct.CurrentAddress' });
+}
+
 function parseLines(raw) {
   return String(raw)
     .replace(/\r/g, '')
@@ -656,7 +662,7 @@ function selectProductDoc(extraNodes = []) {
     createRadio('insuredYes', 'SelectProduct.CustomerCurrentInsured', 'YES', { checked: true }),
     createRadio('ownHome', 'SelectProduct.CustomerOwnOrRent', 'OWN', { checked: true }),
     createInput('SelectProduct.EffectiveDate', '05/08/2026'),
-    createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }),
+    createCurrentAddressSelect(),
     createButton('selectProductContinue', 'Continue'),
     ...extraNodes
   ]);
@@ -707,7 +713,7 @@ function selectProductCustomInsuredDoc({ yesSelected = false, noSelected = false
     createButton('selectProductContinue', 'Continue', { disabled: continueDisabled })
   ];
   if (includeEffectiveDate) nodes.push(createInput('SelectProduct.EffectiveDate', '05/08/2026'));
-  if (includeCurrentAddress) nodes.push(createRadio('current-address-option', 'SelectProduct.CurrentAddress', 'current', { checked: true }));
+  if (includeCurrentAddress) nodes.push(createCurrentAddressSelect());
   return pageDoc('Select Product Is the customer currently insured? Yes No', nodes);
 }
 
@@ -734,7 +740,7 @@ function selectProductChoiceQuestion(questionText, choices) {
   return question;
 }
 
-function selectProductObservedLiveDoc() {
+function selectProductObservedLiveDoc(currentAddress = {}) {
   return pageDoc('Select Product Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Current Address', [
     textNode('Select Product', 'h1'),
     createSelect('SelectProduct.RatingState', [
@@ -746,7 +752,7 @@ function selectProductObservedLiveDoc() {
       { value: 'AUTO', text: 'Auto', selected: true }
     ]),
     createInput('SelectProduct.EffectiveDate', '05/11/2026'),
-    createRadio('SelectProduct.CurrentAddress', 'SelectProduct.CurrentAddress', 'current', { checked: true }),
+    createCurrentAddressSelect(currentAddress),
     selectProductChoiceQuestion('Is the customer currently insured?', [
       { id: 'observed-currently-insured-yes', text: 'Yes' },
       { id: 'observed-currently-insured-no', text: 'No' }
@@ -2173,15 +2179,29 @@ function testReturnShapeContracts() {
   const observedLiveDoc = selectProductObservedLiveDoc();
   const observedLiveStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), observedLiveDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
     'result', 'routeFamily', 'ratingStateValue', 'productValue', 'productText', 'effectiveDateFilled',
-    'currentAddressPresent', 'currentAddressSelected', 'insuredQuestionPresent', 'ownRentQuestionPresent',
+    'currentAddressPresent', 'currentAddressSelected', 'currentAddressSource', 'currentAddressSelectedIndex',
+    'currentAddressText', 'insuredQuestionPresent', 'ownRentQuestionPresent',
     'ownRentOwnPresent', 'ownRentRentPresent', 'continueEnabled', 'missing'
   ]);
   assert.strictEqual(observedLiveStatus.routeFamily, 'intel-select-product');
   assert.strictEqual(observedLiveStatus.currentAddressPresent, '1');
   assert.strictEqual(observedLiveStatus.currentAddressSelected, '1');
+  assert.strictEqual(observedLiveStatus.currentAddressSource, 'stable-select');
+  assert.strictEqual(observedLiveStatus.currentAddressSelectedIndex, '0');
+  assert.strictEqual(observedLiveStatus.currentAddressText, '201 N 66TH TER, HOLLYWOOD, FL, 33024');
   assert.strictEqual(observedLiveStatus.result, 'SELECT_PRODUCT_MISSING_CURRENTLY_INSURED');
+  assert.ok(!observedLiveStatus.missing.includes('SELECT_PRODUCT_MISSING_CURRENT_ADDRESS'));
   assert.ok(observedLiveStatus.missing.includes('SELECT_PRODUCT_MISSING_CURRENTLY_INSURED'));
   assert.ok(observedLiveStatus.missing.includes('SELECT_PRODUCT_MISSING_OWN_RENT'));
+
+  const placeholderAddressDoc = selectProductObservedLiveDoc({ value: '', text: 'Select One' });
+  const placeholderAddressStatus = assertKeyBlock(runOperator('select_product_status', baseArgs(), placeholderAddressDoc, 'https://advisorpro.allstate.com/#/apps/intel/102/selectProduct'), [
+    'result', 'currentAddressPresent', 'currentAddressSelected', 'currentAddressText', 'missing'
+  ]);
+  assert.strictEqual(placeholderAddressStatus.currentAddressPresent, '1');
+  assert.strictEqual(placeholderAddressStatus.currentAddressSelected, '0');
+  assert.strictEqual(placeholderAddressStatus.result, 'SELECT_PRODUCT_MISSING_CURRENT_ADDRESS');
+  assert.ok(placeholderAddressStatus.missing.includes('SELECT_PRODUCT_MISSING_CURRENT_ADDRESS'));
 
   const observedDefaulted = assertKeyBlock(runOperator('ensure_select_product_defaults', baseArgs({
     ratingState: 'FL',
@@ -4628,6 +4648,7 @@ function testAdvisorStateSnapshotContracts() {
   assert.strictEqual(selectProduct.selectProduct.productText, 'Auto');
   assert.strictEqual(selectProduct.selectProduct.effectiveDate, '05/11/2026');
   assert.strictEqual(selectProduct.selectProduct.currentAddressPresent, true);
+  assert.ok(!selectProduct.selectProduct.missingRequired.includes('SELECT_PRODUCT_MISSING_CURRENT_ADDRESS'));
   assert.ok(selectProduct.selectProduct.missingRequired.includes('SELECT_PRODUCT_MISSING_CURRENTLY_INSURED'));
   assert.ok(selectProduct.selectProduct.missingRequired.includes('SELECT_PRODUCT_MISSING_OWN_RENT'));
   assert.ok(selectProduct.allowedNextActions.includes('answer_select_product'));

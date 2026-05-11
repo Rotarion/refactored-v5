@@ -2483,13 +2483,49 @@ copy(String((() => {
   const selectProductRouteFamily = (source = {}) => isSelectProductFormPage(source) ? 'intel-select-product' : 'unknown';
   const findEffectiveDateInput = () => findByStableId('SelectProduct.EffectiveDate')
     || document.querySelector('input[id*="EffectiveDate"],input[name*="EffectiveDate"],input[placeholder*="Effective" i],input[aria-label*="Effective" i]');
+  const isSelectProductPlaceholderText = (text) => /^(select\s+one|select|choose|please\s+select|-+|none)$/i.test(safe(text).trim());
+  const findCurrentAddressSelect = () => {
+    const stable = document.getElementById('SelectProduct.CurrentAddress');
+    if (stable && /^SELECT$/i.test(safe(stable.tagName))) return stable;
+    return Array.from(document.querySelectorAll('select'))
+      .filter(visible)
+      .find((el) => safe(el.id) === 'SelectProduct.CurrentAddress' || safe(el.name) === 'SelectProduct.CurrentAddress' || /CurrentAddress/i.test(`${safe(el.id)} ${safe(el.name)}`)) || null;
+  };
   const findCurrentAddressControls = () => Array.from(document.querySelectorAll('input[type=radio],input[type=checkbox],button,[role=button],label'))
     .filter(visible)
     .filter((el) => /current[^a-z0-9]*address|same[^a-z0-9]*address|use[^a-z0-9]*this[^a-z0-9]*address/i.test(`${safe(el.id)} ${safe(el.name)} ${safe(el.value)} ${readInputLabel(el)} ${getText(el)}`));
   const readCurrentAddressState = () => {
+    const select = findCurrentAddressSelect();
+    if (select && visible(select)) {
+      const state = readSelectState(select);
+      const selectedIndex = Number.isFinite(Number(select.selectedIndex)) ? Number(select.selectedIndex) : -1;
+      const text = safe(state.text).trim();
+      const value = safe(state.value).trim();
+      const selectedTextValid = !!text && !isSelectProductPlaceholderText(text);
+      const selected = selectedTextValid || (!!value && selectedTextValid);
+      return {
+        present: true,
+        selected,
+        safeUnique: false,
+        controls: [select],
+        source: 'stable-select',
+        value,
+        text,
+        selectedIndex: String(selectedIndex)
+      };
+    }
     const controls = findCurrentAddressControls();
     const selected = controls.some((el) => isSelectedNode(el) || el.checked || /selected|checked|active/i.test(`${safe(el.className)} ${safe(el.getAttribute && el.getAttribute('aria-checked'))}`));
-    return { present: controls.length > 0, selected, safeUnique: controls.length === 1, controls };
+    return {
+      present: controls.length > 0,
+      selected,
+      safeUnique: controls.length === 1,
+      controls,
+      source: controls.length ? 'semantic-control' : '',
+      value: selected ? compact(controls.map((el) => safe(el.value)).filter(Boolean).join('|'), 120) : '',
+      text: selected ? compact(controls.map((el) => readInputLabel(el) || getText(el)).filter(Boolean).join('|'), 180) : '',
+      selectedIndex: ''
+    };
   };
   const findSelectProductContinueButton = (source = {}) => {
     const selectors = getSelectorArgs(source);
@@ -2673,6 +2709,10 @@ copy(String((() => {
       effectiveDateFilled: effectiveDate && safe(effectiveDate.value).trim() ? '1' : '0',
       currentAddressPresent: currentAddress.present ? '1' : '0',
       currentAddressSelected: currentAddress.selected ? '1' : '0',
+      currentAddressValue: currentAddress.value || '',
+      currentAddressText: currentAddress.text || '',
+      currentAddressSource: currentAddress.source || '',
+      currentAddressSelectedIndex: currentAddress.selectedIndex || '',
       insuredQuestionPresent: insuredState.questionPresent ? '1' : '0',
       insuredYesPresent: insuredState.yesPresent ? '1' : '0',
       insuredNoPresent: insuredState.noPresent ? '1' : '0',

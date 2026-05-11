@@ -1263,7 +1263,7 @@
   },
   "snapshot-select-product-live-prefilled": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
-    "bodyText": "Select Product Rating State Florida Product Auto Effective Date 05/11/2026 Current Address 100 Test Ave Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Continue",
+    "bodyText": "Select Product Rating State Florida Product Auto Effective Date 05/11/2026 Current Address 201 N 66TH TER, HOLLYWOOD, FL, 33024 Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Continue",
     "nodes": [
       { "tag": "h1", "text": "Select Product" },
       { "tag": "select", "id": "SelectProduct.RatingState", "options": [
@@ -1275,7 +1275,9 @@
         { "value": "AUTO", "text": "Auto", "selected": true }
       ] },
       { "tag": "input", "type": "text", "id": "SelectProduct.EffectiveDate", "value": "05/11/2026" },
-      { "tag": "input", "type": "radio", "id": "SelectProduct.CurrentAddress", "name": "SelectProduct.CurrentAddress", "value": "current", "checked": true },
+      { "tag": "select", "id": "SelectProduct.CurrentAddress", "name": "SelectProduct.CurrentAddress", "options": [
+        { "value": "current-address-guid", "text": "201 N 66TH TER, HOLLYWOOD, FL, 33024", "selected": true }
+      ] },
       { "tag": "section", "className": "mesh-question", "text": "Is the customer currently insured?", "children": [
         { "tag": "button", "id": "fixture-currently-insured-yes", "text": "Yes", "role": "button", "attributes": { "aria-pressed": "false" } },
         { "tag": "button", "id": "fixture-currently-insured-no", "text": "No", "role": "button", "attributes": { "aria-pressed": "false" } }
