@@ -22,6 +22,8 @@ global advisorQuoteReadOnlyRunnerBootstrapped := false
 global advisorQuoteReadOnlyRunnerPilotLogged := false
 global advisorQuoteJsMetrics := 0
 global advisorQuoteJsMetricOps := Map()
+global advisorQuoteConsoleBridgeOpen := false
+global advisorQuoteConsoleBridgeFocus := "page"
 
 RunAdvisorQuoteWorkflowFromClipboard() {
     raw := Trim(A_Clipboard)
@@ -2443,7 +2445,7 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
     try {
         raw := Trim(String(AdvisorQuoteRunJsOpFullInjection("advisor_state_snapshot", Map("source", sourceName), 1, 0)))
     } catch as err {
-        errorCode := "exception:" err.Message
+        errorCode := AdvisorQuoteFormatStateSnapshotException("AdvisorQuoteCaptureStateSnapshotDebug", step, err)
     }
 
     if (Trim(raw) = "" && errorCode = "")
@@ -2488,6 +2490,28 @@ AdvisorQuoteCaptureStateSnapshotDebug(sourceName := "Ctrl+Alt+Shift+S") {
         "latestWriteOk", latestOk ? "1" : "0",
         "archiveWriteOk", archiveOk ? "1" : "0"
     )
+}
+
+AdvisorQuoteFormatStateSnapshotException(functionName, stepLabel, err) {
+    message := ""
+    file := ""
+    line := ""
+    what := ""
+    try message := err.Message
+    try file := err.File
+    try line := String(err.Line)
+    try what := err.What
+
+    detail := "exception:function=" functionName
+        . ", step=" stepLabel
+        . ", message=" message
+    if (file != "")
+        detail .= ", file=" file
+    if (line != "")
+        detail .= ", line=" line
+    if (what != "")
+        detail .= ", what=" what
+    return detail
 }
 
 AdvisorQuoteBuildStateSnapshotCaptureJson(rawSnapshotJson, sourceName := "", errorCode := "") {
