@@ -524,7 +524,7 @@ function assertAdvisorStateSnapshot(raw) {
   const parsed = JSON.parse(raw);
   for (const key of [
     'ok', 'op', 'ts', 'url', 'route', 'confidence', 'anchors', 'blockers',
-    'product', 'selectProduct', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
+    'product', 'selectProduct', 'ascDriversVehicles', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
   ])
     assert.ok(Object.prototype.hasOwnProperty.call(parsed, key), `snapshot missing ${key}`);
   assert.strictEqual(parsed.ok, true);
@@ -542,6 +542,14 @@ function assertAdvisorStateSnapshot(raw) {
     'currentlyInsuredAnswer', 'ownRentAnswer', 'continueVisible', 'continueEnabled', 'missingRequired'
   ]);
   assert.ok(Array.isArray(parsed.selectProduct.missingRequired));
+  assert.deepStrictEqual(Object.keys(parsed.ascDriversVehicles), [
+    'present', 'routeId', 'driversAndVehiclesHeadingPresent', 'inlineParticipantPanelPresent',
+    'inlineParticipantSavePresent', 'inlineParticipantSaveEnabled', 'pageSaveContinuePresent',
+    'pageSaveContinueEnabled', 'unresolvedDriverCount', 'unresolvedVehicleCount',
+    'addedDriverCount', 'removedDriverCount', 'addedVehicleCount', 'removedVehicleCount',
+    'blockerCode', 'blockers', 'nextRecommendedAction'
+  ]);
+  assert.ok(Array.isArray(parsed.ascDriversVehicles.blockers));
   assert.deepStrictEqual(Object.keys(parsed.prefillGate), ['present', 'startHereVisible']);
   assert.deepStrictEqual(Object.keys(parsed.rapport), ['present', 'vehicleCount', 'driverCount', 'staleAddVehicleRow']);
   assert.deepStrictEqual(Object.keys(parsed.iframe), ['present', 'count', 'hints']);
@@ -2249,11 +2257,26 @@ function testReturnShapeContracts() {
     'result', 'panelPresent', 'savePresent', 'saveEnabled', 'genderQuestionPresent', 'genderAlreadySelected',
     'maritalQuestionPresent', 'maritalAlreadySelected', 'ownershipQuestionPresent', 'ownershipSelected',
     'ageFirstLicensedPresent', 'ageFirstLicensedFilled', 'movingViolationsControlPresent',
-    'defensiveDrivingControlPresent', 'missingRequiredControls', 'optionalMissingControls'
+    'defensiveDrivingControlPresent', 'inlineParticipantSaveEnabled', 'pageSaveContinueEnabled',
+    'blockerCode', 'nextAction', 'missingRequiredControls', 'optionalMissingControls'
   ]);
   assert.strictEqual(optionalMissingStatus.panelPresent, '1');
+  assert.strictEqual(optionalMissingStatus.inlineParticipantSaveEnabled, '1');
+  assert.strictEqual(optionalMissingStatus.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
+  assert.strictEqual(optionalMissingStatus.nextAction, 'save_inline_participant_panel');
   assert.strictEqual(optionalMissingStatus.movingViolationsControlPresent, '0');
   assert.strictEqual(optionalMissingStatus.defensiveDrivingControlPresent, '0');
+
+  const inlineReadyPageDisabledScenario = fixtureScenario('snapshot-asc-inline-ready-unresolved-113');
+  const inlineReadyPageDisabledStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), inlineReadyPageDisabledScenario.doc, inlineReadyPageDisabledScenario.href), [
+    'result', 'saveEnabled', 'inlineParticipantSaveEnabled', 'pageSaveContinueEnabled', 'blockerCode', 'nextAction', 'missingRequiredControls'
+  ]);
+  assert.strictEqual(inlineReadyPageDisabledStatus.saveEnabled, '1');
+  assert.strictEqual(inlineReadyPageDisabledStatus.inlineParticipantSaveEnabled, '1');
+  assert.strictEqual(inlineReadyPageDisabledStatus.pageSaveContinueEnabled, '0');
+  assert.strictEqual(inlineReadyPageDisabledStatus.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
+  assert.notStrictEqual(inlineReadyPageDisabledStatus.result, 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED');
+  assert.strictEqual(inlineReadyPageDisabledStatus.nextAction, 'save_inline_participant_panel');
   const optionalMissingFill = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',
     email: 'driver@example.test',
@@ -4680,6 +4703,23 @@ function testAdvisorStateSnapshotContracts() {
   assert.ok(!duplicateStart.allowedNextActions.includes('review_purchase'));
   assert.ok(duplicateStart.unsafeReason.includes('duplicate'));
 
+  const ascDriversVehicles = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    fixtureScenario('snapshot-asc-inline-ready-unresolved-113')
+  ));
+  assert.strictEqual(ascDriversVehicles.route, 'ASC_DRIVERS_VEHICLES');
+  assert.notStrictEqual(ascDriversVehicles.route, 'COVERAGES');
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.present, true);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.routeId, '113');
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.inlineParticipantPanelPresent, true);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.inlineParticipantSaveEnabled, true);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.pageSaveContinueEnabled, false);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.unresolvedDriverCount, 2);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.unresolvedVehicleCount, 3);
+  assert.strictEqual(ascDriversVehicles.ascDriversVehicles.nextRecommendedAction, 'save_inline_participant_panel');
+  assert.ok(!ascDriversVehicles.ascDriversVehicles.blockers.includes('ASC_INLINE_PARTICIPANT_SAVE_DISABLED'));
+
   const purchase = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',
     args,
@@ -4793,8 +4833,10 @@ function testAscDriversVehiclesSnapshotContracts() {
     'driverSummaries', 'vehicleCount', 'unresolvedVehicleCount', 'addedVehicleCount',
     'removedVehicleCount', 'vehicleSummaries', 'inlineParticipantPanelPresent',
     'removeDriverModalPresent', 'removeDriverTargetName', 'removeDriverReasonSelected',
-    'removeDriverReasonCode', 'mainSavePresent', 'mainSaveEnabled', 'blockerCode',
-    'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
+    'removeDriverReasonCode', 'driversAndVehiclesHeadingPresent', 'inlineParticipantSavePresent',
+    'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'pageSaveContinuePresent',
+    'pageSaveContinueEnabled', 'pageSaveContinueButtonId', 'mainSavePresent', 'mainSaveEnabled',
+    'blockerCode', 'blockers', 'nextRecommendedAction', 'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
   ];
   const args = baseArgs();
   const ascHref = 'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/';
@@ -4806,13 +4848,30 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(unresolved.unresolvedDriverCount, '1');
   assert.strictEqual(unresolved.unresolvedVehicleCount, '1');
   assert.strictEqual(unresolved.mainSaveEnabled, '0');
-  assert.strictEqual(unresolved.blockerCode, 'ASC_UNRESOLVED_DRIVERS');
+  assert.strictEqual(unresolved.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
+  assert.ok(unresolved.blockers.includes('UNRESOLVED_FOUND_DRIVERS:1'));
+  assert.ok(unresolved.blockers.includes('UNRESOLVED_FOUND_VEHICLES:1'));
 
   const inline = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
   assert.strictEqual(inline.result, 'OK');
   assert.strictEqual(inline.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
   assert.strictEqual(inline.inlineParticipantPanelPresent, '1');
-  assert.strictEqual(inline.blockerCode, 'ASC_INLINE_PARTICIPANT_PANEL_OPEN');
+  assert.strictEqual(inline.inlineParticipantSaveEnabled, '1');
+  assert.strictEqual(inline.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
+  assert.strictEqual(inline.nextRecommendedAction, 'save_inline_participant_panel');
+
+  const inlineReadyUnresolved = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-ready-unresolved-113')), requiredKeys);
+  assert.strictEqual(inlineReadyUnresolved.result, 'OK');
+  assert.strictEqual(inlineReadyUnresolved.ascProductRouteId, '113');
+  assert.strictEqual(inlineReadyUnresolved.inlineParticipantSaveEnabled, '1');
+  assert.strictEqual(inlineReadyUnresolved.pageSaveContinueEnabled, '0');
+  assert.strictEqual(inlineReadyUnresolved.unresolvedDriverCount, '2');
+  assert.strictEqual(inlineReadyUnresolved.unresolvedVehicleCount, '3');
+  assert.strictEqual(inlineReadyUnresolved.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
+  assert.notStrictEqual(inlineReadyUnresolved.blockerCode, 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED');
+  assert.strictEqual(inlineReadyUnresolved.nextRecommendedAction, 'save_inline_participant_panel');
+  assert.ok(inlineReadyUnresolved.blockers.includes('UNRESOLVED_FOUND_DRIVERS:2'));
+  assert.ok(inlineReadyUnresolved.blockers.includes('UNRESOLVED_FOUND_VEHICLES:3'));
 
   const remove = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-remove-driver')), requiredKeys);
   assert.strictEqual(remove.result, 'OK');

@@ -534,9 +534,15 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
         . ", removeDriverTargetName=" AdvisorQuoteStatusValue(status, "removeDriverTargetName")
         . ", removeDriverReasonSelected=" AdvisorQuoteStatusValue(status, "removeDriverReasonSelected")
         . ", removeDriverReasonCode=" AdvisorQuoteStatusValue(status, "removeDriverReasonCode")
+        . ", inlineParticipantSavePresent=" AdvisorQuoteStatusValue(status, "inlineParticipantSavePresent")
+        . ", inlineParticipantSaveEnabled=" AdvisorQuoteStatusValue(status, "inlineParticipantSaveEnabled")
+        . ", pageSaveContinuePresent=" AdvisorQuoteStatusValue(status, "pageSaveContinuePresent")
+        . ", pageSaveContinueEnabled=" AdvisorQuoteStatusValue(status, "pageSaveContinueEnabled")
         . ", mainSavePresent=" AdvisorQuoteStatusValue(status, "mainSavePresent")
         . ", mainSaveEnabled=" AdvisorQuoteStatusValue(status, "mainSaveEnabled")
         . ", blockerCode=" AdvisorQuoteStatusValue(status, "blockerCode")
+        . ", blockers=" AdvisorQuoteStatusValue(status, "blockers")
+        . ", nextRecommendedAction=" AdvisorQuoteStatusValue(status, "nextRecommendedAction")
         . ", nextRecommendedReadOnlyStatus=" AdvisorQuoteStatusValue(status, "nextRecommendedReadOnlyStatus")
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
@@ -733,6 +739,12 @@ AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
         . ", panelPresent=" AdvisorQuoteStatusValue(status, "panelPresent")
         . ", savePresent=" AdvisorQuoteStatusValue(status, "savePresent")
         . ", saveEnabled=" AdvisorQuoteStatusValue(status, "saveEnabled")
+        . ", inlineParticipantSavePresent=" AdvisorQuoteStatusValue(status, "inlineParticipantSavePresent")
+        . ", inlineParticipantSaveEnabled=" AdvisorQuoteStatusValue(status, "inlineParticipantSaveEnabled")
+        . ", pageSaveContinuePresent=" AdvisorQuoteStatusValue(status, "pageSaveContinuePresent")
+        . ", pageSaveContinueEnabled=" AdvisorQuoteStatusValue(status, "pageSaveContinueEnabled")
+        . ", blockerCode=" AdvisorQuoteStatusValue(status, "blockerCode")
+        . ", nextAction=" AdvisorQuoteStatusValue(status, "nextAction")
         . ", genderControlPresent=" AdvisorQuoteStatusValue(status, "genderControlPresent")
         . ", genderAlreadySelected=" AdvisorQuoteStatusValue(status, "genderAlreadySelected")
         . ", maritalControlPresent=" AdvisorQuoteStatusValue(status, "maritalControlPresent")
@@ -1111,8 +1123,12 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
 
     unresolvedDrivers := AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount")
     ledger["unresolvedDriverCount"] := String(unresolvedDrivers)
-    if (unresolvedDrivers > 0)
-        return AdvisorQuoteAscLedgerFail(ledger, "ASC_DRIVER_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+    unresolvedVehiclesAtDriverGate := AdvisorQuoteStatusInteger(vehicleStatus, "unresolvedVehicleCount")
+    if (unresolvedDrivers > 0) {
+        if (unresolvedVehiclesAtDriverGate > 0)
+            return AdvisorQuoteAscLedgerFail(ledger, "ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED: drivers=" unresolvedDrivers ", vehicles=" unresolvedVehiclesAtDriverGate, "drivers=" AdvisorQuoteStatusValue(driverStatus, "driverSummaries") ", vehicles=" AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_DRIVERS_VEHICLES_UNRESOLVED_DRIVERS: count=" unresolvedDrivers, AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+    }
 
     vehiclePolicy := AdvisorQuoteClassifyAscVehicles(profile)
     expectedVehicleCount := vehiclePolicy["completeVehicles"].Length
@@ -1130,7 +1146,7 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
     if (expectedVehicleCount = 0 && addedVehicles < 1)
         return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_VERIFY_FAILED:no-expected-or-added-vehicle", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
     if (unresolvedVehicles > 0)
-        return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_DRIVERS_VEHICLES_UNRESOLVED_VEHICLES: count=" unresolvedVehicles, AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
 
     ledger["mainSavePresent"] := AdvisorQuoteStatusValue(snapshot, "mainSavePresent")
     ledger["mainSaveEnabled"] := AdvisorQuoteStatusValue(snapshot, "mainSaveEnabled")
@@ -1667,7 +1683,7 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
         return false
     }
     if !AdvisorQuoteClickById(db["selectors"]["participantSaveId"], db["timeouts"]["actionMs"]) {
-        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: save click failed. " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
+        failureReason := "ASC_INLINE_PARTICIPANT_SAVE_CLICK_FAILED: " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-inline-save-click-failed")
         return false
     }

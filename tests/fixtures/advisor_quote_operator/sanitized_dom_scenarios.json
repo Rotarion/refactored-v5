@@ -1247,6 +1247,33 @@
       { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
     ]
   },
+  "snapshot-asc-inline-ready-unresolved-113": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/113/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Let's get some more details Save Save and Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Drivers and vehicles" },
+      { "tag": "h2", "text": "Let's get some more details" },
+      { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+      { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
+      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Secondary Driver Age 37 Add", "children": [
+        { "tag": "button", "id": "test-secondary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2024 Ford Mustang VIN: FAKEVIN*******01 Add", "children": [
+        { "tag": "button", "id": "2024-ford-mustang-add", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2021 Toyota Prius VIN: FAKEVIN*******02 Add", "children": [
+        { "tag": "button", "id": "2021-toyota-prius-add", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2020 Dodge Durango VIN: FAKEVIN*******03 Add", "children": [
+        { "tag": "button", "id": "2020-dodge-durango-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-remove-driver": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Remove Driver Test Secondary Why do you want to remove this person? Save",

@@ -1269,10 +1269,23 @@ copy(String((() => {
     if (normalized.includes('coverages')) evidence.push('text:Coverages');
     return evidence;
   };
-  const findAscSaveButton = () => document.getElementById('profile-summary-submitBtn')
+  const findAscPageSaveContinueButton = () => document.getElementById('profile-summary-submitBtn')
     || Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button]'))
       .filter(visible)
       .find((node) => answerTextMatches(getText(node) || node.value, 'Save and Continue')) || null;
+  const findAscInlineParticipantSaveButton = () => {
+    const exact = document.getElementById('PARTICIPANT_SAVE-btn');
+    if (exact && visible(exact)) return exact;
+    return Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button]'))
+      .filter(visible)
+      .find((node) => {
+        const text = normLower(getText(node) || node.value || node.getAttribute('aria-label') || '');
+        if (text !== 'save') return false;
+        const context = normLower(getText(node.closest('section,div,form,[role="dialog"]') || node.parentElement) || bodyText());
+        return context.includes("let's get some more details") || context.includes('lets get some more details') || context.includes('participant');
+      }) || null;
+  };
+  const findAscSaveButton = findAscPageSaveContinueButton;
   const findAscSpouseSelect = () => document.getElementById('maritalStatusWithSpouse_spouseName')
     || document.querySelector('select[name="agreement.agreementParticipant.party.spouse.id"]')
     || Array.from(document.querySelectorAll('select')).find((select) => /spouse/i.test(`${safe(select.id)} ${safe(select.name)}`)) || null;
@@ -1347,9 +1360,11 @@ copy(String((() => {
     else missing.push('url:/apps/ASCPRODUCT/');
     const text = bodyText();
     const panelPresent = /let'?s get some more details|participant|driver details|more details/i.test(text) || !!document.getElementById('PARTICIPANT_SAVE-btn');
-    const saveButton = findAscSaveButton() || document.getElementById('PARTICIPANT_SAVE-btn');
-    if (saveButton) evidence.push(`button:${safe(saveButton.id || 'save')}`);
-    else missing.push('button:save');
+    const saveButton = findAscInlineParticipantSaveButton();
+    const pageSaveButton = findAscPageSaveContinueButton();
+    if (saveButton) evidence.push(`inline-button:${safe(saveButton.id || 'save')}`);
+    else if (panelPresent) missing.push('button:inline-save');
+    if (pageSaveButton) evidence.push(`page-button:${safe(pageSaveButton.id || 'save-and-continue')}`);
     const spouseSelect = findAscSpouseSelect();
     const spouseState = spouseSelect ? readSelectState(spouseSelect) : { value: '', text: '' };
     const spouseOptions = spouseSelect ? Array.from(spouseSelect.options || []).map((opt) => compact(`${safe(opt.value)}:${safe(opt.text || opt.innerText)}`, 90)).join('||') : '';
@@ -1379,7 +1394,12 @@ copy(String((() => {
     const primary = driverRows[0] || {};
     let result = 'NOT_FOUND';
     if (isAscProductRoute() && (panelPresent || evidence.length >= 2 || saveButton || driverRows.length)) result = 'FOUND';
-    if (result === 'FOUND' && saveButton && isDisabledLike(saveButton) && missingRequired.length) result = 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
+    const saveEnabled = !!(saveButton && !isDisabledLike(saveButton));
+    const pageSaveEnabled = !!(pageSaveButton && !isDisabledLike(pageSaveButton));
+    const blockerCode = panelPresent && saveEnabled
+      ? 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE'
+      : (panelPresent && saveButton && isDisabledLike(saveButton) ? 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED' : '');
+    if (result === 'FOUND' && blockerCode === 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED' && missingRequired.length) result = 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
     return {
       result,
       ascProductRouteId: ascProductRouteId(),
@@ -1388,9 +1408,17 @@ copy(String((() => {
       primaryAge: primary.age || '',
       participantNameMasked: primary.name ? '[REDACTED]' : '',
       savePresent: saveButton ? '1' : '0',
-      saveEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      saveEnabled: saveEnabled ? '1' : '0',
       saveButtonPresent: saveButton ? '1' : '0',
-      saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
+      saveButtonEnabled: saveEnabled ? '1' : '0',
+      saveButtonId: safe(saveButton && saveButton.id),
+      inlineParticipantSavePresent: saveButton ? '1' : '0',
+      inlineParticipantSaveEnabled: saveEnabled ? '1' : '0',
+      pageSaveContinuePresent: pageSaveButton ? '1' : '0',
+      pageSaveContinueEnabled: pageSaveEnabled ? '1' : '0',
+      pageSaveContinueButtonId: safe(pageSaveButton && pageSaveButton.id),
+      blockerCode,
+      nextAction: blockerCode === 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE' ? 'save_inline_participant_panel' : '',
       genderQuestionPresent: genderControls.length ? '1' : '0',
       genderControlPresent: genderControls.length ? '1' : '0',
       genderAlreadySelected: radioGroupAlreadySelected(genderControls) ? '1' : '0',
@@ -4937,9 +4965,18 @@ copy(String((() => {
           removeDriverTargetName: '',
           removeDriverReasonSelected: '0',
           removeDriverReasonCode: '',
+          driversAndVehiclesHeadingPresent: '0',
+          inlineParticipantSavePresent: '0',
+          inlineParticipantSaveEnabled: '0',
+          inlineParticipantSaveButtonId: '',
+          pageSaveContinuePresent: '0',
+          pageSaveContinueEnabled: '0',
+          pageSaveContinueButtonId: '',
           mainSavePresent: '0',
           mainSaveEnabled: '0',
           blockerCode: 'NOT_ASC_DRIVERS_VEHICLES',
+          blockers: 'NOT_ASC_DRIVERS_VEHICLES',
+          nextRecommendedAction: '',
           nextRecommendedReadOnlyStatus: 'detect_state',
           evidence: '',
           missing: 'asc-drivers-vehicles-route'
@@ -4948,12 +4985,20 @@ copy(String((() => {
       const active = readAdvisorActiveModalStatusFields(source);
       const driverStatus = ascDriverRowsStatus(source);
       const vehicleStatus = ascVehicleRowsStatus(source);
-      const saveButton = findAscSaveButton();
+      const saveButton = findAscPageSaveContinueButton();
+      const inlineSaveButton = findAscInlineParticipantSaveButton();
       const removeFields = readAscRemoveDriverFields();
       const inlinePresent = advisorInlineParticipantPanelPresent();
+      const unresolvedDriverCount = Number(driverStatus.unresolvedDriverCount || 0);
+      const unresolvedVehicleCount = Number(vehicleStatus.unresolvedVehicleCount || 0);
+      const blockers = [];
+      if (inlinePresent && inlineSaveButton && !isDisabledLike(inlineSaveButton)) blockers.push('INLINE_PANEL_READY_TO_SAVE');
+      if (unresolvedDriverCount > 0) blockers.push(`UNRESOLVED_FOUND_DRIVERS:${unresolvedDriverCount}`);
+      if (unresolvedVehicleCount > 0) blockers.push(`UNRESOLVED_FOUND_VEHICLES:${unresolvedVehicleCount}`);
       let activeModalType = active.activeModalType;
       let activePanelType = active.activePanelType;
       let blockerCode = '';
+      let nextRecommendedAction = '';
       let nextRecommendedReadOnlyStatus = '';
       if (removeFields.root) {
         activeModalType = 'ASC_REMOVE_DRIVER_MODAL';
@@ -4962,17 +5007,18 @@ copy(String((() => {
       } else if (inlinePresent) {
         activePanelType = 'ASC_INLINE_PARTICIPANT_PANEL';
         activeModalType = activeModalType === 'NONE' ? 'ASC_INLINE_PARTICIPANT_PANEL' : activeModalType;
-        blockerCode = 'ASC_INLINE_PARTICIPANT_PANEL_OPEN';
+        blockerCode = inlineSaveButton && !isDisabledLike(inlineSaveButton)
+          ? 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE'
+          : 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
+        nextRecommendedAction = inlineSaveButton && !isDisabledLike(inlineSaveButton) ? 'save_inline_participant_panel' : '';
         nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
       } else if (activeModalType === 'ASC_VEHICLE_MODAL') {
         blockerCode = 'ASC_VEHICLE_MODAL_OPEN';
         nextRecommendedReadOnlyStatus = 'modal_exists';
-      } else if (Number(driverStatus.unresolvedDriverCount || 0) > 0) {
-        blockerCode = 'ASC_UNRESOLVED_DRIVERS';
-        nextRecommendedReadOnlyStatus = 'asc_driver_rows_status';
-      } else if (Number(vehicleStatus.unresolvedVehicleCount || 0) > 0) {
-        blockerCode = 'ASC_UNRESOLVED_VEHICLES';
-        nextRecommendedReadOnlyStatus = 'asc_vehicle_rows_status';
+      } else if (unresolvedDriverCount > 0 || unresolvedVehicleCount > 0) {
+        blockerCode = 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED';
+        nextRecommendedAction = 'review_unresolved_drivers_vehicles';
+        nextRecommendedReadOnlyStatus = unresolvedDriverCount > 0 ? 'asc_driver_rows_status' : 'asc_vehicle_rows_status';
       } else if (saveButton && isDisabledLike(saveButton)) {
         blockerCode = 'ASC_MAIN_SAVE_DISABLED';
         nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
@@ -5008,9 +5054,18 @@ copy(String((() => {
         removeDriverTargetName: removeFields.targetName,
         removeDriverReasonSelected: removeFields.reasonSelected,
         removeDriverReasonCode: removeFields.reasonCode,
+        driversAndVehiclesHeadingPresent: snapshotBool(bodyText().includes('drivers and vehicles')),
+        inlineParticipantSavePresent: snapshotBool(inlineSaveButton),
+        inlineParticipantSaveEnabled: snapshotBool(inlineSaveButton && !isDisabledLike(inlineSaveButton)),
+        inlineParticipantSaveButtonId: safe(inlineSaveButton && inlineSaveButton.id),
+        pageSaveContinuePresent: snapshotBool(saveButton),
+        pageSaveContinueEnabled: snapshotBool(saveButton && !isDisabledLike(saveButton)),
+        pageSaveContinueButtonId: safe(saveButton && saveButton.id),
         mainSavePresent: snapshotBool(saveButton),
         mainSaveEnabled: snapshotBool(saveButton && !isDisabledLike(saveButton)),
         blockerCode,
+        blockers: blockers.join('|'),
+        nextRecommendedAction,
         nextRecommendedReadOnlyStatus,
         evidence: compact(evidence, 240),
         missing: compact([driverStatus.missing, vehicleStatus.missing, active.missing].filter(Boolean).join('|'), 240)
@@ -5039,9 +5094,18 @@ copy(String((() => {
         removeDriverTargetName: '',
         removeDriverReasonSelected: '0',
         removeDriverReasonCode: '',
+        driversAndVehiclesHeadingPresent: '0',
+        inlineParticipantSavePresent: '0',
+        inlineParticipantSaveEnabled: '0',
+        inlineParticipantSaveButtonId: '',
+        pageSaveContinuePresent: '0',
+        pageSaveContinueEnabled: '0',
+        pageSaveContinueButtonId: '',
         mainSavePresent: '0',
         mainSaveEnabled: '0',
         blockerCode: 'SNAPSHOT_ERROR',
+        blockers: 'SNAPSHOT_ERROR',
+        nextRecommendedAction: '',
         nextRecommendedReadOnlyStatus: 'scan_current_page',
         evidence: '',
         missing: compact(err && err.message, 200)
@@ -5160,6 +5224,29 @@ copy(String((() => {
       missingRequired
     };
   };
+  const readAdvisorAscDriversVehiclesSnapshotState = (source = {}) => {
+    const status = readAscDriversVehiclesSnapshotFields(source);
+    const blockers = safe(status.blockers).split('|').map((item) => item.trim()).filter(Boolean);
+    return {
+      present: status.result === 'OK',
+      routeId: status.ascProductRouteId || '',
+      driversAndVehiclesHeadingPresent: status.driversAndVehiclesHeadingPresent === '1',
+      inlineParticipantPanelPresent: status.inlineParticipantPanelPresent === '1',
+      inlineParticipantSavePresent: status.inlineParticipantSavePresent === '1',
+      inlineParticipantSaveEnabled: status.inlineParticipantSaveEnabled === '1',
+      pageSaveContinuePresent: status.pageSaveContinuePresent === '1' || status.mainSavePresent === '1',
+      pageSaveContinueEnabled: status.pageSaveContinueEnabled === '1' || status.mainSaveEnabled === '1',
+      unresolvedDriverCount: Number(status.unresolvedDriverCount || 0),
+      unresolvedVehicleCount: Number(status.unresolvedVehicleCount || 0),
+      addedDriverCount: Number(status.addedDriverCount || 0),
+      removedDriverCount: Number(status.removedDriverCount || 0),
+      addedVehicleCount: Number(status.addedVehicleCount || 0),
+      removedVehicleCount: Number(status.removedVehicleCount || 0),
+      blockerCode: status.blockerCode || '',
+      blockers,
+      nextRecommendedAction: status.nextRecommendedAction || ''
+    };
+  };
   const advisorStateBlockers = (source = {}) => {
     const blockers = [];
     const alerts = collectVisibleAlerts().map((item) => compact(item, 180)).filter(Boolean);
@@ -5196,13 +5283,14 @@ copy(String((() => {
       visibleEvidence: compact(visibleEvidence, 240)
     };
   };
-  const advisorStateAscPageKind = () => {
+  const advisorStateAscPageKind = (source = {}) => {
     const url = lower(pageUrl());
     const text = bodyText();
     const headings = advisorStateVisibleHeadingTexts().join(' | ');
     if (url.includes('/purchase') || url.includes('/payment') || url.includes('/checkout')) return 'PURCHASE';
     if (url.includes('/apps/ascproduct/') && /\b(purchase|payment|bind policy|checkout)\b/i.test(headings)) return 'PURCHASE';
-    if (url.includes('/coverage') || /\bcoverages?\b/i.test(text)) return 'COVERAGES';
+    const coverageUrl = url.includes('/apps/foundations/101/coverages') || url.includes('/coverages') || url.includes('/coverage');
+    if ((coverageUrl && /\bcoverages?\b/i.test(text)) || isQuoteLandingPage(source)) return 'COVERAGES';
     return '';
   };
   const advisorSelectProductDefaultActionAvailable = (selectProduct) => {
@@ -5214,7 +5302,7 @@ copy(String((() => {
     ]);
     return (selectProduct.missingRequired || []).every((item) => safeDefaultMissing.has(item));
   };
-  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers, selectProduct) => {
+  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles) => {
     if (blockers.length) return [];
     switch (route) {
       case 'CUSTOMER_SUMMARY_PREFILL_GATE':
@@ -5229,6 +5317,12 @@ copy(String((() => {
         return rapport.present ? advisorStateUnique(['inspect_rapport', rapport.vehicleCount > 0 ? 'confirm_vehicles' : '', advisorStateHasActionText(/create quotes|save\s*&\s*continue|continue/i) ? 'continue_from_rapport' : '']) : [];
       case 'CONSUMER_REPORTS':
         return ['review_consumer_reports'];
+      case 'ASC_DRIVERS_VEHICLES':
+        if (ascDriversVehicles && ascDriversVehicles.nextRecommendedAction === 'save_inline_participant_panel')
+          return ['save_inline_participant_panel'];
+        if (ascDriversVehicles && (ascDriversVehicles.unresolvedDriverCount > 0 || ascDriversVehicles.unresolvedVehicleCount > 0))
+          return ['human_review_required'];
+        return [];
       case 'COVERAGES':
         return ['review_coverages'];
       case 'PURCHASE':
@@ -5249,6 +5343,7 @@ copy(String((() => {
     const prefillGate = readAdvisorPrefillGateSnapshotState(source);
     const rapport = readAdvisorRapportSnapshotState(source);
     const selectProduct = readAdvisorSelectProductSnapshotState(source);
+    const ascDriversVehicles = readAdvisorAscDriversVehiclesSnapshotState(source);
     const iframe = readAdvisorIframeSnapshotState();
     const blockers = advisorStateBlockers(source);
     const anchors = [];
@@ -5302,6 +5397,13 @@ copy(String((() => {
       confidence = 0.86;
       unsafeReason = null;
       anchors.push('url:/apps/ASCPRODUCT/', 'text:order consumer reports');
+    } else if (isDriversAndVehiclesPage(source)) {
+      route = 'ASC_DRIVERS_VEHICLES';
+      confidence = ascDriversVehicles.driversAndVehiclesHeadingPresent ? 0.91 : 0.82;
+      unsafeReason = ascDriversVehicles.blockers.length
+        ? `ASC Drivers/Vehicles blockers: ${ascDriversVehicles.blockers.join('|')}`
+        : null;
+      anchors.push('url:/apps/ASCPRODUCT/', 'text:Drivers and vehicles', ascDriversVehicles.inlineParticipantPanelPresent ? 'panel:inline-participant' : '', ascDriversVehicles.blockerCode ? `blocker:${ascDriversVehicles.blockerCode}` : '');
     } else if (ascKind) {
       route = ascKind;
       confidence = 0.82;
@@ -5321,10 +5423,11 @@ copy(String((() => {
 
     if (blockers.length) {
       confidence = Math.min(confidence, 0.78);
-      unsafeReason = `Blocking UI or alert evidence is present: ${blockers.join(' | ')}`;
+      const blockerReason = `Blocking UI or alert evidence is present: ${blockers.join(' | ')}`;
+      unsafeReason = unsafeReason ? `${unsafeReason} ${blockerReason}` : blockerReason;
     }
 
-    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers, selectProduct);
+    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles);
     if (route === 'SELECT_PRODUCT' && allowedNextActions.includes('answer_select_product'))
       unsafeReason = null;
     if (!allowedNextActions.length && route !== 'UNKNOWN_UNSAFE' && !unsafeReason)
@@ -5341,6 +5444,7 @@ copy(String((() => {
       blockers,
       product,
       selectProduct,
+      ascDriversVehicles,
       prefillGate,
       rapport,
       iframe,
