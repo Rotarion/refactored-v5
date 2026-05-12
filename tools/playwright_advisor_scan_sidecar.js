@@ -122,6 +122,7 @@ function parseArgv(argv, options = {}) {
     label: 'PLAYWRIGHT_SIDECAR_SCAN',
     reason: 'scan-only-foundation',
     timeoutMs: 5000,
+    cdpEvalTimeoutMs: 30000,
     pageIndex: null,
     noWrite: false,
     stdout: false,
@@ -207,6 +208,12 @@ function parseArgv(argv, options = {}) {
       i = option.nextIndex;
       continue;
     }
+    if (token.startsWith('--cdp-eval-timeout-ms')) {
+      const option = readOption(argv, i);
+      config.cdpEvalTimeoutMs = Number(option.value);
+      i = option.nextIndex;
+      continue;
+    }
     if (token.startsWith('--page-index')) {
       const option = readOption(argv, i);
       config.pageIndex = Number(option.value);
@@ -218,6 +225,9 @@ function parseArgv(argv, options = {}) {
 
   if (!Number.isFinite(config.timeoutMs) || config.timeoutMs < 250) {
     throw new Error('--timeout-ms must be a number >= 250');
+  }
+  if (!Number.isFinite(config.cdpEvalTimeoutMs) || config.cdpEvalTimeoutMs < 250) {
+    throw new Error('--cdp-eval-timeout-ms must be a number >= 250');
   }
   if (config.pageIndex != null && (!Number.isInteger(config.pageIndex) || config.pageIndex < 0)) {
     throw new Error('--page-index must be a non-negative integer');
@@ -321,6 +331,28 @@ function buildDirectCdpEvaluationRequests(runtimeText, ops, config = {}) {
     assertCdpMethodAllowed(request.method);
     return request;
   });
+}
+
+function buildDirectCdpPreflightRequest() {
+  const expression = [
+    'JSON.stringify({',
+    '  href: String(location.href || \'\'),',
+    '  title: String(document.title || \'\'),',
+    '  readyState: String(document.readyState || \'\')',
+    '})'
+  ].join('\n');
+  const request = {
+    op: '__preflight__',
+    method: 'Runtime.evaluate',
+    params: {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
+      userGesture: false
+    }
+  };
+  assertCdpMethodAllowed(request.method);
+  return request;
 }
 
 function parseKeyValueLines(raw) {
@@ -481,7 +513,7 @@ async function runScanWithPlaywright(config, playwright) {
       const args = buildArgsForOp(op, config);
       const payload = renderOperatorPayload(runtimeText, op, args);
       const opStarted = Date.now();
-      const raw = await evaluateReadOnlyPayload(page, payload, config.timeoutMs, op);
+      const raw = await evaluateReadOnlyPayload(page, payload, config.cdpEvalTimeoutMs, op);
       const parsed = parseOpOutput(op, raw);
       results.push({
         op,
@@ -658,18 +690,20 @@ class DirectCdpClient {
     pending.resolve(message.result || {});
   }
 
-  send(method, params = {}) {
+  send(method, params = {}, options = {}) {
     assertCdpMethodAllowed(method);
     if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) {
       return Promise.reject(new Error('CDP WebSocket is not open.'));
     }
     const id = this.nextId++;
     const payload = JSON.stringify({ id, method, params });
+    const timeoutMs = options.timeoutMs || this.timeoutMs;
+    const timeoutLabel = options.timeoutLabel || `CDP ${method}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+        reject(new Error(`${timeoutLabel} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, method });
       this.socket.send(payload);
     });
@@ -704,6 +738,31 @@ function readRuntimeEvaluateResult(response) {
   return '';
 }
 
+function parsePreflightValue(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || ''));
+    return {
+      href: String(parsed.href || ''),
+      title: String(parsed.title || ''),
+      readyState: String(parsed.readyState || '')
+    };
+  } catch {
+    return {
+      href: '',
+      title: '',
+      readyState: '',
+      raw: String(raw || '')
+    };
+  }
+}
+
+function buildDirectCdpTimeoutError(op, targetUrl, targetTitle, timeoutMs) {
+  return new Error(
+    `CDP Runtime.evaluate timed out for op=${op}; selectedTargetUrl=${targetUrl}; selectedTargetTitle=${targetTitle}; timeoutMs=${timeoutMs}. `
+      + 'Preflight succeeded, so retry with a higher --cdp-eval-timeout-ms value.'
+  );
+}
+
 async function runScanWithDirectCdp(config, options = {}) {
   assertReadOnlyOps(config.ops);
   const targets = await fetchCdpTargets(config.cdpUrl, config.timeoutMs, options);
@@ -723,21 +782,51 @@ async function runScanWithDirectCdp(config, options = {}) {
 
   try {
     const startedAt = new Date().toISOString();
+    const preflightRequest = buildDirectCdpPreflightRequest();
+    let preflight = {};
+    try {
+      const preflightResponse = await client.send(preflightRequest.method, preflightRequest.params, {
+        timeoutMs: config.cdpEvalTimeoutMs,
+        timeoutLabel: 'CDP Runtime.evaluate preflight'
+      });
+      preflight = parsePreflightValue(readRuntimeEvaluateResult(preflightResponse));
+    } catch (error) {
+      throw new Error(
+        `Direct CDP preflight failed for selectedTargetUrl=${targetUrl}; selectedTargetTitle=${target.title || ''}; `
+          + `timeoutMs=${config.cdpEvalTimeoutMs}; reason=${String(error && error.message || error)}`
+      );
+    }
+
     const results = [];
     for (const request of requests) {
       const opStarted = Date.now();
-      const response = await client.send(request.method, request.params);
-      const raw = readRuntimeEvaluateResult(response);
-      const parsed = parseOpOutput(request.op, raw);
-      results.push({
-        op: request.op,
-        readOnly: true,
-        ok: String(raw || '').trim() !== '',
-        elapsedMs: Date.now() - opStarted,
-        summary: summarizeOpResult(request.op, parsed),
-        parsed,
-        raw
-      });
+      let response;
+      try {
+        response = await client.send(request.method, request.params, {
+          timeoutMs: config.cdpEvalTimeoutMs,
+          timeoutLabel: `CDP Runtime.evaluate op=${request.op}`
+        });
+        const raw = readRuntimeEvaluateResult(response);
+        const parsed = parseOpOutput(request.op, raw);
+        results.push({
+          op: request.op,
+          readOnly: true,
+          ok: String(raw || '').trim() !== '',
+          elapsedMs: Date.now() - opStarted,
+          summary: summarizeOpResult(request.op, parsed),
+          parsed,
+          raw
+        });
+      } catch (error) {
+        const message = String(error && error.message || error);
+        if (message.includes('timed out')) {
+          throw buildDirectCdpTimeoutError(request.op, targetUrl, target.title || '', config.cdpEvalTimeoutMs);
+        }
+        throw new Error(
+          `Direct CDP Runtime.evaluate failed for op=${request.op}; selectedTargetUrl=${targetUrl}; `
+            + `selectedTargetTitle=${target.title || ''}; reason=${message}`
+        );
+      }
     }
 
     return {
@@ -754,6 +843,7 @@ async function runScanWithDirectCdp(config, options = {}) {
         url: targetUrl,
         title: target.title || ''
       },
+      preflight,
       ops: config.ops,
       outputPath: config.noWrite ? '' : config.outputPath,
       results
@@ -791,6 +881,7 @@ function formatHelp() {
     '  target URL token: advisorpro.allstate.com',
     '  output: logs/playwright_advisor_scan_latest.json',
     '  ops: advisor_state_snapshot, advisor_active_modal_status, gather_rapport_snapshot, asc_drivers_vehicles_snapshot, scan_current_page',
+    '  direct CDP evaluation timeout: 30000ms (override with --cdp-eval-timeout-ms)',
     '',
     'Safety:',
     '  The CLI refuses any op not in its read-only allowlist.',
@@ -845,6 +936,7 @@ module.exports = {
   assertReadOnlyOps,
   buildDirectCdpEvaluateExpression,
   buildDirectCdpEvaluationRequests,
+  buildDirectCdpPreflightRequest,
   buildArgsForOp,
   cdpHttpUrl,
   fetchCdpTargets,

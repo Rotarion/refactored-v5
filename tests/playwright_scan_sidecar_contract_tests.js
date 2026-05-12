@@ -74,6 +74,19 @@ function testActualRuntimeRendersReadOnlyOps() {
 }
 
 function testDirectCdpRequestsAreReadOnlyRuntimeEvaluateOnly() {
+  const preflight = sidecar.buildDirectCdpPreflightRequest();
+  assert.strictEqual(preflight.method, 'Runtime.evaluate');
+  assert.strictEqual(preflight.params.awaitPromise, true);
+  assert.strictEqual(preflight.params.returnByValue, true);
+  assert.strictEqual(preflight.params.userGesture, false);
+  assert.ok(preflight.params.expression.includes('location.href'));
+  assert.ok(preflight.params.expression.includes('document.title'));
+  assert.ok(preflight.params.expression.includes('document.readyState'));
+  assert.ok(!preflight.params.expression.includes('Page.navigate'));
+  assert.ok(!preflight.params.expression.includes('Input.dispatchKeyEvent'));
+  assert.ok(!preflight.params.expression.includes('Runtime.callFunctionOn'));
+  assert.ok(!preflight.params.expression.includes('captureScreenshot'));
+
   const requests = sidecar.buildDirectCdpEvaluationRequests(RUNTIME_STUB, [
     'advisor_state_snapshot',
     'scan_current_page'
@@ -126,6 +139,18 @@ async function testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly() {
     send(method, params) {
       sentMethods.push({ method, params });
       assert.strictEqual(method, 'Runtime.evaluate');
+      if (String(params.expression || '').includes('document.readyState')) {
+        return Promise.resolve({
+          result: {
+            type: 'string',
+            value: JSON.stringify({
+              href: 'https://advisorpro.allstate.com/#/apps/intel/102/rapport',
+              title: 'Advisor Pro',
+              readyState: 'complete'
+            })
+          }
+        });
+      }
       return Promise.resolve({
         result: {
           type: 'string',
@@ -171,8 +196,63 @@ async function testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly() {
   });
   assert.strictEqual(envelope.connection.kind, 'direct-cdp');
   assert.strictEqual(envelope.target.url, 'https://advisorpro.allstate.com/#/apps/intel/102/rapport');
-  assert.deepStrictEqual(sentMethods.map((entry) => entry.method), ['Runtime.evaluate']);
+  assert.deepStrictEqual(sentMethods.map((entry) => entry.method), ['Runtime.evaluate', 'Runtime.evaluate']);
+  assert.strictEqual(envelope.preflight.readyState, 'complete');
   assert.strictEqual(envelope.results.length, 1);
+}
+
+async function testDirectCdpTimeoutErrorMentionsOpTargetAndRecommendation() {
+  let callCount = 0;
+  const fakeClient = {
+    send(method) {
+      assert.strictEqual(method, 'Runtime.evaluate');
+      callCount += 1;
+      if (callCount === 1) {
+        return Promise.resolve({
+          result: {
+            type: 'string',
+            value: JSON.stringify({
+              href: 'https://advisorpro.allstate.com/#/apps/foundations/101/homepage',
+              title: 'Allstate Advisor Pro',
+              readyState: 'complete'
+            })
+          }
+        });
+      }
+      return Promise.reject(new Error('CDP Runtime.evaluate op=advisor_state_snapshot timed out after 1234ms'));
+    }
+  };
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => [{
+      type: 'page',
+      url: 'https://advisorpro.allstate.com/#/apps/foundations/101/homepage',
+      title: 'Allstate Advisor Pro',
+      webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/1'
+    }]
+  });
+  const config = sidecar.parseArgv([
+    '--op=advisor_state_snapshot',
+    '--no-write',
+    '--cdp-eval-timeout-ms=1234'
+  ], { env: {}, cwd: path.resolve(__dirname, '..') });
+  await assert.rejects(
+    () => sidecar.runScanWithDirectCdp(config, {
+      client: fakeClient,
+      fetchImpl,
+      runtimeText: RUNTIME_STUB
+    }),
+    (error) => {
+      const message = String(error && error.message || error);
+      assert.ok(message.includes('op=advisor_state_snapshot'));
+      assert.ok(message.includes('selectedTargetUrl=https://advisorpro.allstate.com/#/apps/foundations/101/homepage'));
+      assert.ok(message.includes('timeoutMs=1234'));
+      assert.ok(message.includes('retry with a higher --cdp-eval-timeout-ms'));
+      return true;
+    }
+  );
 }
 
 function testArgParsingAndOutputGuard() {
@@ -187,6 +267,13 @@ function testArgParsingAndOutputGuard() {
   assert.deepStrictEqual(config.targetUrlContains, ['advisorpro.allstate.com', 'example.internal']);
   assert.deepStrictEqual(config.ops, ['advisor_state_snapshot', 'scan_current_page']);
   assert.strictEqual(config.timeoutMs, 1500);
+  assert.strictEqual(config.cdpEvalTimeoutMs, 30000);
+
+  const evalTimeoutConfig = sidecar.parseArgv([
+    '--op=advisor_state_snapshot',
+    '--cdp-eval-timeout-ms=45000'
+  ], { env: {} });
+  assert.strictEqual(evalTimeoutConfig.cdpEvalTimeoutMs, 45000);
 
   const aliasConfig = sidecar.parseArgv([
     '--target-url-token=advisor.example',
@@ -246,6 +333,7 @@ async function run() {
   testDirectCdpRequestsAreReadOnlyRuntimeEvaluateOnly();
   testDirectCdpMethodGuard();
   await testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly();
+  await testDirectCdpTimeoutErrorMentionsOpTargetAndRecommendation();
   testArgParsingAndOutputGuard();
   testOutputParsingAndSummaries();
   process.stdout.write('playwright_scan_sidecar_contract_tests: PASS\n');

@@ -47,6 +47,9 @@ CDP attach utility:
 - No npm, npx, corepack, package-lock, or node_modules requirement for the direct CDP fallback.
 - Target discovery reads `http://127.0.0.1:9222/json` first, then `/json/list`.
 - Browser evaluation uses only CDP `Runtime.evaluate`.
+- Direct CDP runs a tiny read-only preflight before the full operator payload:
+  `JSON.stringify({ href: location.href, title: document.title, readyState: document.readyState })`.
+- Full operator evaluation defaults to `--cdp-eval-timeout-ms 30000`.
 - Forbidden CDP action/navigation methods such as `Page.navigate`, `Input.*`, `Runtime.callFunctionOn`, screenshots, and screencasts are rejected by the method guard.
 
 TypeScript dedicated-profile utility:
@@ -65,6 +68,13 @@ $NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencie
 ```
 
 This works without Playwright installed when the bundled Node runtime provides built-in `fetch` and `WebSocket`.
+
+If the tiny preflight succeeds but the full read-only operator payload times out, retry with a higher evaluation timeout:
+
+```powershell
+$NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
+& $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222 --op advisor_state_snapshot --cdp-eval-timeout-ms 60000
+```
 
 The default target URL token is `advisorpro.allstate.com`. The default output is:
 
