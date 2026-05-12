@@ -52,6 +52,8 @@ GetAdvisorQuoteWorkflowDb() {
         "ascDriverRemoveReasonText", "This driver has their own car insurance",
         "incidentReasonText", "Accident caused by being hit by animal or road debris",
         "vehicleFinanceYearThreshold", 2015,
+        "advisorRapportGateVehicleEnabled", true,
+        "advisorRapportAllowProvisionalSameFamilyGate", true,
         "rapportVehicleMode", "match-existing-then-add-complete",
         "rapportAllowModelPlaceholderFallback", true,
         "rapportModelFallbackMode", "first-valid-same-make",

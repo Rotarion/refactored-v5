@@ -84,6 +84,29 @@ AdvisorQuoteRapportVehicleModeAllowsAddComplete(mode) {
     return Trim(String(mode)) = "match-existing-then-add-complete"
 }
 
+AdvisorQuoteBoolDefaultTrue(value) {
+    text := StrLower(Trim(String(value ?? "")))
+    return !(text = "false" || text = "0" || text = "no")
+}
+
+AdvisorQuoteRapportGateVehicleEnabled(db := "") {
+    global advisorRapportGateVehicleEnabled
+    if IsSet(advisorRapportGateVehicleEnabled)
+        return advisorRapportGateVehicleEnabled = true
+    if (IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]) && db["defaults"].Has("advisorRapportGateVehicleEnabled"))
+        return AdvisorQuoteBoolDefaultTrue(db["defaults"]["advisorRapportGateVehicleEnabled"])
+    return true
+}
+
+AdvisorQuoteRapportAllowProvisionalSameFamilyGate(db := "") {
+    global advisorRapportAllowProvisionalSameFamilyGate
+    if IsSet(advisorRapportAllowProvisionalSameFamilyGate)
+        return advisorRapportAllowProvisionalSameFamilyGate = true
+    if (IsObject(db) && db.Has("defaults") && IsObject(db["defaults"]) && db["defaults"].Has("advisorRapportAllowProvisionalSameFamilyGate"))
+        return AdvisorQuoteBoolDefaultTrue(db["defaults"]["advisorRapportAllowProvisionalSameFamilyGate"])
+    return true
+}
+
 AdvisorQuoteCompleteDbResolvedVehicleAddEligible(vehicle, resolvedVehicle, rapportVehicleMode := "match-existing-then-add-complete") {
     return AdvisorQuoteRapportVehicleModeAllowsAddComplete(rapportVehicleMode)
         && AdvisorQuoteVehicleHasActionableFields(vehicle)
@@ -215,7 +238,7 @@ AdvisorQuoteRapportVehicleLedgerMaxIterations(rateableVehicleCount) {
 
 AdvisorQuoteRapportVehicleTerminalStatus(status) {
     switch Trim(String(status)) {
-        case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER", "SCRAP_YEAR_MISSING", "SCRAP_MAKE_MISSING", "SCRAP_MAKE_UNAVAILABLE", "SCRAP_MODEL_UNAVAILABLE", "DEFERRED_AMBIGUOUS", "FAILED_UNSAFE":
+        case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER", "GATE_SATISFIED_CONFIRMED", "GATE_SATISFIED_ADDED", "GATE_SATISFIED_PROVISIONAL", "SKIPPED_AFTER_GATE_SATISFIED", "UNSUPPORTED_AFTER_BUCKET_PROBING", "RAPPORT_GATE_MODEL_AMBIGUOUS", "RAPPORT_GATE_VEHICLE_FAILED", "VEHICLE_BUCKET_PROBE_FAILED", "SCRAP_YEAR_MISSING", "SCRAP_MAKE_MISSING", "SCRAP_MAKE_UNAVAILABLE", "SCRAP_MODEL_UNAVAILABLE", "DEFERRED_AMBIGUOUS", "FAILED_UNSAFE":
             return true
         default:
             return false
@@ -321,6 +344,18 @@ AdvisorQuoteRapportVehicleLedgerSetStatus(ledger, vehicle, status, detail := "")
             eventType := "RAPPORT_VEHICLE_SCRAPPED_MAKE_MISSING"
         case "SCRAP_MAKE_UNAVAILABLE":
             eventType := "RAPPORT_VEHICLE_SCRAPPED_MAKE_UNAVAILABLE"
+        case "GATE_SATISFIED_CONFIRMED", "GATE_SATISFIED_ADDED", "GATE_SATISFIED_PROVISIONAL":
+            eventType := "RAPPORT_GATE_SATISFIED"
+        case "SKIPPED_AFTER_GATE_SATISFIED":
+            eventType := "RAPPORT_VEHICLE_SKIPPED_AFTER_GATE_SATISFIED"
+        case "UNSUPPORTED_AFTER_BUCKET_PROBING":
+            eventType := "RAPPORT_VEHICLE_UNSUPPORTED_AFTER_BUCKET_PROBING"
+        case "RAPPORT_GATE_MODEL_AMBIGUOUS":
+            eventType := "RAPPORT_GATE_MODEL_AMBIGUOUS"
+        case "RAPPORT_GATE_VEHICLE_FAILED":
+            eventType := "RAPPORT_GATE_VEHICLE_FAILED"
+        case "VEHICLE_BUCKET_PROBE_FAILED":
+            eventType := "VEHICLE_BUCKET_PROBE_FAILED"
     }
     AdvisorQuoteAppendLog(eventType, AdvisorQuoteGetLastStep(), AdvisorQuoteRapportVehicleLedgerItemDetail(item))
     if (eventType != "RAPPORT_VEHICLE_LEDGER_STATUS")
@@ -371,15 +406,20 @@ AdvisorQuoteRapportVehicleLedgerSatisfiedCount(ledger) {
         return count
     for _, item in ledger["items"] {
         switch item["status"] {
-            case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER":
+            case "CONFIRMED_EXACT", "CONFIRMED_POTENTIAL_MATCH", "ADDED_DB_RESOLVED", "ADDED_MODEL_PLACEHOLDER", "ADDED_SUBMODEL_PLACEHOLDER", "GATE_SATISFIED_CONFIRMED", "GATE_SATISFIED_ADDED", "GATE_SATISFIED_PROVISIONAL":
                 count += 1
         }
     }
     return count
 }
 
-AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled) {
+AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled, gateSatisfied := false) {
     confirmedOrAdded := Integer(confirmedOrAddedVehicleCount)
+    if gateSatisfied {
+        return (confirmedOrAdded > 0 || Trim(String(createQuotesEnabled)) = "1")
+            && Trim(String(staleAddRowPresent)) != "1"
+            && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1" || confirmedOrAdded > 0)
+    }
     return AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger)
         && (confirmedOrAdded > 0 || Trim(String(createQuotesEnabled)) = "1")
         && (Trim(String(staleAddRowPresent)) != "1" || confirmedOrAdded > 0)
@@ -402,6 +442,39 @@ AdvisorQuoteRapportVehicleLedgerSummary(ledger) {
     for _, item in ledger["items"]
         parts.Push(item["key"] ":" item["status"])
     return JoinArray(parts, " || ")
+}
+
+AdvisorQuoteRapportVehicleLedgerMarkSkippedAfterGate(ledger, satisfiedVehicles, &skippedVehicles := "") {
+    skippedVehicles := []
+    if !(IsObject(ledger) && ledger.Has("items"))
+        return
+    satisfiedKeys := Map()
+    if IsObject(satisfiedVehicles) {
+        for _, vehicle in satisfiedVehicles {
+            key := AdvisorQuoteVehicleLabel(vehicle)
+            if (key != "")
+                satisfiedKeys[key] := true
+        }
+    }
+    for _, item in ledger["items"] {
+        key := item.Has("key") ? item["key"] : AdvisorQuoteVehicleLabel(item["vehicle"])
+        if (key = "" || satisfiedKeys.Has(key))
+            continue
+        vehicle := item.Has("vehicle") ? item["vehicle"] : ""
+        if IsObject(vehicle)
+            skippedVehicles.Push(vehicle)
+        status := item.Has("status") ? Trim(String(item["status"])) : ""
+        if (status = "" || !AdvisorQuoteRapportVehicleTerminalStatus(status))
+            AdvisorQuoteRapportVehicleLedgerSetStatus(ledger, vehicle, "SKIPPED_AFTER_GATE_SATISFIED", "rapport-gate-satisfied")
+        else {
+            AdvisorQuoteAppendLog(
+                "RAPPORT_VEHICLE_SKIPPED_AFTER_GATE_SATISFIED",
+                AdvisorQuoteGetLastStep(),
+                AdvisorQuoteRapportVehicleLedgerItemDetail(item)
+                    . ", retainedTerminalStatus=1"
+            )
+        }
+    }
 }
 
 AdvisorQuoteLogGatherVehiclePolicy(policy) {
@@ -579,6 +652,39 @@ AdvisorQuoteGetGatherStaleAddVehicleRowStatus(allExpectedVehiclesSatisfied := fa
 AdvisorQuoteCancelStaleAddVehicleRow(allExpectedVehiclesSatisfied := false) {
     args := Map("allExpectedVehiclesSatisfied", allExpectedVehiclesSatisfied ? "1" : "0")
     return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("cancel_stale_add_vehicle_row", args))
+}
+
+AdvisorQuoteResetOpenGatherAddVehicleRow(context, &failureReason := "", &failureScanPath := "") {
+    failureReason := ""
+    failureScanPath := ""
+    status := AdvisorQuoteGetGatherStaleAddVehicleRowStatus(true)
+    AdvisorQuoteAppendLog(
+        "VEHICLE_ADD_ROW_RESET_STATUS",
+        AdvisorQuoteGetLastStep(),
+        "context=" context ", " AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status)
+    )
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "" || result = "NONE")
+        return true
+    if (AdvisorQuoteStatusValue(status, "safeToCancel") != "1") {
+        failureReason := "VEHICLE_ADD_ROW_RESET_FAILED: context=" context ", reason=" AdvisorQuoteStatusValue(status, "reason") ", " AdvisorQuoteBuildGatherStaleVehicleRowStatusDetail(status)
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-add-row-reset-unsafe")
+        return false
+    }
+
+    cancelStatus := AdvisorQuoteCancelStaleAddVehicleRow(true)
+    AdvisorQuoteAppendLog(
+        "VEHICLE_ADD_ROW_RESET",
+        AdvisorQuoteGetLastStep(),
+        "context=" context ", " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+    )
+    cancelResult := AdvisorQuoteStatusValue(cancelStatus, "result")
+    if (cancelResult = "CANCELLED" || cancelResult = "NO_STALE_ROW")
+        return true
+
+    failureReason := "VEHICLE_ADD_ROW_RESET_FAILED: context=" context ", " AdvisorQuoteBuildGatherStaleVehicleCancelDetail(cancelStatus)
+    failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-add-row-reset-failed")
+    return false
 }
 
 AdvisorQuoteSelectGatherAddRowFirstValidSubModel(allExpectedVehiclesSatisfied := false) {
@@ -867,6 +973,66 @@ AdvisorQuotePreferredDbMakeLabel(resolvedVehicle, fallback := "") {
     return AdvisorQuoteResolvedListFirst(resolvedVehicle, "advisorMakeLabels", fallback)
 }
 
+AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label) {
+    text := Trim(String(label ?? ""))
+    key := AdvisorVehicleNormalizeText(text)
+    if (text = "" || key = "" || seen.Has(key))
+        return false
+    seen[key] := true
+    labels.Push(text)
+    return true
+}
+
+AdvisorQuoteRelatedAdvisorMakeBuckets(make) {
+    family := AdvisorVehicleNormalizeMakeFamily(make)
+    buckets := []
+    switch family {
+        case "FORD":
+            buckets.Push("FORD"), buckets.Push("FORD TRUCKS"), buckets.Push("FORD VANS")
+        case "CHEVROLET":
+            buckets.Push("CHEVROLET"), buckets.Push("CHEVY TRUCKS"), buckets.Push("CHEVY VANS")
+        case "DODGE":
+            buckets.Push("DODGE"), buckets.Push("DODGE TRUCKS"), buckets.Push("DODGE VANS")
+        case "TOYOTA":
+            buckets.Push("TOYOTA"), buckets.Push("TOY. TRUCKS")
+        case "GMC":
+            buckets.Push("GMC"), buckets.Push("GMC TRUCKS"), buckets.Push("GMC VANS")
+        case "RAM":
+            buckets.Push("RAM"), buckets.Push("RAM TRUCKS"), buckets.Push("RAM VANS")
+        default:
+            if (family != "")
+                buckets.Push(family)
+    }
+    return buckets
+}
+
+AdvisorQuoteDbMakeBucketProbeLabels(vehicle, resolvedVehicle) {
+    labels := []
+    seen := Map()
+    fallbackMake := IsObject(vehicle) && vehicle.Has("make") ? vehicle["make"] : ""
+
+    AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, AdvisorQuotePreferredDbMakeLabel(resolvedVehicle, fallbackMake))
+    if (IsObject(resolvedVehicle) && resolvedVehicle.Has("advisorMakeLabels") && IsObject(resolvedVehicle["advisorMakeLabels"])) {
+        for _, label in resolvedVehicle["advisorMakeLabels"]
+            AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label)
+    }
+
+    year := IsObject(vehicle) && vehicle.Has("year") ? vehicle["year"] : ""
+    model := IsObject(vehicle) && vehicle.Has("model") ? vehicle["model"] : ""
+    for _, label in AdvisorVehicleDbCandidateMakeLabels(year, fallbackMake, model)
+        AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label)
+    for _, label in StrSplit(AdvisorVehicleAllowedMakeLabelsText(fallbackMake, model, year), "|")
+        AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label)
+
+    for _, label in AdvisorQuoteRelatedAdvisorMakeBuckets(fallbackMake)
+        AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label)
+    if (IsObject(resolvedVehicle) && resolvedVehicle.Has("canonicalMake")) {
+        for _, label in AdvisorQuoteRelatedAdvisorMakeBuckets(resolvedVehicle["canonicalMake"])
+            AdvisorQuoteAppendUniqueAdvisorMakeLabel(labels, seen, label)
+    }
+    return labels
+}
+
 AdvisorQuoteVehicleOptionSummaryList(optionSummary) {
     options := []
     for _, optionText in StrSplit(String(optionSummary ?? ""), "|") {
@@ -929,10 +1095,11 @@ AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureR
         return "DEFERRED"
     }
 
+    vehicleLabel := AdvisorQuoteVehicleLabel(vehicle)
     AdvisorQuoteAppendLog(
         "VEHICLE_DB_ADD_ATTEMPT",
         AdvisorQuoteGetLastStep(),
-        "vehicle=" vehicle["displayKey"] ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
+        "vehicle=" vehicleLabel ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
     )
     preAddStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle)
     AdvisorQuoteLogGatherVehicleAddStatus(preAddStatus, "VEHICLE_DB_ADD_PREFLIGHT_STATUS", vehicle)
@@ -940,140 +1107,306 @@ AdvisorQuoteAddCompleteDbResolvedVehicle(vehicle, resolvedVehicle, db, &failureR
         AdvisorQuoteAppendLog(
             "VEHICLE_DB_ADD_COMMITTED",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", method=already-confirmed-before-add, matchedText=" AdvisorQuoteStatusValue(preAddStatus, "matchedText")
+            "vehicle=" vehicleLabel ", method=already-confirmed-before-add, matchedText=" AdvisorQuoteStatusValue(preAddStatus, "matchedText")
         )
         return "ADDED"
-    }
-
-    AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_STATUS_BEFORE_DB_ADD_PREPARE", vehicle)
-    idx := AdvisorQuotePrepareVehicleRow(vehicle["year"])
-    if (idx < 0) {
-        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_PREPARE_FAILED", vehicle)
-        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=prepare-row-failed")
-        return "DEFERRED"
-    }
-
-    yearCascadeStatus := AdvisorQuoteSetVehicleYearAndWaitManufacturer(idx, vehicle["year"], db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"])
-    AdvisorQuoteLogVehicleYearCascadeStatus(yearCascadeStatus, "VEHICLE_YEAR_CASCADE", vehicle)
-    if (AdvisorQuoteStatusValue(yearCascadeStatus, "yearVerified") != "1") {
-        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=year-not-verified")
-        return "DEFERRED"
-    }
-    AdvisorQuoteAppendLog(
-        "VEHICLE_DB_ADD_SELECTED_YEAR",
-        AdvisorQuoteGetLastStep(),
-        "vehicle=" vehicle["displayKey"]
-            . ", year=" vehicle["year"]
-            . ", yearValue=" AdvisorQuoteStatusValue(yearCascadeStatus, "yearValue")
-            . ", method=" AdvisorQuoteStatusValue(yearCascadeStatus, "method")
-    )
-
-    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Manufacturer", db["timeouts"]["transitionMs"], 2) {
-        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MAKE_OPTIONS_TIMEOUT", vehicle)
-        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=make-options-timeout")
-        return "DEFERRED"
     }
 
     optionArgs := AdvisorQuoteBuildDbResolvedVehicleJsArgs(vehicle, resolvedVehicle)
-    makeWanted := AdvisorQuotePreferredDbMakeLabel(resolvedVehicle, vehicle["make"])
-    makeResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "Manufacturer", makeWanted, false, vehicle, optionArgs)
-    if (makeResult != "OK") {
+    if AdvisorQuoteRapportAllowProvisionalSameFamilyGate(db) {
+        optionArgs["allowProvisionalSameFamilyGate"] := "1"
+        optionArgs["allowProvisionalSameFamily"] := "1"
+    }
+    probeLabels := AdvisorQuoteDbMakeBucketProbeLabels(vehicle, resolvedVehicle)
+    if (probeLabels.Length = 0) {
         AdvisorQuoteAppendLog(
-            "VEHICLE_DEFERRED_DB_ADD_UNSAFE",
+            "VEHICLE_BUCKET_PROBE_FAILED",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", reason=make-option-" makeResult ", allowedMakeLabels=" AdvisorQuoteStatusValue(optionArgs, "allowedMakeLabels")
+            "vehicle=" vehicleLabel ", reason=no-candidate-make-buckets"
         )
         return "DEFERRED"
     }
-    AdvisorQuoteAppendLog(
-        "VEHICLE_DB_ADD_SELECTED_MAKE",
-        AdvisorQuoteGetLastStep(),
-        "vehicle=" vehicle["displayKey"] ", wanted=" makeWanted ", allowedMakeLabels=" AdvisorQuoteStatusValue(optionArgs, "allowedMakeLabels")
-    )
 
-    if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Model", db["timeouts"]["transitionMs"], 2) {
-        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MODEL_OPTIONS_TIMEOUT", vehicle)
-        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_MODEL_OPTION_NOT_FOUND", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=model-options-timeout")
-        return "DEFERRED"
-    }
-
+    anyModelAmbiguous := false
+    anyBucketProbed := false
     modelWanted := AdvisorQuoteResolvedListFirst(resolvedVehicle, "modelAliases", vehicle["model"])
-    modelResult := AdvisorQuoteSelectVehicleDropdownOptionResult(idx, "Model", modelWanted, false, vehicle, optionArgs)
-    switch modelResult {
-        case "OK":
-            AdvisorQuoteAppendLog(
-                "VEHICLE_DB_ADD_SELECTED_MODEL",
-                AdvisorQuoteGetLastStep(),
-                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
-            )
-        case "AMBIGUOUS":
-            AdvisorQuoteAppendLog(
-                "VEHICLE_DEFERRED_DB_MODEL_OPTION_AMBIGUOUS",
-                AdvisorQuoteGetLastStep(),
-                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
-            )
-            return "DEFERRED"
-        case "NO_OPTION":
-            AdvisorQuoteAppendLog(
-                "VEHICLE_DEFERRED_DB_MODEL_OPTION_NOT_FOUND",
-                AdvisorQuoteGetLastStep(),
-                "vehicle=" vehicle["displayKey"] ", wanted=" modelWanted ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases") ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
-            )
-            return "DEFERRED"
-        default:
-            AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=model-option-" modelResult)
-            return "DEFERRED"
-    }
 
-    subModelResult := AdvisorQuoteSelectDbAddSubModelIfRequired(idx, vehicle, resolvedVehicle, db)
-    if (subModelResult != "OK") {
+    for _, makeWanted in probeLabels {
+        if StopRequested() {
+            failureReason := "Stopped manually."
+            return "FAILED"
+        }
+
+        if !AdvisorQuoteResetOpenGatherAddVehicleRow("before-db-bucket-probe:" makeWanted, &failureReason, &failureScanPath)
+            return "FAILED"
+
+        anyBucketProbed := true
         AdvisorQuoteAppendLog(
-            "VEHICLE_DEFERRED_DB_SUBMODEL_AMBIGUOUS",
+            "VEHICLE_BUCKET_PROBE_START",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", result=" subModelResult
+            "vehicle=" vehicleLabel
+                . ", makeBucket=" makeWanted
+                . ", candidateBuckets=" JoinArray(probeLabels, "|")
+                . ", " AdvisorQuoteBuildVehicleDbResolveDetail(resolvedVehicle, vehicle)
         )
-        return "DEFERRED"
-    }
 
-    readyStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle, idx)
-    AdvisorQuoteLogGatherVehicleAddStatus(readyStatus, "VEHICLE_DB_ADD_READY_STATUS", vehicle)
-    if (AdvisorQuoteStatusValue(readyStatus, "rowComplete") != "1") {
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_STATUS_BEFORE_DB_ADD_PREPARE", vehicle)
+        idx := AdvisorQuotePrepareVehicleRow(vehicle["year"])
+        if (idx < 0) {
+            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus("", vehicle["year"]), "VEHICLE_ROW_PREPARE_FAILED", vehicle)
+            AdvisorQuoteAppendLog("VEHICLE_BUCKET_PROBE_FAILED", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=prepare-row-failed")
+            continue
+        }
+
+        yearCascadeStatus := AdvisorQuoteSetVehicleYearAndWaitManufacturer(idx, vehicle["year"], db["timeouts"]["transitionMs"], db["timeouts"]["pollMs"])
+        AdvisorQuoteLogVehicleYearCascadeStatus(yearCascadeStatus, "VEHICLE_YEAR_CASCADE", vehicle)
+        if (AdvisorQuoteStatusValue(yearCascadeStatus, "yearVerified") != "1") {
+            AdvisorQuoteAppendLog("VEHICLE_BUCKET_PROBE_FAILED", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=year-not-verified")
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-year-failed:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
         AdvisorQuoteAppendLog(
-            "VEHICLE_DEFERRED_DB_ADD_UNSAFE",
+            "VEHICLE_DB_ADD_SELECTED_YEAR",
             AdvisorQuoteGetLastStep(),
-            "vehicle=" vehicle["displayKey"] ", reason=row-not-complete-after-db-selection, method=" AdvisorQuoteStatusValue(readyStatus, "method")
+            "vehicle=" vehicleLabel
+                . ", year=" vehicle["year"]
+                . ", makeBucket=" makeWanted
+                . ", yearValue=" AdvisorQuoteStatusValue(yearCascadeStatus, "yearValue")
+                . ", method=" AdvisorQuoteStatusValue(yearCascadeStatus, "method")
         )
-        return "DEFERRED"
+
+        if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Manufacturer", db["timeouts"]["transitionMs"], 2) {
+            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MAKE_OPTIONS_TIMEOUT", vehicle)
+            AdvisorQuoteAppendLog("VEHICLE_BUCKET_PROBE_FAILED", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=make-options-timeout")
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-make-timeout:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+
+        makeArgs := Map()
+        for key, value in optionArgs
+            makeArgs[key] := value
+        makeArgs["allowedMakeLabels"] := makeWanted
+        makeArgs["advisorMakeLabels"] := makeWanted
+        makeStatus := AdvisorQuoteSelectVehicleDropdownOptionStatus(idx, "Manufacturer", makeWanted, false, vehicle, makeArgs)
+        makeResult := AdvisorQuoteStatusValue(makeStatus, "result")
+        if (makeResult != "OK") {
+            AdvisorQuoteAppendLog(
+                "VEHICLE_BUCKET_PROBE_FAILED",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicleLabel
+                    . ", makeBucket=" makeWanted
+                    . ", reason=make-option-" makeResult
+                    . ", candidateBuckets=" JoinArray(probeLabels, "|")
+            )
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-make-select-failed:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+        selectedAdvisorMake := AdvisorQuoteStatusValue(makeStatus, "selectedText")
+        if (selectedAdvisorMake = "")
+            selectedAdvisorMake := AdvisorQuoteStatusValue(makeStatus, "selectedValue")
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DB_ADD_SELECTED_MAKE",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicleLabel
+                . ", wanted=" makeWanted
+                . ", selectedAdvisorMake=" selectedAdvisorMake
+                . ", candidateBuckets=" JoinArray(probeLabels, "|")
+        )
+
+        if !AdvisorQuoteWaitForVehicleSelectEnabled(idx, "Model", db["timeouts"]["transitionMs"], 2) {
+            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_MODEL_OPTIONS_TIMEOUT", vehicle)
+            AdvisorQuoteAppendLog("VEHICLE_MODEL_NOT_FOUND_IN_BUCKET", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=model-options-timeout")
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-model-timeout:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+
+        modelStatus := AdvisorQuoteSelectVehicleDropdownOptionStatus(idx, "Model", modelWanted, false, vehicle, optionArgs)
+        modelResult := AdvisorQuoteStatusValue(modelStatus, "result")
+        provisionalSelected := false
+        selectedAdvisorModel := AdvisorQuoteStatusValue(modelStatus, "selectedText")
+        if (selectedAdvisorModel = "")
+            selectedAdvisorModel := AdvisorQuoteStatusValue(modelStatus, "selectedValue")
+        switch modelResult {
+            case "OK":
+                AdvisorQuoteAppendLog(
+                    "VEHICLE_DB_ADD_SELECTED_MODEL",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" vehicleLabel
+                        . ", wanted=" modelWanted
+                        . ", makeBucket=" makeWanted
+                        . ", selectedAdvisorMake=" selectedAdvisorMake
+                        . ", selectedAdvisorModel=" selectedAdvisorModel
+                        . ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases")
+                        . ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+                )
+            case "PROVISIONAL":
+                provisionalSelected := true
+                vehicle["rapportProvisionalGateVehicle"] := "1"
+                vehicle["rapportProvisionalReason"] := AdvisorQuoteStatusValue(modelStatus, "provisionalReason")
+                vehicle["rapportSelectedAdvisorMake"] := selectedAdvisorMake
+                vehicle["rapportSelectedAdvisorModel"] := selectedAdvisorModel
+                vehicle["rapportSelectedOptionIndex"] := AdvisorQuoteStatusValue(modelStatus, "selectedOptionIndex")
+                vehicle["rapportAmbiguousOptions"] := AdvisorQuoteStatusValue(modelStatus, "ambiguousOptions")
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_GATE_PROVISIONAL_MODEL_SELECTED",
+                    AdvisorQuoteGetLastStep(),
+                    "provisionalGateVehicle=1"
+                        . ", provisionalReason=" AdvisorQuoteStatusValue(modelStatus, "provisionalReason")
+                        . ", leadVehicle=" vehicleLabel
+                        . ", selectedAdvisorMake=" selectedAdvisorMake
+                        . ", selectedAdvisorModel=" selectedAdvisorModel
+                        . ", selectedOptionIndex=" AdvisorQuoteStatusValue(modelStatus, "selectedOptionIndex")
+                        . ", ambiguousOptions=" AdvisorQuoteStatusValue(modelStatus, "ambiguousOptions")
+                        . ", ascReconciliationExpected=1"
+                )
+            case "AMBIGUOUS":
+                anyModelAmbiguous := true
+                AdvisorQuoteAppendLog(
+                    "RAPPORT_GATE_MODEL_AMBIGUOUS",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" vehicleLabel
+                        . ", makeBucket=" makeWanted
+                        . ", wanted=" modelWanted
+                        . ", ambiguousOptions=" AdvisorQuoteStatusValue(modelStatus, "ambiguousOptions")
+                        . ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases")
+                        . ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+                )
+                if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-model-ambiguous:" makeWanted, &failureReason, &failureScanPath)
+                    return "FAILED"
+                continue
+            case "NO_OPTION", "NO_SELECT":
+                AdvisorQuoteAppendLog(
+                    "VEHICLE_MODEL_NOT_FOUND_IN_BUCKET",
+                    AdvisorQuoteGetLastStep(),
+                    "vehicle=" vehicleLabel
+                        . ", makeBucket=" makeWanted
+                        . ", wanted=" modelWanted
+                        . ", modelAliases=" AdvisorQuoteStatusValue(optionArgs, "modelAliases")
+                        . ", normalizedModelKeys=" AdvisorQuoteStatusValue(optionArgs, "normalizedModelKeys")
+                )
+                if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-model-not-found:" makeWanted, &failureReason, &failureScanPath)
+                    return "FAILED"
+                continue
+            default:
+                AdvisorQuoteAppendLog("VEHICLE_BUCKET_PROBE_FAILED", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=model-option-" modelResult)
+                if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-model-select-failed:" makeWanted, &failureReason, &failureScanPath)
+                    return "FAILED"
+                continue
+        }
+
+        subModelResult := AdvisorQuoteSelectDbAddSubModelIfRequired(idx, vehicle, resolvedVehicle, db)
+        if (subModelResult != "OK") {
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_DB_SUBMODEL_AMBIGUOUS",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicleLabel
+                    . ", makeBucket=" makeWanted
+                    . ", selectedAdvisorMake=" selectedAdvisorMake
+                    . ", selectedAdvisorModel=" selectedAdvisorModel
+                    . ", result=" subModelResult
+            )
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-submodel-failed:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+
+        readyStatus := AdvisorQuoteGetGatherVehicleAddStatus(vehicle, idx)
+        AdvisorQuoteLogGatherVehicleAddStatus(readyStatus, "VEHICLE_DB_ADD_READY_STATUS", vehicle)
+        if (AdvisorQuoteStatusValue(readyStatus, "rowComplete") != "1") {
+            AdvisorQuoteAppendLog(
+                "VEHICLE_BUCKET_PROBE_FAILED",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicleLabel
+                    . ", makeBucket=" makeWanted
+                    . ", selectedAdvisorMake=" selectedAdvisorMake
+                    . ", selectedAdvisorModel=" selectedAdvisorModel
+                    . ", reason=row-not-complete-after-db-selection"
+                    . ", method=" AdvisorQuoteStatusValue(readyStatus, "method")
+            )
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-row-incomplete:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+
+        addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
+        AdvisorQuoteAppendLog("RAPPORT_ADD_ROW_ADD_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus))
+        if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED" || AdvisorQuoteStatusValue(addStatus, "clicked") != "1") {
+            AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
+            AdvisorQuoteAppendLog("VEHICLE_BUCKET_PROBE_FAILED", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", makeBucket=" makeWanted ", reason=add-click-failed")
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("db-bucket-add-click-failed:" makeWanted, &failureReason, &failureScanPath)
+                return "FAILED"
+            continue
+        }
+
+        postAddStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db, idx)
+        AdvisorQuoteLogGatherVehicleAddStatus(postAddStatus, "VEHICLE_DB_ADD_STATUS_FINAL", vehicle)
+        if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postAddStatus) {
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DB_ADD_COMMITTED",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicleLabel
+                    . ", method=confirmed-card"
+                    . ", provisionalGateVehicle=" (provisionalSelected ? "1" : "0")
+                    . ", selectedAdvisorMake=" selectedAdvisorMake
+                    . ", selectedAdvisorModel=" selectedAdvisorModel
+                    . ", matchedText=" AdvisorQuoteStatusValue(postAddStatus, "matchedText")
+            )
+            return provisionalSelected ? "PROVISIONAL" : "ADDED"
+        }
+
+        editFailureReason := ""
+        editFailureScanPath := ""
+        editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &editFailureReason, &editFailureScanPath, "db-add")
+        AdvisorQuoteAppendLog("VEHICLE_DB_ADD_SUBMODEL_STATUS", AdvisorQuoteGetLastStep(), "vehicle=" vehicleLabel ", editOutcome=" editOutcome ", editFailureReason=" editFailureReason)
+        if (editOutcome = "CONFIRMED") {
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DB_ADD_COMMITTED",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicleLabel
+                    . ", method=edit-vehicle-update"
+                    . ", provisionalGateVehicle=" (provisionalSelected ? "1" : "0")
+                    . ", selectedAdvisorMake=" selectedAdvisorMake
+                    . ", selectedAdvisorModel=" selectedAdvisorModel
+            )
+            return provisionalSelected ? "PROVISIONAL" : "ADDED"
+        }
+        if (editOutcome = "FAILED") {
+            failureReason := editFailureReason
+            failureScanPath := editFailureScanPath
+            if (failureReason = "")
+                failureReason := "VEHICLE_DB_ADD_EDIT_FAILED: " vehicleLabel
+            return "FAILED"
+        }
+
+        failureReason := "VEHICLE_DB_ADD_DID_NOT_COMMIT: Add Car/Truck did not produce a matching confirmed vehicle card for " vehicleLabel "."
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-db-add-did-not-commit")
+        AdvisorQuoteAppendLog(
+            "VEHICLE_DB_ADD_DID_NOT_COMMIT",
+            AdvisorQuoteGetLastStep(),
+            "vehicle=" vehicleLabel
+                . ", makeBucket=" makeWanted
+                . ", selectedAdvisorMake=" selectedAdvisorMake
+                . ", selectedAdvisorModel=" selectedAdvisorModel
+                . ", postAddResult=" AdvisorQuoteStatusValue(postAddStatus, "result")
+                . ", editOutcome=" editOutcome
+        )
+        return "FAILED"
     }
 
-    addStatus := AdvisorQuoteClickGatherAddRowAddButton(true)
-    AdvisorQuoteAppendLog("RAPPORT_ADD_ROW_ADD_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherAddRowAddClickDetail(addStatus))
-    if (AdvisorQuoteStatusValue(addStatus, "result") != "CLICKED" || AdvisorQuoteStatusValue(addStatus, "clicked") != "1") {
-        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(idx, vehicle["year"]), "VEHICLE_ADD_CLICK_FAILED", vehicle)
-        AdvisorQuoteAppendLog("VEHICLE_DEFERRED_DB_ADD_UNSAFE", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", reason=add-click-failed")
-        return "DEFERRED"
-    }
-
-    postAddStatus := AdvisorQuoteWaitForGatherVehicleConfirmedStatus(vehicle, db, idx)
-    AdvisorQuoteLogGatherVehicleAddStatus(postAddStatus, "VEHICLE_DB_ADD_STATUS_FINAL", vehicle)
-    if AdvisorQuoteGatherVehicleStatusAlreadyConfirmed(postAddStatus) {
-        AdvisorQuoteAppendLog("VEHICLE_DB_ADD_COMMITTED", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", method=confirmed-card, matchedText=" AdvisorQuoteStatusValue(postAddStatus, "matchedText"))
-        return "ADDED"
-    }
-
-    editFailureReason := ""
-    editFailureScanPath := ""
-    editOutcome := AdvisorQuoteCompleteVehicleEditModalIfPresent(vehicle, db, &editFailureReason, &editFailureScanPath, "db-add")
-    AdvisorQuoteAppendLog("VEHICLE_DB_ADD_SUBMODEL_STATUS", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", editOutcome=" editOutcome ", editFailureReason=" editFailureReason)
-    if (editOutcome = "CONFIRMED") {
-        AdvisorQuoteAppendLog("VEHICLE_DB_ADD_COMMITTED", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", method=edit-vehicle-update")
-        return "ADDED"
-    }
-
-    failureReason := "VEHICLE_DB_ADD_DID_NOT_COMMIT: Add Car/Truck did not produce a matching confirmed vehicle card for " vehicle["displayKey"] "."
-    failureScanPath := (editFailureScanPath != "") ? editFailureScanPath : AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-db-add-did-not-commit")
-    AdvisorQuoteAppendLog("VEHICLE_DB_ADD_DID_NOT_COMMIT", AdvisorQuoteGetLastStep(), "vehicle=" vehicle["displayKey"] ", postAddResult=" AdvisorQuoteStatusValue(postAddStatus, "result") ", editOutcome=" editOutcome)
-    return "FAILED"
+    AdvisorQuoteAppendLog(
+        "VEHICLE_UNSUPPORTED_BY_ADVISOR",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicleLabel
+            . ", candidateBuckets=" JoinArray(probeLabels, "|")
+            . ", modelWanted=" modelWanted
+            . ", anyBucketProbed=" (anyBucketProbed ? "1" : "0")
+            . ", anyModelAmbiguous=" (anyModelAmbiguous ? "1" : "0")
+    )
+    return anyModelAmbiguous ? "AMBIGUOUS" : "UNSUPPORTED"
 }
 
 AdvisorQuoteCloneVehicleWithModel(vehicle, model, statusLabel := "") {
@@ -1320,6 +1653,46 @@ AdvisorQuoteSelectVehicleDropdownOptionResult(index, fieldName, wantedText, allo
     if (result != "OK" && IsObject(vehicle))
         AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(index, vehicle["year"]), "VEHICLE_DROPDOWN_SELECT_FAILED", vehicle)
     return result
+}
+
+AdvisorQuoteSelectVehicleDropdownOptionStatus(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "", extraArgs := "") {
+    args := Map(
+        "index", index,
+        "fieldName", fieldName,
+        "wantedText", wantedText,
+        "allowFirstNonEmpty", allowFirstNonEmpty,
+        "returnDetails", "1"
+    )
+    if IsObject(extraArgs) {
+        for key, value in extraArgs
+            args[key] := value
+    }
+    raw := AdvisorQuoteRunOp("select_vehicle_dropdown_option", args)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    result := AdvisorQuoteStatusValue(status, "result")
+    if (result = "") {
+        result := Trim(String(raw ?? ""))
+        status["result"] := result
+    }
+    vehicleKey := IsObject(vehicle) && vehicle.Has("displayKey") ? vehicle["displayKey"] : ""
+    AdvisorQuoteAppendLog(
+        "VEHICLE_DROPDOWN_SELECT",
+        AdvisorQuoteGetLastStep(),
+        "vehicle=" vehicleKey
+            . ", field=" fieldName
+            . ", wanted=" wantedText
+            . ", allowFirstNonEmpty=" (allowFirstNonEmpty ? "1" : "0")
+            . ", result=" result
+            . ", selectedText=" AdvisorQuoteStatusValue(status, "selectedText")
+            . ", selectedValue=" AdvisorQuoteStatusValue(status, "selectedValue")
+            . ", selectedOptionIndex=" AdvisorQuoteStatusValue(status, "selectedOptionIndex")
+            . ", provisionalGateVehicle=" AdvisorQuoteStatusValue(status, "provisionalGateVehicle")
+            . ", provisionalReason=" AdvisorQuoteStatusValue(status, "provisionalReason")
+            . ", ambiguousOptions=" AdvisorQuoteStatusValue(status, "ambiguousOptions")
+    )
+    if (result != "OK" && result != "PROVISIONAL" && IsObject(vehicle))
+        AdvisorQuoteLogGatherVehicleRowStatus(AdvisorQuoteGetGatherVehicleRowStatus(index, vehicle["year"]), "VEHICLE_DROPDOWN_SELECT_FAILED", vehicle)
+    return status
 }
 
 AdvisorQuoteSelectVehicleDropdownOption(index, fieldName, wantedText, allowFirstNonEmpty := false, vehicle := "") {

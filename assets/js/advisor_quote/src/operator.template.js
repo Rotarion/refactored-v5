@@ -3836,6 +3836,13 @@ copy(String((() => {
     option: option || null,
     status: status || (option ? 'OK' : 'NO_OPTION')
   });
+  const vehicleDropdownBoolArg = (value) => /^(1|true|yes|y)$/i.test(safe(value).trim());
+  const vehicleDropdownOptionIndex = (select, option) => Array.from((select && select.options) || []).indexOf(option);
+  const vehicleDropdownOptionDetail = (select, option) => ({
+    index: vehicleDropdownOptionIndex(select, option),
+    value: vehicleOptionValue(option),
+    text: vehicleOptionText(option)
+  });
   const normalizedVehicleDropdownKeys = (source = {}, wantedText = '') => {
     const keys = parseVehicleListArg(source.normalizedModelKeys)
       .map((value) => normalizeVehicleModelKey(value) || safe(value).toUpperCase().replace(/[^A-Z0-9]/g, ''))
@@ -3852,6 +3859,77 @@ copy(String((() => {
     if (field === 'Model')
       values.push(...parseVehicleListArg(source.modelAliases));
     return Array.from(new Set(values.map(normUpper).filter(Boolean)));
+  };
+  const vehicleSameFamilyLeadTexts = (source = {}, wantedText = '') => {
+    const values = [
+      source.model,
+      source.canonicalModel,
+      source.inputModel,
+      wantedText
+    ].concat(parseVehicleListArg(source.modelAliases));
+    const out = [];
+    const seen = new Set();
+    for (const value of values) {
+      const text = normalizeVehicleText(value);
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      out.push(text);
+    }
+    return out;
+  };
+  const vehicleSameFamilyPrefixSuffixAllowed = (suffixText, suffixKey) => {
+    const text = normalizeVehicleText(suffixText);
+    const key = safe(suffixKey).replace(/[^A-Z0-9]/g, '');
+    if (!text && !key) return false;
+    const textTokens = text.split(/\s+/).filter(Boolean);
+    const allowedTokens = new Set(['2WD', '4WD', 'AWD', 'FWD', 'RWD', '2DR', '4DR', '4X2', '4X4']);
+    if (textTokens.length && textTokens.every((token) => allowedTokens.has(token))) return true;
+    return /^(2WD|4WD|AWD|FWD|RWD|2DR|4DR|4X2|4X4)$/.test(key);
+  };
+  const vehicleSameFamilyPrefixMatchesText = (rawText, source = {}, wantedText = '') => {
+    const optionText = normalizeVehicleText(rawText);
+    const optionKey = normalizeVehicleModelKey(rawText);
+    if (!optionText && !optionKey) return false;
+    for (const leadText of vehicleSameFamilyLeadTexts(source, wantedText)) {
+      const leadKey = normalizeVehicleModelKey(leadText);
+      if (!leadText || !leadKey) continue;
+      if (optionText.startsWith(`${leadText} `)) {
+        const suffixText = optionText.slice(leadText.length).trim();
+        const suffixKey = optionKey.startsWith(leadKey) ? optionKey.slice(leadKey.length) : '';
+        if (vehicleSameFamilyPrefixSuffixAllowed(suffixText, suffixKey)) return true;
+      }
+      if (optionKey.startsWith(leadKey)) {
+        const suffixKey = optionKey.slice(leadKey.length);
+        if (vehicleSameFamilyPrefixSuffixAllowed('', suffixKey)) return true;
+      }
+    }
+    return false;
+  };
+  const vehicleSameFamilyPrefixMatchesOption = (option, source = {}, wantedText = '') =>
+    vehicleSameFamilyPrefixMatchesText(vehicleOptionText(option), source, wantedText)
+    || vehicleSameFamilyPrefixMatchesText(vehicleOptionValue(option), source, wantedText);
+  const vehicleSameFamilyPrefixOptionResult = (select, options, fieldName, wantedText, source = {}, ambiguousOptions = []) => {
+    if (safe(fieldName) !== 'Model') return null;
+    if (!vehicleDropdownBoolArg(source.allowProvisionalSameFamilyGate || source.allowProvisionalSameFamily)) return null;
+    const matches = uniqueVehicleOptions(options.filter((opt) => vehicleSameFamilyPrefixMatchesOption(opt, source, wantedText)));
+    if (!matches.length) return null;
+    const option = matches[0];
+    const details = matches.map((match) => vehicleDropdownOptionDetail(select, match));
+    const ambiguous = (ambiguousOptions && ambiguousOptions.length ? ambiguousOptions : matches)
+      .map((match) => {
+        const detail = vehicleDropdownOptionDetail(select, match);
+        return `${detail.index}:${detail.text || detail.value}`;
+      })
+      .join('|');
+    return Object.assign(vehicleDropdownOptionResult(option, 'PROVISIONAL'), {
+      provisionalGateVehicle: true,
+      provisionalReason: 'same-family prefix first available',
+      selectedOptionIndex: String(vehicleDropdownOptionIndex(select, option)),
+      selectedOptionText: vehicleOptionText(option),
+      selectedOptionValue: vehicleOptionValue(option),
+      ambiguousOptions: ambiguous,
+      sameFamilyMatchCount: String(details.length)
+    });
   };
   const findVehicleDropdownOptionResult = (select, fieldName, wantedText, allowFirstNonEmpty = false, source = {}) => {
     const options = Array.from((select && select.options) || []).filter(validVehicleOption);
@@ -3879,7 +3957,9 @@ copy(String((() => {
         || wantedValues.includes(normUpper(vehicleOptionText(opt)))
       ));
       if (matches.length === 1) return vehicleDropdownOptionResult(matches[0]);
-      if (matches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+      if (matches.length > 1)
+        return vehicleSameFamilyPrefixOptionResult(select, options, field, wantedText, source, matches)
+          || vehicleDropdownOptionResult(null, 'AMBIGUOUS');
       if (field === 'Model' && (String(source.strictModelMatch || '') === '1' || source.strictModelMatch === true)) {
         const keys = normalizedVehicleDropdownKeys(source, wantedText);
         matches = uniqueVehicleOptions(options.filter((opt) => {
@@ -3888,7 +3968,11 @@ copy(String((() => {
           return (valueKey && keys.has(valueKey)) || (textKey && keys.has(textKey));
         }));
         if (matches.length === 1) return vehicleDropdownOptionResult(matches[0]);
-        if (matches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+        if (matches.length > 1)
+          return vehicleSameFamilyPrefixOptionResult(select, options, field, wantedText, source, matches)
+            || vehicleDropdownOptionResult(null, 'AMBIGUOUS');
+        const provisional = vehicleSameFamilyPrefixOptionResult(select, options, field, wantedText, source, matches);
+        if (provisional) return provisional;
         return vehicleDropdownOptionResult(null, 'NO_OPTION');
       }
       const wanted = wantedValues[0];
@@ -3907,6 +3991,8 @@ copy(String((() => {
       if (containsMatches.length === 1) return vehicleDropdownOptionResult(containsMatches[0]);
       if (containsMatches.length > 1) return vehicleDropdownOptionResult(null, 'AMBIGUOUS');
     }
+    const provisional = vehicleSameFamilyPrefixOptionResult(select, options, field, wantedText, source);
+    if (provisional) return provisional;
     if (allowFirstNonEmpty)
       return vehicleDropdownOptionResult(options[0] || null);
     return vehicleDropdownOptionResult(null, 'NO_OPTION');
@@ -7230,13 +7316,53 @@ copy(String((() => {
       const index = Number(args.index);
       const fieldName = safe(args.fieldName);
       const allowFirstNonEmpty = String(args.allowFirstNonEmpty || '') === '1' || args.allowFirstNonEmpty === true;
+      const returnDetails = String(args.returnDetails || '') === '1' || args.returnDetails === true;
       const select = vehicleField(index, fieldName);
-      if (!select || select.disabled) return 'NO_SELECT';
+      if (!select || select.disabled) {
+        if (returnDetails)
+          return linesOut({
+            result: 'NO_SELECT',
+            selectedValue: '',
+            selectedText: '',
+            selectedOptionIndex: '',
+            provisionalGateVehicle: '0',
+            provisionalReason: '',
+            ambiguousOptions: '',
+            applied: '0'
+          });
+        return 'NO_SELECT';
+      }
       const selected = findVehicleDropdownOptionResult(select, fieldName, args.wantedText, allowFirstNonEmpty, args);
-      if (!selected || selected.status === 'NO_OPTION') return 'NO_OPTION';
-      if (selected.status === 'AMBIGUOUS') return 'AMBIGUOUS';
-      if (!selected.option) return 'NO_OPTION';
-      return applyVehicleDropdownOption(select, selected.option) ? 'OK' : 'NO_OPTION';
+      if (!selected || selected.status === 'NO_OPTION' || selected.status === 'AMBIGUOUS' || !selected.option) {
+        const result = selected && selected.status ? selected.status : 'NO_OPTION';
+        if (returnDetails)
+          return linesOut({
+            result,
+            selectedValue: '',
+            selectedText: '',
+            selectedOptionIndex: '',
+            provisionalGateVehicle: '0',
+            provisionalReason: '',
+            ambiguousOptions: selected && selected.ambiguousOptions || '',
+            applied: '0'
+          });
+        return result;
+      }
+      const applied = applyVehicleDropdownOption(select, selected.option);
+      const result = applied ? selected.status : 'NO_OPTION';
+      if (returnDetails)
+        return linesOut({
+          result,
+          selectedValue: applied ? vehicleOptionValue(selected.option) : '',
+          selectedText: applied ? vehicleOptionText(selected.option) : '',
+          selectedOptionIndex: applied ? String(vehicleDropdownOptionIndex(select, selected.option)) : '',
+          provisionalGateVehicle: applied && selected.provisionalGateVehicle ? '1' : '0',
+          provisionalReason: applied && selected.provisionalGateVehicle ? selected.provisionalReason : '',
+          ambiguousOptions: selected.ambiguousOptions || '',
+          sameFamilyMatchCount: selected.sameFamilyMatchCount || '',
+          applied: applied ? '1' : '0'
+        });
+      return result;
     }
 
     case 'select_vehicle_dropdown_first_valid_nonplaceholder': {

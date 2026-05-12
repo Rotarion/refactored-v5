@@ -618,18 +618,6 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
 
     AdvisorQuoteCaptureStateSnapshotObserver("before_vehicle_confirmation", "actionableVehicles=" actionableVehicles.Length ", partialYearMakeVehicles=" partialYearMakeVehicles.Length)
-    if (rapportLedger["rateableCount"] = 0) {
-        failureReason := "NO_RATEABLE_VEHICLES"
-        AdvisorQuoteAppendLog(
-            "RAPPORT_NO_RATEABLE_VEHICLES",
-            AdvisorQuoteGetLastStep(),
-            "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
-                . ", vehicleCount=" rapportLedger["items"].Length
-        )
-        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "no-actionable-lead-vehicle")
-        return false
-    }
-
     vehicleSatisfiedCount := 0
     satisfiedVehicles := []
     promotedPartialVehicles := []
@@ -642,13 +630,58 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     staleDuplicateRowDetails := ""
     rapportVehicleMode := AdvisorQuoteRapportVehicleMode(db)
     vehicleModeAllowsAddComplete := AdvisorQuoteRapportVehicleModeAllowsAddComplete(rapportVehicleMode)
+    gatePolicyEnabled := AdvisorQuoteRapportGateVehicleEnabled(db)
+    provisionalSameFamilyGateEnabled := AdvisorQuoteRapportAllowProvisionalSameFamilyGate(db)
+    gateSatisfied := false
+    gateVehicle := ""
+    gateVehicleStatus := ""
+    provisionalGateVehicle := false
+    ascReconciliationExpected := false
+    skippedAfterGateVehicles := []
+    initialRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+    initialConfirmedVehicleCount := AdvisorQuoteStatusInteger(initialRapportSnapshot, "confirmedVehicleCount")
+    if (gatePolicyEnabled && initialConfirmedVehicleCount > 0) {
+        gateSatisfied := true
+        vehicleSatisfiedCount := initialConfirmedVehicleCount
+        gateVehicle := "existing-confirmed-rapport-vehicle"
+        gateVehicleStatus := "GATE_SATISFIED_CONFIRMED"
+        ascReconciliationExpected := true
+        AdvisorQuoteAppendLog(
+            "RAPPORT_GATE_SATISFIED",
+            AdvisorQuoteGetLastStep(),
+            "gateStatus=GATE_SATISFIED_CONFIRMED"
+                . ", gateVehicle=" gateVehicle
+                . ", confirmedVehicleCount=" initialConfirmedVehicleCount
+                . ", reason=existing-confirmed-car-truck"
+                . ", ascReconciliationExpected=1"
+        )
+    }
+    if (rapportLedger["rateableCount"] = 0 && !gateSatisfied) {
+        failureReason := gatePolicyEnabled ? "RAPPORT_GATE_VEHICLE_FAILED" : "NO_RATEABLE_VEHICLES"
+        AdvisorQuoteAppendLog(
+            gatePolicyEnabled ? "RAPPORT_GATE_VEHICLE_FAILED" : "RAPPORT_NO_RATEABLE_VEHICLES",
+            AdvisorQuoteGetLastStep(),
+            "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+                . ", vehicleCount=" rapportLedger["items"].Length
+                . ", reachedRapportGate=0"
+                . ", humanReviewRequired=1"
+        )
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", gatePolicyEnabled ? "rapport-gate-vehicle-failed" : "no-actionable-lead-vehicle")
+        return false
+    }
     AdvisorQuoteAppendLog(
         "RAPPORT_VEHICLE_MODE",
         AdvisorQuoteGetLastStep(),
         "rapportVehicleMode=" rapportVehicleMode
             . ", vehicleModeAllowsAddComplete=" (vehicleModeAllowsAddComplete ? "1" : "0")
+            . ", advisorRapportGateVehicleEnabled=" (gatePolicyEnabled ? "1" : "0")
+            . ", advisorRapportAllowProvisionalSameFamilyGate=" (provisionalSameFamilyGateEnabled ? "1" : "0")
+            . ", initialConfirmedVehicleCount=" initialConfirmedVehicleCount
+            . ", reachedRapportGate=" (gateSatisfied ? "1" : "0")
     )
     for _, vehicle in actionableVehicles {
+        if (gatePolicyEnabled && gateSatisfied)
+            break
         if StopRequested() {
             failureReason := "Stopped manually."
             return false
@@ -711,7 +744,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             }
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
-            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_EXACT", "matched-confirmed-card")
+            if gatePolicyEnabled {
+                gateSatisfied := true
+                gateVehicle := AdvisorQuoteVehicleLabel(vehicle)
+                gateVehicleStatus := "GATE_SATISFIED_CONFIRMED"
+                ascReconciliationExpected := true
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "GATE_SATISFIED_CONFIRMED", "matched-confirmed-card")
+            } else
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_EXACT", "matched-confirmed-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_ALREADY_CONFIRMED",
                 AdvisorQuoteGetLastStep(),
@@ -720,6 +760,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                     . ", actionableVehicleCount=" actionableVehicles.Length
                     . ", matchedText=" AdvisorQuoteStatusValue(preflightStatus, "matchedText")
             )
+            if gatePolicyEnabled
+                break
             continue
         }
 
@@ -727,6 +769,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         if (editOutcome = "CONFIRMED") {
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
+            if gatePolicyEnabled {
+                gateSatisfied := true
+                gateVehicle := AdvisorQuoteVehicleLabel(vehicle)
+                gateVehicleStatus := "GATE_SATISFIED_CONFIRMED"
+                ascReconciliationExpected := true
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "GATE_SATISFIED_CONFIRMED", "edit-panel-update")
+                break
+            }
             AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_EXACT", "edit-panel-update")
             continue
         }
@@ -750,6 +800,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         if (confirmOutcome = "CONFIRMED") {
             vehicleSatisfiedCount += 1
             satisfiedVehicles.Push(vehicle)
+            if gatePolicyEnabled {
+                gateSatisfied := true
+                gateVehicle := AdvisorQuoteVehicleLabel(vehicle)
+                gateVehicleStatus := "GATE_SATISFIED_CONFIRMED"
+                ascReconciliationExpected := true
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "GATE_SATISFIED_CONFIRMED", "potential-card")
+                break
+            }
             AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "CONFIRMED_POTENTIAL_MATCH", "potential-card")
             continue
         }
@@ -789,14 +847,62 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 vehicleSatisfiedCount += 1
                 satisfiedVehicles.Push(vehicle)
                 dbAddedVehicles.Push(vehicle)
+                if gatePolicyEnabled {
+                    gateSatisfied := true
+                    gateVehicle := AdvisorQuoteVehicleLabel(vehicle)
+                    gateVehicleStatus := "GATE_SATISFIED_ADDED"
+                    ascReconciliationExpected := true
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "GATE_SATISFIED_ADDED", "db-resolved-model")
+                    break
+                }
                 AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "ADDED_DB_RESOLVED", "db-resolved-model")
                 continue
+            }
+            if (addOutcome = "PROVISIONAL") {
+                vehicleSatisfiedCount += 1
+                satisfiedVehicles.Push(vehicle)
+                dbAddedVehicles.Push(vehicle)
+                provisionalGateVehicle := true
+                gateSatisfied := true
+                gateVehicle := AdvisorQuoteVehicleLabel(vehicle)
+                gateVehicleStatus := "GATE_SATISFIED_PROVISIONAL"
+                ascReconciliationExpected := true
+                AdvisorQuoteRapportVehicleLedgerSetStatus(
+                    rapportLedger,
+                    vehicle,
+                    "GATE_SATISFIED_PROVISIONAL",
+                    "same-family-prefix"
+                        . ", selectedAdvisorMake=" (vehicle.Has("rapportSelectedAdvisorMake") ? vehicle["rapportSelectedAdvisorMake"] : "")
+                        . ", selectedAdvisorModel=" (vehicle.Has("rapportSelectedAdvisorModel") ? vehicle["rapportSelectedAdvisorModel"] : "")
+                )
+                break
             }
             if (addOutcome = "FAILED")
                 return false
             deferredRapportVehicles.Push(vehicle)
             deferredCompleteVehicles.Push(vehicle)
-            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "SCRAP_MODEL_UNAVAILABLE", "db-add-deferred")
+            switch addOutcome {
+                case "AMBIGUOUS":
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "RAPPORT_GATE_MODEL_AMBIGUOUS", "db-add-model-ambiguous")
+                case "UNSUPPORTED":
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "UNSUPPORTED_AFTER_BUCKET_PROBING", "db-add-all-buckets-probed")
+                default:
+                    AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, vehicle, "VEHICLE_BUCKET_PROBE_FAILED", "db-add-" addOutcome)
+            }
+            continue
+        }
+
+        if gatePolicyEnabled {
+            deferredRapportVehicles.Push(vehicle)
+            deferredCompleteVehicles.Push(vehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_DEFERRED_NO_DB_CARD_MATCH",
+                AdvisorQuoteGetLastStep(),
+                "vehicle=" vehicle["displayKey"]
+                    . ", source=rapport-gate-policy"
+                    . ", resolveResult=" resolveResult
+                    . ", rapportVehicleMode=" rapportVehicleMode
+            )
             continue
         }
 
@@ -822,6 +928,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
     }
 
     for _, partialVehicle in partialYearMakeVehicles {
+        if (gatePolicyEnabled && gateSatisfied)
+            break
         if StopRequested() {
             failureReason := "Stopped manually."
             return false
@@ -849,7 +957,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             vehicleSatisfiedCount += 1
             promotedPartialVehicles.Push(promotedVehicle)
             satisfiedVehicles.Push(promotedVehicle)
-            AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "CONFIRMED_EXACT", "partial-promoted-confirmed-card")
+            if gatePolicyEnabled {
+                gateSatisfied := true
+                gateVehicle := AdvisorQuoteVehicleLabel(promotedVehicle)
+                gateVehicleStatus := "GATE_SATISFIED_CONFIRMED"
+                ascReconciliationExpected := true
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "GATE_SATISFIED_CONFIRMED", "partial-promoted-confirmed-card")
+            } else
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, partialVehicle, "CONFIRMED_EXACT", "partial-promoted-confirmed-card")
             AdvisorQuoteAppendLog(
                 "VEHICLE_PARTIAL_ALREADY_CONFIRMED",
                 AdvisorQuoteGetLastStep(),
@@ -860,6 +975,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                     . ", promotionSource=" AdvisorQuoteStatusValue(partialStatus, "promotionSource")
                     . ", matchedText=" AdvisorQuoteStatusValue(partialStatus, "matchedText")
             )
+            if gatePolicyEnabled
+                break
             continue
         }
 
@@ -872,6 +989,21 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
                 AdvisorQuoteGetLastStep(),
                 "partialVehicle=" partialVehicle["displayKey"]
                     . ", result=" result
+                    . ", candidateCount=" AdvisorQuoteStatusValue(partialStatus, "candidateCount")
+                    . ", candidateTexts=" AdvisorQuoteStatusValue(partialStatus, "candidateTexts")
+            )
+            continue
+        }
+
+        if gatePolicyEnabled {
+            deferredPartialVehicles.Push(partialVehicle)
+            AdvisorQuoteAppendLog(
+                "VEHICLE_PARTIAL_DEFERRED",
+                AdvisorQuoteGetLastStep(),
+                "partialVehicle=" partialVehicle["displayKey"]
+                    . ", result=" result
+                    . ", reason=rapport-gate-policy-does-not-add-partial-placeholder"
+                    . ", failedFields=" AdvisorQuoteStatusValue(partialStatus, "failedFields")
                     . ", candidateCount=" AdvisorQuoteStatusValue(partialStatus, "candidateCount")
                     . ", candidateTexts=" AdvisorQuoteStatusValue(partialStatus, "candidateTexts")
             )
@@ -926,6 +1058,35 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         )
     }
 
+    if (gatePolicyEnabled && gateSatisfied) {
+        AdvisorQuoteRapportVehicleLedgerMarkSkippedAfterGate(rapportLedger, satisfiedVehicles, &skippedAfterGateVehicles)
+        if !AdvisorQuoteResetOpenGatherAddVehicleRow("rapport-gate-satisfied", &failureReason, &failureScanPath)
+            return false
+    }
+
+    if (gatePolicyEnabled && !gateSatisfied) {
+        if !AdvisorQuoteResetOpenGatherAddVehicleRow("rapport-gate-failed", &failureReason, &failureScanPath)
+            return false
+        for _, item in rapportLedger["items"] {
+            status := item.Has("status") ? Trim(String(item["status"])) : ""
+            if (status = "" || !AdvisorQuoteRapportVehicleTerminalStatus(status))
+                AdvisorQuoteRapportVehicleLedgerSetStatus(rapportLedger, item["vehicle"], "RAPPORT_GATE_VEHICLE_FAILED", "no-gate-vehicle-created")
+        }
+        failureReason := "RAPPORT_GATE_VEHICLE_FAILED"
+        AdvisorQuoteAppendLog(
+            "RAPPORT_GATE_VEHICLE_FAILED",
+            AdvisorQuoteGetLastStep(),
+            "ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
+                . ", deferredCompleteVehicles=" AdvisorQuoteVehicleListSummary(deferredCompleteVehicles)
+                . ", deferredUnknownVehicles=" AdvisorQuoteVehicleListSummary(deferredUnknownVehicles)
+                . ", deferredPartialVehicles=" AdvisorQuoteVehicleListSummary(deferredPartialVehicles)
+                . ", reachedRapportGate=0"
+                . ", humanReviewRequired=1"
+        )
+        failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-gate-vehicle-failed")
+        return false
+    }
+
     if (vehicleSatisfiedCount = 0) {
         failureReason := "NO_RATEABLE_VEHICLES"
         AdvisorQuoteAppendLog(
@@ -940,7 +1101,7 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         return false
     }
 
-    if !AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(rapportLedger) {
+    if (!(gatePolicyEnabled && gateSatisfied) && !AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(rapportLedger)) {
         failureReason := "RAPPORT_VEHICLE_LEDGER_INCOMPLETE: " AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-incomplete")
         return false
@@ -998,6 +1159,11 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", deferredVinVehicles=" AdvisorQuoteVehicleListSummary(vehiclePolicy["deferredVinVehicles"])
             . ", vehicleSatisfiedCount=" vehicleSatisfiedCount
             . ", satisfiedVehicles=" AdvisorQuoteVehicleListSummary(satisfiedVehicles)
+            . ", reachedRapportGate=" ((gatePolicyEnabled && gateSatisfied) ? "1" : "0")
+            . ", gateVehicle=" gateVehicle
+            . ", provisionalGateVehicle=" (provisionalGateVehicle ? "1" : "0")
+            . ", skippedVehicles=" AdvisorQuoteVehicleListSummary(skippedAfterGateVehicles)
+            . ", ascReconciliationExpected=" (ascReconciliationExpected ? "1" : "0")
             . ", confirmedGuardArgsSummary=" expectedVehiclesForFinalGuard
     )
     confirmedStatus := AdvisorQuoteGetGatherConfirmedVehiclesStatusForVehicles(expectedVehiclesForGuardList)
@@ -1034,18 +1200,34 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", unexpectedVehicles=" AdvisorQuoteStatusValue(confirmedStatus, "unexpectedVehicles")
             . ", matchedVehicles=" AdvisorQuoteStatusValue(confirmedStatus, "matchedVehicles")
             . ", unresolvedLeadVehicles=" AdvisorQuoteStatusValue(confirmedStatus, "unresolvedLeadVehicles")
+            . ", reachedRapportGate=" ((gatePolicyEnabled && gateSatisfied) ? "1" : "0")
+            . ", gateVehicle=" gateVehicle
+            . ", provisionalGateVehicle=" (provisionalGateVehicle ? "1" : "0")
+            . ", skippedVehicles=" AdvisorQuoteVehicleListSummary(skippedAfterGateVehicles)
+            . ", ascReconciliationExpected=" (ascReconciliationExpected ? "1" : "0")
     )
-    if !AdvisorQuoteGatherConfirmedVehiclesSafe(confirmedStatus, profile, &failureReason) {
+    if (!(gatePolicyEnabled && gateSatisfied) && !AdvisorQuoteGatherConfirmedVehiclesSafe(confirmedStatus, profile, &failureReason)) {
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "confirmed-vehicles-unsafe")
         return false
     }
 
-    if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, vehicleSatisfiedCount, &failureReason, &failureScanPath)
-        return false
+    if !(gatePolicyEnabled && gateSatisfied) {
+        if !AdvisorQuoteCleanupStaleGatherVehicleRowIfSafe(expectedVehiclesForGuardList, staleDuplicateRowSeen, staleDuplicateRowDetails, vehicleSatisfiedCount, &failureReason, &failureScanPath)
+            return false
+    }
 
     finalRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
     if (AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent") = "1") {
-        if (vehicleSatisfiedCount > 0 && AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent") = "1") {
+        if (gatePolicyEnabled && gateSatisfied) {
+            if !AdvisorQuoteResetOpenGatherAddVehicleRow("rapport-gate-final-stale-row", &failureReason, &failureScanPath)
+                return false
+            finalRapportSnapshot := AdvisorQuoteGetGatherRapportSnapshot()
+            if (AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent") = "1") {
+                failureReason := "VEHICLE_ADD_ROW_RESET_FAILED: stale Add Car/Truck row remains after RAPPORT gate was satisfied. " AdvisorQuoteBuildGatherRapportSnapshotDetail(finalRapportSnapshot)
+                failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "vehicle-add-row-reset-failed")
+                return false
+            }
+        } else if (vehicleSatisfiedCount > 0 && AdvisorQuoteStatusValue(finalRapportSnapshot, "startQuotingSectionPresent") = "1") {
             AdvisorQuoteAppendLog(
                 "RAPPORT_STALE_ROW_DEFERRED_WITH_CONFIRMED_VEHICLE",
                 AdvisorQuoteGetLastStep(),
@@ -1084,7 +1266,8 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
         vehicleSatisfiedCount,
         AdvisorQuoteStatusValue(finalRapportSnapshot, "staleAddRowPresent"),
         AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent"),
-        AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
+        AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled"),
+        gatePolicyEnabled && gateSatisfied
     ) {
         failureReason := "RAPPORT_VEHICLE_LEDGER_START_QUOTING_BLOCKED: " AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger)
         failureScanPath := AdvisorQuoteScanCurrentPage("RAPPORT", "rapport-vehicle-ledger-start-quoting-blocked")
@@ -1101,8 +1284,14 @@ AdvisorQuoteHandleGatherData(profile, db, &failureReason := "", &failureScanPath
             . ", vehicleWarningPresent=" AdvisorQuoteStatusValue(finalRapportSnapshot, "vehicleWarningPresent")
             . ", createQuotesEnabled=" AdvisorQuoteStatusValue(finalRapportSnapshot, "createQuotesEnabled")
             . ", startQuotingAllowed=1"
+            . ", reachedRapportGate=" ((gatePolicyEnabled && gateSatisfied) ? "1" : "0")
+            . ", gateVehicle=" gateVehicle
+            . ", gateVehicleStatus=" gateVehicleStatus
+            . ", provisionalGateVehicle=" (provisionalGateVehicle ? "1" : "0")
+            . ", skippedVehicles=" AdvisorQuoteVehicleListSummary(skippedAfterGateVehicles)
+            . ", ascReconciliationExpected=" (ascReconciliationExpected ? "1" : "0")
     )
-    AdvisorQuoteCaptureStateSnapshotObserver("after_vehicle_confirmation", "confirmedOrAddedVehicleCount=" vehicleSatisfiedCount ", ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger))
+    AdvisorQuoteCaptureStateSnapshotObserver("after_vehicle_confirmation", "confirmedOrAddedVehicleCount=" vehicleSatisfiedCount ", reachedRapportGate=" ((gatePolicyEnabled && gateSatisfied) ? "1" : "0") ", gateVehicle=" gateVehicle ", ledger=" AdvisorQuoteRapportVehicleLedgerSummary(rapportLedger))
 
     startQuotingStatus := AdvisorQuoteGetGatherStartQuotingStatus(db)
     AdvisorQuoteAppendLog("GATHER_START_QUOTING_STATUS", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildGatherStartQuotingStatusDetail(startQuotingStatus))

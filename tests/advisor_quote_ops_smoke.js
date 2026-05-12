@@ -1133,6 +1133,30 @@ function testRapportAhkStaleRowCancelFailurePolicy() {
   assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed[\s\S]*staleAddRowPresent[\s\S]*confirmedOrAdded > 0[\s\S]*vehicleWarningPresent[\s\S]*confirmedOrAdded > 0/);
 }
 
+function testRapportGatePolicyAhkContracts() {
+  const rapportAhk = readRepoText('workflows/advisor/advisor_quote_rapport.ahk');
+  const vehicleAhk = readRepoText('workflows/advisor/advisor_quote_rapport_vehicles.ahk');
+  const dbAhk = readRepoText('domain/advisor_quote_db.ahk');
+  const mainAhk = readRepoText('main.ahk');
+
+  assert.match(dbAhk, /advisorRapportGateVehicleEnabled", true/);
+  assert.match(dbAhk, /advisorRapportAllowProvisionalSameFamilyGate", true/);
+  assert.match(mainAhk, /advisorRapportGateVehicleEnabled := true/);
+  assert.match(mainAhk, /advisorRapportAllowProvisionalSameFamilyGate := true/);
+  assert.match(vehicleAhk, /AdvisorQuoteRelatedAdvisorMakeBuckets[\s\S]*FORD TRUCKS[\s\S]*CHEVY TRUCKS[\s\S]*TOY\. TRUCKS/);
+  assert.match(vehicleAhk, /allowProvisionalSameFamilyGate/);
+  assert.match(vehicleAhk, /RAPPORT_GATE_PROVISIONAL_MODEL_SELECTED/);
+  assert.match(vehicleAhk, /VEHICLE_MODEL_NOT_FOUND_IN_BUCKET/);
+  assert.match(vehicleAhk, /AdvisorQuoteResetOpenGatherAddVehicleRow/);
+  assert.match(rapportAhk, /GATE_SATISFIED_PROVISIONAL/);
+  assert.match(vehicleAhk, /SKIPPED_AFTER_GATE_SATISFIED/);
+  assert.match(rapportAhk, /RAPPORT_GATE_VEHICLE_FAILED/);
+  assert.match(rapportAhk, /RAPPORT_GATE_MODEL_AMBIGUOUS/);
+  assert.match(rapportAhk, /UNSUPPORTED_AFTER_BUCKET_PROBING/);
+  assert.match(rapportAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed\([\s\S]*gatePolicyEnabled && gateSatisfied/);
+  assert.doesNotMatch(rapportAhk, /db-add-deferred/);
+}
+
 function testRapportVinBackedPublicRecordVehiclePolicy() {
   const missingModelCard = createVehicleCard('Potential Vehicles 2024 Toyota Camry VIN FAK3VNAA000000001 Confirm Remove', 'confirm-public-vin-missing-model');
   const missingModelButton = missingModelCard.children[0];
@@ -3839,6 +3863,73 @@ function testVehicleContracts() {
   ]);
   assert.strictEqual(runOperator('select_vehicle_dropdown_option', { index: 0, fieldName: 'Model', wantedText: 'F-150', modelAliases: 'F-150|F150', normalizedModelKeys: 'F150', strictModelMatch: '1' }, f150NotF250Doc), 'OK');
   assert.strictEqual(f150NotF250Doc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'F150');
+  const f150SameFamilyDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'F1502WD', text: 'F150 2WD' },
+      { value: 'F1504WD', text: 'F150 4WD' }
+    ])
+  ]);
+  const f150SameFamily = assertKeyBlock(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'F150',
+    model: 'F150',
+    modelAliases: 'F150',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1',
+    allowProvisionalSameFamilyGate: '1',
+    returnDetails: '1'
+  }, f150SameFamilyDoc), ['result', 'selectedValue', 'selectedOptionIndex', 'provisionalGateVehicle', 'provisionalReason']);
+  assert.strictEqual(f150SameFamily.result, 'PROVISIONAL');
+  assert.strictEqual(f150SameFamily.selectedValue, 'F1502WD');
+  assert.strictEqual(f150SameFamily.selectedOptionIndex, '1');
+  assert.strictEqual(f150SameFamily.provisionalGateVehicle, '1');
+  assert.strictEqual(f150SameFamily.provisionalReason, 'same-family prefix first available');
+  const f150SameFamilyReversedDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'F1504WD', text: 'F150 4WD' },
+      { value: 'F1502WD', text: 'F150 2WD' }
+    ])
+  ]);
+  const f150SameFamilyReversed = assertKeyBlock(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'F-150',
+    model: 'F-150',
+    modelAliases: 'F150',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1',
+    allowProvisionalSameFamilyGate: '1',
+    returnDetails: '1'
+  }, f150SameFamilyReversedDoc), ['result', 'selectedValue', 'selectedOptionIndex', 'provisionalGateVehicle']);
+  assert.strictEqual(f150SameFamilyReversed.result, 'PROVISIONAL');
+  assert.strictEqual(f150SameFamilyReversed.selectedValue, 'F1504WD');
+  assert.strictEqual(f150SameFamilyReversed.selectedOptionIndex, '1');
+  assert.strictEqual(f150SameFamilyReversed.provisionalGateVehicle, '1');
+  const f150NoUnsafeOvermatchDoc = new FakeDocument([
+    createSelect('ConsumerData.Assets.Vehicles[0].Model', [
+      { value: '', text: 'Select One' },
+      { value: 'ESCAPE', text: 'Escape' },
+      { value: 'EXPEDITION', text: 'Expedition' },
+      { value: 'EXPLORER', text: 'Explorer' }
+    ])
+  ]);
+  const f150NoUnsafeOvermatch = assertKeyBlock(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'F150',
+    model: 'F150',
+    modelAliases: 'F150',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1',
+    allowProvisionalSameFamilyGate: '1',
+    returnDetails: '1'
+  }, f150NoUnsafeOvermatchDoc), ['result', 'provisionalGateVehicle', 'applied']);
+  assert.strictEqual(f150NoUnsafeOvermatch.result, 'NO_OPTION');
+  assert.strictEqual(f150NoUnsafeOvermatch.provisionalGateVehicle, '0');
+  assert.strictEqual(f150NoUnsafeOvermatch.applied, '0');
   const priusNotPrimeDoc = new FakeDocument([
     createSelect('ConsumerData.Assets.Vehicles[0].Model', [
       { value: '', text: 'Select One' },
@@ -5029,6 +5120,7 @@ function run() {
   testVehicleMatching();
   testRapportVinBackedPublicRecordVehiclePolicy();
   testRapportAhkStaleRowCancelFailurePolicy();
+  testRapportGatePolicyAhkContracts();
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
   testResidentRunnerContracts();
