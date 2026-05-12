@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 
 const sidecar = require('../tools/playwright_advisor_scan_sidecar');
@@ -348,6 +349,96 @@ async function testDirectCdpTimeoutErrorMentionsOpTargetAndRecommendation() {
   );
 }
 
+async function testRunArchiveWritesLatestRunFileAndSummary() {
+  let callCount = 0;
+  const fakeClient = {
+    send(method, params) {
+      assert.strictEqual(method, 'Runtime.evaluate');
+      callCount += 1;
+      if (callCount === 1) {
+        return Promise.resolve({
+          result: {
+            type: 'string',
+            value: JSON.stringify({
+              href: 'https://advisorpro.allstate.com/#/apps/intel/102/overview',
+              title: 'Advisor Pro Private Title',
+              readyState: 'complete'
+            })
+          }
+        });
+      }
+      assert.ok(String(params.expression || '').includes('advisor_state_snapshot'));
+      return Promise.resolve({
+        result: {
+          type: 'string',
+          value: JSON.stringify({
+            ok: true,
+            op: 'advisor_state_snapshot',
+            route: 'PRODUCT_OVERVIEW',
+            confidence: 0.72,
+            blockers: [],
+            allowedNextActions: [],
+            unsafeReason: null
+          })
+        }
+      });
+    }
+  };
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => [{
+      type: 'page',
+      url: 'https://advisorpro.allstate.com/#/apps/intel/102/overview',
+      title: 'Advisor Pro Private Title',
+      webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/1'
+    }]
+  });
+
+  const runId = `contract_archive_${Date.now()}`;
+  const outputPath = `logs/playwright_contract_archive/${runId}/latest.json`;
+  const archiveDir = `logs/playwright_contract_archive/${runId}/archive`;
+  const config = sidecar.parseArgv([
+    '--op=advisor_state_snapshot',
+    '--output', outputPath,
+    '--archive-dir', archiveDir,
+    '--run-id', runId,
+    '--label', 'Product Overview Validation'
+  ], { env: {}, cwd: path.resolve(__dirname, '..') });
+
+  const envelope = await sidecar.runScan(config, {
+    playwright: null,
+    client: fakeClient,
+    fetchImpl,
+    runtimeText: RUNTIME_STUB
+  });
+
+  const latestPath = path.resolve(__dirname, '..', outputPath);
+  assert.ok(fs.existsSync(latestPath), 'latest scan file should be written');
+  assert.ok(envelope.archive, 'envelope should include archive metadata');
+  assert.strictEqual(envelope.archive.runId, runId);
+
+  const summaryPath = path.resolve(__dirname, '..', envelope.archive.summaryPath);
+  assert.ok(fs.existsSync(summaryPath), 'summary file should be written');
+  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+  assert.strictEqual(summary.runId, runId);
+  assert.strictEqual(summary.scanCount, 1);
+  assert.strictEqual(summary.lastRoute, 'PRODUCT_OVERVIEW');
+  assert.strictEqual(summary.lastConfidence, 0.72);
+  assert.strictEqual(summary.lastUnsafe, '0');
+  assert.strictEqual(summary.countsByRoute.PRODUCT_OVERVIEW, 1);
+  assert.strictEqual(summary.lastTarget.url, 'https://advisorpro.allstate.com/#/apps/intel/102/overview');
+  assert.strictEqual(summary.scanFiles.length, 1);
+
+  const scanFileRelative = summary.scanFiles[0];
+  const scanFileName = path.basename(scanFileRelative);
+  assert.strictEqual(scanFileName, '001_PRODUCT_OVERVIEW_advisor_state_snapshot.json');
+  assert.ok(!scanFileName.includes('advisorpro.allstate.com'));
+  assert.ok(!scanFileName.includes('Advisor Pro Private Title'));
+  assert.ok(fs.existsSync(path.resolve(__dirname, '..', scanFileRelative)), 'archive scan file should be written');
+}
+
 function testArgParsingAndOutputGuard() {
   const config = sidecar.parseArgv([
     '--cdp-url=http://127.0.0.1:9333',
@@ -361,6 +452,7 @@ function testArgParsingAndOutputGuard() {
   assert.deepStrictEqual(config.ops, ['advisor_state_snapshot', 'scan_current_page']);
   assert.strictEqual(config.timeoutMs, 1500);
   assert.strictEqual(config.cdpEvalTimeoutMs, 30000);
+  assert.ok(path.relative(path.resolve(__dirname, '..'), config.archiveDir).replace(/\\/g, '/').startsWith('logs/'));
 
   const evalTimeoutConfig = sidecar.parseArgv([
     '--op=advisor_state_snapshot',
@@ -374,6 +466,14 @@ function testArgParsingAndOutputGuard() {
   ], { env: {} });
   assert.deepStrictEqual(aliasConfig.targetUrlContains, ['advisor.example']);
 
+  const archiveConfig = sidecar.parseArgv([
+    '--archive-dir=logs/custom_archive',
+    '--run-id=live run: 01',
+    '--op=advisor_state_snapshot'
+  ], { env: {}, cwd: path.resolve(__dirname, '..') });
+  assert.ok(archiveConfig.archiveDir.endsWith('logs/custom_archive'));
+  assert.strictEqual(archiveConfig.runId, 'live_run_01');
+
   assert.throws(
     () => sidecar.parseArgv(['--op=advisor_state_snapshot,click_by_id'], { env: {} }),
     /Refusing non-read-only Advisor op/
@@ -382,7 +482,12 @@ function testArgParsingAndOutputGuard() {
     () => sidecar.assertOutputPathSafe(path.resolve(__dirname, '..', 'docs', 'raw_scan.json')),
     /outside logs/
   );
+  assert.throws(
+    () => sidecar.assertArchiveDirSafe(path.resolve(__dirname, '..', 'docs', 'raw_scans')),
+    /outside logs/
+  );
   sidecar.assertOutputPathSafe(path.resolve(__dirname, '..', 'logs', 'playwright_advisor_scan_latest.json'));
+  sidecar.assertArchiveDirSafe(path.resolve(__dirname, '..', 'logs', 'playwright_advisor_scans'));
 }
 
 function testOutputParsingAndSummaries() {
@@ -428,6 +533,7 @@ async function run() {
   await testDirectCdpClientHandlesBrowserStyleWebSocketPayloads();
   await testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly();
   await testDirectCdpTimeoutErrorMentionsOpTargetAndRecommendation();
+  await testRunArchiveWritesLatestRunFileAndSummary();
   testArgParsingAndOutputGuard();
   testOutputParsingAndSummaries();
   process.stdout.write('playwright_scan_sidecar_contract_tests: PASS\n');

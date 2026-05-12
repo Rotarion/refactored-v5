@@ -6,6 +6,7 @@ const path = require('path');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const OPERATOR_RUNTIME_PATH = path.join(REPO_ROOT, 'assets', 'js', 'advisor_quote', 'ops_result.js');
 const DEFAULT_OUTPUT_PATH = path.join(REPO_ROOT, 'logs', 'playwright_advisor_scan_latest.json');
+const DEFAULT_ARCHIVE_DIR = path.join(REPO_ROOT, 'logs', 'playwright_advisor_scans');
 const TOOL_NAME = 'playwright_advisor_scan_sidecar';
 const DIRECT_CDP_METHODS = Object.freeze([
   'Runtime.evaluate'
@@ -111,6 +112,33 @@ function readOption(argv, index) {
   return { value: argv[index + 1], nextIndex: index + 1 };
 }
 
+function sanitizeFilenameToken(value, fallback = 'scan') {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/https?:\/+[^ ]+/gi, '')
+    .replace(/[\\/:"*?<>|#%{}[\]^`~&=+@!$,;]+/g, '_')
+    .replace(/[^A-Za-z0-9_.-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_ .-]+|[_ .-]+$/g, '')
+    .slice(0, 80);
+  return cleaned || fallback;
+}
+
+function makeTimestampRunId(date = new Date()) {
+  const pad = (value, width = 2) => String(value).padStart(width, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    '_',
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+    '_',
+    pad(date.getMilliseconds(), 3)
+  ].join('');
+}
+
 function parseArgv(argv, options = {}) {
   const env = options.env || process.env;
   const cwd = options.cwd || REPO_ROOT;
@@ -119,6 +147,8 @@ function parseArgv(argv, options = {}) {
     targetUrlContains: ['advisorpro.allstate.com'],
     ops: [],
     outputPath: DEFAULT_OUTPUT_PATH,
+    archiveDir: DEFAULT_ARCHIVE_DIR,
+    runId: '',
     label: 'PLAYWRIGHT_SIDECAR_SCAN',
     reason: 'scan-only-foundation',
     timeoutMs: 5000,
@@ -187,6 +217,18 @@ function parseArgv(argv, options = {}) {
     if (token.startsWith('--output')) {
       const option = readOption(argv, i);
       config.outputPath = option.value;
+      i = option.nextIndex;
+      continue;
+    }
+    if (token.startsWith('--archive-dir')) {
+      const option = readOption(argv, i);
+      config.archiveDir = option.value;
+      i = option.nextIndex;
+      continue;
+    }
+    if (token.startsWith('--run-id')) {
+      const option = readOption(argv, i);
+      config.runId = sanitizeFilenameToken(option.value, 'run');
       i = option.nextIndex;
       continue;
     }
@@ -420,18 +462,143 @@ function resolveOutputPath(outputPath, cwd = REPO_ROOT) {
   return path.isAbsolute(outputPath) ? outputPath : path.resolve(cwd, outputPath);
 }
 
+function pathIsUnderLogs(outputPath, cwd = REPO_ROOT) {
+  const resolved = resolveOutputPath(outputPath, cwd);
+  const relative = path.relative(REPO_ROOT, resolved).replace(/\\/g, '/');
+  return !(relative.startsWith('../') || relative === '..' || path.isAbsolute(relative)) && relative.startsWith('logs/');
+}
+
 function assertOutputPathSafe(outputPath, options = {}) {
   if (options.allowOutputOutsideLogs) return;
-  const resolved = resolveOutputPath(outputPath, options.cwd || REPO_ROOT);
-  const relative = path.relative(REPO_ROOT, resolved).replace(/\\/g, '/');
-  if (relative.startsWith('../') || relative === '..' || path.isAbsolute(relative) || !relative.startsWith('logs/')) {
+  if (!pathIsUnderLogs(outputPath, options.cwd || REPO_ROOT)) {
     throw new Error('Refusing to write scan output outside logs/. Use --allow-output-outside-logs only for sanitized artifacts.');
+  }
+}
+
+function assertArchiveDirSafe(archiveDir, options = {}) {
+  if (!pathIsUnderLogs(archiveDir, options.cwd || REPO_ROOT)) {
+    throw new Error('Refusing to write scan archive outside logs/.');
   }
 }
 
 function writeJsonFile(outputPath, payload) {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
+function readJsonFileIfPresent(filePath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return fallback;
+    return fallback;
+  }
+}
+
+function routeFromResult(result) {
+  if (!result || typeof result !== 'object') return 'UNKNOWN';
+  const summary = result.summary || {};
+  if (summary.route) return String(summary.route);
+  if (summary.routeFamily) return String(summary.routeFamily);
+  const parsed = result.parsed || {};
+  const value = parsed.value || {};
+  if (value.route) return String(value.route);
+  if (value.routeFamily) return String(value.routeFamily);
+  if (value.result) return String(value.result);
+  return 'UNKNOWN';
+}
+
+function confidenceFromResult(result) {
+  if (!result || typeof result !== 'object') return '';
+  const summary = result.summary || {};
+  if (summary.confidence !== undefined && summary.confidence !== null) return summary.confidence;
+  const value = (result.parsed && result.parsed.value) || {};
+  return value.confidence !== undefined && value.confidence !== null ? value.confidence : '';
+}
+
+function unsafeFromResult(result) {
+  if (!result || typeof result !== 'object') return '';
+  const summary = result.summary || {};
+  if (summary.unsafe !== undefined && summary.unsafe !== null) return summary.unsafe;
+  const value = (result.parsed && result.parsed.value) || {};
+  if (value.unsafeReason !== undefined && value.unsafeReason !== null) return value.unsafeReason ? '1' : '0';
+  return '';
+}
+
+function archiveFilename(sequence, result, config = {}) {
+  const routeToken = sanitizeFilenameToken(routeFromResult(result).toUpperCase(), 'UNKNOWN').toUpperCase();
+  const opToken = sanitizeFilenameToken(result && result.op ? result.op : 'op', 'op');
+  const parts = [String(sequence).padStart(3, '0'), routeToken];
+  parts.push(opToken);
+  return `${parts.join('_')}.json`;
+}
+
+function buildInitialRunSummary(runId, createdAt) {
+  return {
+    runId,
+    createdAt,
+    scanCount: 0,
+    lastTarget: null,
+    lastRoute: '',
+    lastConfidence: '',
+    lastUnsafe: '',
+    countsByRoute: {},
+    scanFiles: []
+  };
+}
+
+function writeScanArchive(envelope, config) {
+  const runId = sanitizeFilenameToken(config.runId || makeTimestampRunId(), 'run');
+  const archiveDir = resolveOutputPath(config.archiveDir || DEFAULT_ARCHIVE_DIR, config.cwd);
+  assertArchiveDirSafe(archiveDir, config);
+  const runDir = path.join(archiveDir, 'runs', runId);
+  const summaryPath = path.join(runDir, 'run_summary.json');
+  const summary = readJsonFileIfPresent(summaryPath, buildInitialRunSummary(runId, envelope.capturedAt || new Date().toISOString()));
+  if (!summary.runId) summary.runId = runId;
+  if (!summary.createdAt) summary.createdAt = envelope.capturedAt || new Date().toISOString();
+  if (!summary.countsByRoute || typeof summary.countsByRoute !== 'object') summary.countsByRoute = {};
+  if (!Array.isArray(summary.scanFiles)) summary.scanFiles = [];
+
+  const written = [];
+  let sequence = Number(summary.scanCount || 0);
+  for (const result of envelope.results || []) {
+    sequence += 1;
+    const filename = archiveFilename(sequence, result, config);
+    const filePath = path.join(runDir, filename);
+    const route = routeFromResult(result);
+    const payload = {
+      schemaVersion: 'advisor-playwright-scan-archive-entry/v1',
+      runId,
+      sequence,
+      archivedAt: new Date().toISOString(),
+      tool: envelope.tool,
+      connection: envelope.connection,
+      target: envelope.target,
+      preflight: envelope.preflight || null,
+      label: config.label || '',
+      op: result.op,
+      route,
+      result
+    };
+    writeJsonFile(filePath, payload);
+    const relative = path.relative(REPO_ROOT, filePath).replace(/\\/g, '/');
+    written.push(relative);
+    summary.scanFiles.push(relative);
+    summary.countsByRoute[route] = Number(summary.countsByRoute[route] || 0) + 1;
+    summary.lastRoute = route;
+    summary.lastConfidence = confidenceFromResult(result);
+    summary.lastUnsafe = unsafeFromResult(result);
+  }
+
+  summary.scanCount = Number(summary.scanCount || 0) + written.length;
+  summary.lastTarget = envelope.target || null;
+  writeJsonFile(summaryPath, summary);
+  return {
+    runId,
+    runDir: path.relative(REPO_ROOT, runDir).replace(/\\/g, '/'),
+    summaryPath: path.relative(REPO_ROOT, summaryPath).replace(/\\/g, '/'),
+    scanFiles: written
+  };
 }
 
 function loadPlaywright(options = {}) {
@@ -900,6 +1067,9 @@ async function runScan(config, options = {}) {
     const resolved = resolveOutputPath(config.outputPath, config.cwd);
     assertOutputPathSafe(resolved, config);
     config.outputPath = resolved;
+    config.archiveDir = resolveOutputPath(config.archiveDir || DEFAULT_ARCHIVE_DIR, config.cwd);
+    assertArchiveDirSafe(config.archiveDir, config);
+    config.runId = sanitizeFilenameToken(config.runId || makeTimestampRunId(), 'run');
   }
 
   const playwright = Object.prototype.hasOwnProperty.call(options, 'playwright')
@@ -909,7 +1079,10 @@ async function runScan(config, options = {}) {
   const envelope = backend === 'playwright-cdp'
     ? await runScanWithPlaywright(config, playwright)
     : await runScanWithDirectCdp(config, options);
-  if (!config.noWrite) writeJsonFile(config.outputPath, envelope);
+  if (!config.noWrite) {
+    envelope.archive = writeScanArchive(envelope, config);
+    writeJsonFile(config.outputPath, envelope);
+  }
   return envelope;
 }
 
@@ -921,6 +1094,7 @@ function formatHelp() {
     'Defaults:',
     '  target URL token: advisorpro.allstate.com',
     '  output: logs/playwright_advisor_scan_latest.json',
+    '  archive: logs/playwright_advisor_scans/runs/<runId>/',
     '  ops: advisor_state_snapshot, advisor_active_modal_status, gather_rapport_snapshot, asc_drivers_vehicles_snapshot, scan_current_page',
     '  direct CDP evaluation timeout: 30000ms (override with --cdp-eval-timeout-ms)',
     '',
@@ -971,19 +1145,24 @@ module.exports = {
   DEFAULT_ADVISOR_ARGS,
   OPERATOR_RUNTIME_PATH,
   DEFAULT_OUTPUT_PATH,
+  DEFAULT_ARCHIVE_DIR,
   DirectCdpClient,
   assertCdpMethodAllowed,
+  assertArchiveDirSafe,
   assertOutputPathSafe,
   assertReadOnlyOps,
+  archiveFilename,
   buildDirectCdpEvaluateExpression,
   buildDirectCdpEvaluationRequests,
   buildDirectCdpPreflightRequest,
   buildArgsForOp,
+  confidenceFromResult,
   cdpHttpUrl,
   fetchCdpTargets,
   formatHelp,
   loadOperatorRuntime,
   loadPlaywright,
+  makeTimestampRunId,
   normalizeOps,
   parseArgv,
   parseKeyValueLines,
@@ -991,11 +1170,15 @@ module.exports = {
   readRuntimeEvaluateResult,
   renderOperatorPayload,
   resolveOutputPath,
+  routeFromResult,
   runScan,
   runScanWithDirectCdp,
   runScanWithPlaywright,
+  sanitizeFilenameToken,
   selectCdpTarget,
   selectScanBackend,
   summarizeOpResult,
+  unsafeFromResult,
+  writeScanArchive,
   urlMatches
 };

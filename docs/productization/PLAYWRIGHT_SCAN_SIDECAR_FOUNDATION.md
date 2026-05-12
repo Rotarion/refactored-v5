@@ -82,6 +82,33 @@ The default target URL token is `advisorpro.allstate.com`. The default output is
 logs/playwright_advisor_scan_latest.json
 ```
 
+Each successful CDP scan also archives an immutable per-scan JSON file under:
+
+```text
+logs/playwright_advisor_scans/runs/<runId>/
+```
+
+If `--run-id` is omitted, the sidecar generates a timestamp-based run id. The run folder receives numbered scan files using only the route token and read-only op name, for example:
+
+```text
+001_PRODUCT_OVERVIEW_advisor_state_snapshot.json
+```
+
+The sidecar also maintains:
+
+```text
+logs/playwright_advisor_scans/runs/<runId>/run_summary.json
+```
+
+The run summary records the run id, creation time, scan count, last target, last route/confidence/unsafe value, counts by route, and the list of archived scan files. `--archive-dir` can move the archive root, but it is still refused outside `logs/`. `--label` remains available as human-readable scan metadata; filenames stay route/op based so raw URLs and page titles are not copied into archive filenames.
+
+Example with an explicit run id:
+
+```powershell
+$NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
+& $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222 --op advisor_state_snapshot --run-id live-validation-001 --label "Product overview validation"
+```
+
 To run a smaller read-only bundle:
 
 ```powershell
