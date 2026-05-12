@@ -1,0 +1,1731 @@
+{
+  "schemaVersion": "advisor-live-snapshot-sanitized-bundle/v2",
+  "batch": "2026-05-12-post-classifier-recapture",
+  "createdFor": "Hermes Advisor Pro automation project",
+  "sanitizationNotes": [
+    "Raw customer names, extra-driver names, street addresses, VINs, masked VIN fragments, and long page text anchors were redacted.",
+    "Dynamic ASCPRODUCT and customer-summary IDs were normalized to route-family placeholders where practical.",
+    "This bundle is safe for repo evidence review but should still be treated as internal project data."
+  ],
+  "snapshots": [
+    {
+      "sourceFileSanitizedName": "01_entry_begin_quoting.json",
+      "capturedAt": "2026-05-12 16:23:37",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/intel/102/start",
+      "route": "ENTRY_CREATE_FORM",
+      "confidence": 0.84,
+      "allowedNextActions": [
+        "human_review_required"
+      ],
+      "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect.",
+      "blockers": [],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": false,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_MISSING_CONTINUE"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:23:37",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/intel/102/start",
+        "route": "ENTRY_CREATE_FORM",
+        "confidence": 0.84,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect.",
+        "error": null,
+        "retryAttempted": false,
+        "retryReason": "",
+        "retrySucceeded": false,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:23:37.808Z",
+          "url": "/apps/intel/102/start",
+          "route": "ENTRY_CREATE_FORM",
+          "confidence": 0.84,
+          "anchors": [
+            "url:/apps/intel/102/start",
+            "title:Allstate Advisor Pro℠",
+            "heading:Begin Quoting",
+            "text:entry-start-actions",
+            "PAGE_TEXT_REDACTED_ENTRY_NAV"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "02_entry_standardized_address_alert.json",
+      "capturedAt": "2026-05-12 16:25:01",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/intel/102/start",
+      "route": "ENTRY_CREATE_FORM",
+      "confidence": 0.78,
+      "allowedNextActions": [],
+      "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect. Blocking UI or alert evidence is present: alert:ENTRY_STANDARDIZED_ADDRESS_ALERT",
+      "blockers": [
+        "alert:ENTRY_STANDARDIZED_ADDRESS_ALERT"
+      ],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": false,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_MISSING_CONTINUE"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:25:01",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/intel/102/start",
+        "route": "ENTRY_CREATE_FORM",
+        "confidence": 0.78,
+        "allowedNextActions": [],
+        "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect. Blocking UI or alert evidence is present: alert:ENTRY_STANDARDIZED_ADDRESS_ALERT",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:25:00.770Z",
+          "url": "/apps/intel/102/start",
+          "route": "ENTRY_CREATE_FORM",
+          "confidence": 0.78,
+          "anchors": [
+            "url:/apps/intel/102/start",
+            "title:Allstate Advisor Pro℠",
+            "heading:Begin Quoting",
+            "heading:Create New Prospect",
+            "heading:Standardized Address",
+            "heading:Current Home Address",
+            "text:entry-start-actions",
+            "PAGE_TEXT_REDACTED_ENTRY_NAV"
+          ],
+          "blockers": [
+            "alert:ENTRY_STANDARDIZED_ADDRESS_ALERT"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect. Blocking UI or alert evidence is present: alert:ENTRY_STANDARDIZED_ADDRESS_ALERT"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "03_customer_summary_prefill_gate.json",
+      "capturedAt": "2026-05-12 16:25:25",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/customer-summary/{id}/overview",
+      "route": "CUSTOMER_SUMMARY_PREFILL_GATE",
+      "confidence": 0.93,
+      "allowedNextActions": [
+        "start_prefill"
+      ],
+      "unsafeReason": null,
+      "blockers": [],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": false,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_MISSING_CONTINUE"
+        ]
+      },
+      "prefillGate": {
+        "present": true,
+        "startHereVisible": true
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:25:25",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/customer-summary/{id}/overview",
+        "route": "CUSTOMER_SUMMARY_PREFILL_GATE",
+        "confidence": 0.93,
+        "allowedNextActions": [
+          "start_prefill"
+        ],
+        "unsafeReason": null,
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:25:25.032Z",
+          "url": "/apps/customer-summary/{id}/overview",
+          "route": "CUSTOMER_SUMMARY_PREFILL_GATE",
+          "confidence": 0.93,
+          "anchors": [
+            "url:/apps/customer-summary/{id}/overview",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Quote History",
+            "heading:Assets Details",
+            "url:/apps/customer-summary/",
+            "text:START HERE",
+            "url:/apps/customer-summary/|url:/overview|text:START HERE|text:Quote History|text:Assets Details|text:summary-anchor-extra"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": true,
+            "startHereVisible": true
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "start_prefill"
+          ],
+          "unsafeReason": null
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "04_product_overview_grid.json",
+      "capturedAt": "2026-05-12 16:25:46",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/intel/102/overview",
+      "route": "PRODUCT_OVERVIEW",
+      "confidence": 0.72,
+      "allowedNextActions": [],
+      "unsafeReason": "Product overview route detected, but the Auto product tile/status evidence was not resolved.",
+      "blockers": [],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": true,
+        "continueEnabled": true,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:25:46",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/intel/102/overview",
+        "route": "PRODUCT_OVERVIEW",
+        "confidence": 0.72,
+        "allowedNextActions": [],
+        "unsafeReason": "Product overview route detected, but the Auto product tile/status evidence was not resolved.",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:25:46.066Z",
+          "url": "/apps/intel/102/overview",
+          "route": "PRODUCT_OVERVIEW",
+          "confidence": 0.72,
+          "anchors": [
+            "url:/apps/intel/102/overview",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "route-candidate:url-only"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": true,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "Product overview route detected, but the Auto product tile/status evidence was not resolved."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "05_rapport.json",
+      "capturedAt": "2026-05-12 16:26:16",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/intel/102/rapport",
+      "route": "RAPPORT",
+      "confidence": 0.88,
+      "allowedNextActions": [
+        "inspect_rapport",
+        "confirm_vehicles"
+      ],
+      "unsafeReason": null,
+      "blockers": [],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": false,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_MISSING_CONTINUE"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": true,
+        "vehicleCount": 6,
+        "driverCount": null,
+        "staleAddVehicleRow": false
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:26:16",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/intel/102/rapport",
+        "route": "RAPPORT",
+        "confidence": 0.88,
+        "allowedNextActions": [
+          "inspect_rapport",
+          "confirm_vehicles"
+        ],
+        "unsafeReason": null,
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:26:16.432Z",
+          "url": "/apps/intel/102/rapport",
+          "route": "RAPPORT",
+          "confidence": 0.88,
+          "anchors": [
+            "url:/apps/intel/102/rapport",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Customer Name (Primary) Age 21",
+            "heading:STANDARDIZED_ADDRESS (Primary)",
+            "heading:2021 Riya",
+            "heading:2024 Ram trucks 3500 2WD VIN_OR_MASKED_VIN_REDACTED",
+            "heading:ADDRESS_REDACTED",
+            "heading:2025 Tesla MODEL 3 VIN_OR_MASKED_VIN_REDACTED",
+            "heading:2019 Toyota COROLLA VIN_OR_MASKED_VIN_REDACTED",
+            "heading:2010 Mazda CX-9 VIN_OR_MASKED_VIN_REDACTED",
+            "text:Gather Data"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": true,
+            "vehicleCount": 6,
+            "driverCount": null,
+            "staleAddVehicleRow": false
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "inspect_rapport",
+            "confirm_vehicles"
+          ],
+          "unsafeReason": null
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "06_select_product.json",
+      "capturedAt": "2026-05-12 16:27:04",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/intel/102/selectProduct",
+      "route": "SELECT_PRODUCT",
+      "confidence": 0.92,
+      "allowedNextActions": [
+        "answer_select_product"
+      ],
+      "unsafeReason": null,
+      "blockers": [],
+      "product": {
+        "autoVisible": true,
+        "autoSelected": true,
+        "saveContinueVisible": true
+      },
+      "selectProduct": {
+        "present": true,
+        "ratingState": "FL",
+        "product": "AUTO",
+        "productText": "Auto",
+        "effectiveDate": "DATE_REDACTED",
+        "currentAddressPresent": true,
+        "currentlyInsuredAnswer": "YES",
+        "ownRentAnswer": "Own",
+        "continueVisible": true,
+        "continueEnabled": true,
+        "missingRequired": []
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": false,
+        "routeId": "",
+        "driversAndVehiclesHeadingPresent": false,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": false,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 0,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+        "blockers": [
+          "NOT_ASC_DRIVERS_VEHICLES"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:27:04",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/intel/102/selectProduct",
+        "route": "SELECT_PRODUCT",
+        "confidence": 0.92,
+        "allowedNextActions": [
+          "answer_select_product"
+        ],
+        "unsafeReason": null,
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:27:03.808Z",
+          "url": "/apps/intel/102/selectProduct",
+          "route": "SELECT_PRODUCT",
+          "confidence": 0.92,
+          "anchors": [
+            "url:/apps/intel/102/selectProduct",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Select Product",
+            "url:/selectProduct",
+            "control:SelectProduct.Product",
+            "control:selectProductContinue"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": true,
+            "autoSelected": true,
+            "saveContinueVisible": true
+          },
+          "selectProduct": {
+            "present": true,
+            "ratingState": "FL",
+            "product": "AUTO",
+            "productText": "Auto",
+            "effectiveDate": "DATE_REDACTED",
+            "currentAddressPresent": true,
+            "currentlyInsuredAnswer": "YES",
+            "ownRentAnswer": "Own",
+            "continueVisible": true,
+            "continueEnabled": true,
+            "missingRequired": []
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "answer_select_product"
+          ],
+          "unsafeReason": null
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "07_asc_inline_participant_panel.json",
+      "capturedAt": "2026-05-12 16:27:30",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/ASCPRODUCT/{id}/",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "confidence": 0.78,
+      "allowedNextActions": [],
+      "unsafeReason": "ASC Drivers/Vehicles blockers: INLINE_PANEL_READY_TO_SAVE|UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_INLINE_PARTICIPANT_PANEL:Let's get some more details",
+      "blockers": [
+        "active:ASC_INLINE_PARTICIPANT_PANEL:Let's get some more details"
+      ],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": true,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_CONTINUE_DISABLED"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": true,
+        "routeId": "{id}",
+        "driversAndVehiclesHeadingPresent": true,
+        "inlineParticipantPanelPresent": true,
+        "inlineParticipantSavePresent": true,
+        "inlineParticipantSaveEnabled": true,
+        "pageSaveContinuePresent": true,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 1,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 0,
+        "removedDriverCount": 1,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "ASC_INLINE_PARTICIPANT_READY_TO_SAVE",
+        "blockers": [
+          "INLINE_PANEL_READY_TO_SAVE",
+          "UNRESOLVED_FOUND_DRIVERS:1"
+        ],
+        "nextRecommendedAction": "save_inline_participant_panel"
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:27:30",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/ASCPRODUCT/{id}/",
+        "route": "ASC_DRIVERS_VEHICLES",
+        "confidence": 0.78,
+        "allowedNextActions": [],
+        "unsafeReason": "ASC Drivers/Vehicles blockers: INLINE_PANEL_READY_TO_SAVE|UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_INLINE_PARTICIPANT_PANEL:Let's get some more details",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:27:30.344Z",
+          "url": "/apps/ASCPRODUCT/{id}/",
+          "route": "ASC_DRIVERS_VEHICLES",
+          "confidence": 0.78,
+          "anchors": [
+            "url:/apps/ASCPRODUCT/{id}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "heading:Let's get some more details",
+            "url:/apps/ASCPRODUCT/",
+            "text:Drivers and vehicles",
+            "panel:inline-participant",
+            "blocker:ASC_INLINE_PARTICIPANT_READY_TO_SAVE"
+          ],
+          "blockers": [
+            "active:ASC_INLINE_PARTICIPANT_PANEL:Let's get some more details"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "{id}",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": true,
+            "inlineParticipantSavePresent": true,
+            "inlineParticipantSaveEnabled": true,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 1,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_INLINE_PARTICIPANT_READY_TO_SAVE",
+            "blockers": [
+              "INLINE_PANEL_READY_TO_SAVE",
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": "save_inline_participant_panel"
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "ASC Drivers/Vehicles blockers: INLINE_PANEL_READY_TO_SAVE|UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_INLINE_PARTICIPANT_PANEL:Let's get some more details"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "08_asc_remove_driver_modal.json",
+      "capturedAt": "2026-05-12 16:27:59",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/ASCPRODUCT/{id}/",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "confidence": 0.78,
+      "allowedNextActions": [],
+      "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_REMOVE_DRIVER_MODAL:EXTRA_DRIVER_NAME",
+      "blockers": [
+        "active:ASC_REMOVE_DRIVER_MODAL:EXTRA_DRIVER_NAME"
+      ],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": true,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_CONTINUE_DISABLED"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": true,
+        "routeId": "{id}",
+        "driversAndVehiclesHeadingPresent": true,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": true,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 1,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 1,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "ASC_REMOVE_DRIVER_MODAL_OPEN",
+        "blockers": [
+          "UNRESOLVED_FOUND_DRIVERS:1"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:27:59",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/ASCPRODUCT/{id}/",
+        "route": "ASC_DRIVERS_VEHICLES",
+        "confidence": 0.78,
+        "allowedNextActions": [],
+        "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_REMOVE_DRIVER_MODAL:EXTRA_DRIVER_NAME",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:27:59.440Z",
+          "url": "/apps/ASCPRODUCT/{id}/",
+          "route": "ASC_DRIVERS_VEHICLES",
+          "confidence": 0.78,
+          "anchors": [
+            "url:/apps/ASCPRODUCT/{id}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "heading:EXTRA_DRIVER_NAME",
+            "url:/apps/ASCPRODUCT/",
+            "text:Drivers and vehicles",
+            "blocker:ASC_REMOVE_DRIVER_MODAL_OPEN"
+          ],
+          "blockers": [
+            "active:ASC_REMOVE_DRIVER_MODAL:EXTRA_DRIVER_NAME"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "{id}",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 1,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_REMOVE_DRIVER_MODAL_OPEN",
+            "blockers": [
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_REMOVE_DRIVER_MODAL:EXTRA_DRIVER_NAME"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "09_asc_vehicle_modal.json",
+      "capturedAt": "2026-05-12 16:28:31",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/ASCPRODUCT/{id}/",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "confidence": 0.78,
+      "allowedNextActions": [],
+      "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_VEHICLE_MODAL:2024 Ram 3500",
+      "blockers": [
+        "active:ASC_VEHICLE_MODAL:2024 Ram 3500"
+      ],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": true,
+        "continueEnabled": false,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+          "SELECT_PRODUCT_CONTINUE_DISABLED"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": true,
+        "routeId": "{id}",
+        "driversAndVehiclesHeadingPresent": true,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": true,
+        "pageSaveContinueEnabled": false,
+        "unresolvedDriverCount": 1,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 1,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "ASC_VEHICLE_MODAL_OPEN",
+        "blockers": [
+          "UNRESOLVED_FOUND_DRIVERS:1"
+        ],
+        "nextRecommendedAction": ""
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:28:31",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/ASCPRODUCT/{id}/",
+        "route": "ASC_DRIVERS_VEHICLES",
+        "confidence": 0.78,
+        "allowedNextActions": [],
+        "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_VEHICLE_MODAL:2024 Ram 3500",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:28:31.371Z",
+          "url": "/apps/ASCPRODUCT/{id}/",
+          "route": "ASC_DRIVERS_VEHICLES",
+          "confidence": 0.78,
+          "anchors": [
+            "url:/apps/ASCPRODUCT/{id}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "heading:2024 Ram 3500",
+            "url:/apps/ASCPRODUCT/",
+            "text:Drivers and vehicles",
+            "blocker:ASC_VEHICLE_MODAL_OPEN"
+          ],
+          "blockers": [
+            "active:ASC_VEHICLE_MODAL:2024 Ram 3500"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "{id}",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 1,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_VEHICLE_MODAL_OPEN",
+            "blockers": [
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1 Blocking UI or alert evidence is present: active:ASC_VEHICLE_MODAL:2024 Ram 3500"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "sourceFileSanitizedName": "10_asc_drivers_vehicles_main.json",
+      "capturedAt": "2026-05-12 16:28:54",
+      "op": "advisor_state_snapshot",
+      "url": "/apps/ASCPRODUCT/{id}/",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "confidence": 0.91,
+      "allowedNextActions": [
+        "human_review_required"
+      ],
+      "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1",
+      "blockers": [],
+      "product": {
+        "autoVisible": false,
+        "autoSelected": false,
+        "saveContinueVisible": false
+      },
+      "selectProduct": {
+        "present": false,
+        "ratingState": "",
+        "product": "",
+        "productText": "",
+        "effectiveDate": "",
+        "currentAddressPresent": false,
+        "currentlyInsuredAnswer": null,
+        "ownRentAnswer": null,
+        "continueVisible": true,
+        "continueEnabled": true,
+        "missingRequired": [
+          "SELECT_PRODUCT_MISSING_RATING_STATE",
+          "SELECT_PRODUCT_MISSING_PRODUCT",
+          "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+          "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS"
+        ]
+      },
+      "prefillGate": {
+        "present": false,
+        "startHereVisible": false
+      },
+      "rapport": {
+        "present": false,
+        "vehicleCount": null,
+        "driverCount": null,
+        "staleAddVehicleRow": null
+      },
+      "ascDriversVehicles": {
+        "present": true,
+        "routeId": "{id}",
+        "driversAndVehiclesHeadingPresent": true,
+        "inlineParticipantPanelPresent": false,
+        "inlineParticipantSavePresent": false,
+        "inlineParticipantSaveEnabled": false,
+        "pageSaveContinuePresent": true,
+        "pageSaveContinueEnabled": true,
+        "unresolvedDriverCount": 1,
+        "unresolvedVehicleCount": 0,
+        "addedDriverCount": 1,
+        "removedDriverCount": 0,
+        "addedVehicleCount": 0,
+        "removedVehicleCount": 0,
+        "blockerCode": "ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED",
+        "blockers": [
+          "UNRESOLVED_FOUND_DRIVERS:1"
+        ],
+        "nextRecommendedAction": "review_unresolved_drivers_vehicles"
+      },
+      "iframe": {
+        "present": false,
+        "count": 0,
+        "hints": []
+      },
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 16:28:54",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "/apps/ASCPRODUCT/{id}/",
+        "route": "ASC_DRIVERS_VEHICLES",
+        "confidence": 0.91,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T20:28:54.142Z",
+          "url": "/apps/ASCPRODUCT/{id}/",
+          "route": "ASC_DRIVERS_VEHICLES",
+          "confidence": 0.91,
+          "anchors": [
+            "url:/apps/ASCPRODUCT/{id}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:CUSTOMER_NAME (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "url:/apps/ASCPRODUCT/",
+            "text:Drivers and vehicles",
+            "blocker:ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": true,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "{id}",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": true,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 1,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED",
+            "blockers": [
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": "review_unresolved_drivers_vehicles"
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "ASC Drivers/Vehicles blockers: UNRESOLVED_FOUND_DRIVERS:1"
+        },
+        "rawText": null
+      }
+    }
+  ]
+}
