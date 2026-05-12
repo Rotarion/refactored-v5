@@ -1161,6 +1161,130 @@
       { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
     ]
   },
+  "snapshot-gather-one-safe-vehicle-gate-deferred": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES POTENTIAL VEHICLES UNKNOWN VEHICLES Start Quoting Auto Create Quotes & Order Reports",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2020 Toyota COROLLA VINMASK*******01 Edit Remove CONFIRMED", "children": [
+          { "tag": "button", "id": "confirmed-corolla-edit", "text": "Edit" },
+          { "tag": "button", "id": "confirmed-corolla-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "section", "text": "POTENTIAL VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card potential-vehicle", "text": "2022 Ford F-150 masked evidence Confirm Remove", "children": [
+          { "tag": "button", "id": "potential-f150-confirm", "text": "Confirm" },
+          { "tag": "button", "id": "potential-f150-remove", "text": "Remove" }
+        ] },
+        { "tag": "div", "className": "vehicle-card potential-vehicle", "text": "2022 Ford F-250 masked evidence Confirm Remove", "children": [
+          { "tag": "button", "id": "potential-f250-confirm", "text": "Confirm" },
+          { "tag": "button", "id": "potential-f250-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "section", "text": "UNKNOWN VEHICLES Vehicle details unavailable for deferred review" },
+      { "tag": "input", "type": "checkbox", "id": "ConsumerReports.Auto.Product-intel#102", "checked": true },
+      { "tag": "select", "id": "ConsumerReports.Auto.RatingState", "options": [
+        { "value": "FL", "text": "FL", "selected": true }
+      ] },
+      { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports" }
+    ]
+  },
+  "snapshot-gather-stale-row-safe-cancel-empty": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck Start Quoting",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2020 Toyota COROLLA VINMASK*******01 Edit Remove CONFIRMED" }
+      ] },
+      { "tag": "div", "className": "vehicle-add-row incomplete", "text": "Add Car or Truck INCOMPLETE Car/Truck Vehicle Type Year VIN Manufacturer Model Sub-Model", "children": [
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+          { "value": "CAR_TRUCK", "text": "Car/Truck", "selected": true }
+        ] },
+        { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "" },
+        { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "disabled": true, "options": [] },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "disabled": true, "options": [] },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [] },
+        { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+        { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+      ] }
+    ]
+  },
+  "snapshot-gather-stale-row-unsafe-needed-evidence": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck 2022 Ford model unresolved",
+    "nodes": [
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card confirmed-vehicle", "text": "2020 Toyota COROLLA VINMASK*******01 Edit Remove CONFIRMED" }
+      ] },
+      { "tag": "div", "className": "vehicle-add-row incomplete", "text": "Add Car or Truck 2022 Ford Select One F-150 F-250", "children": [
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].VehTypeCd", "options": [
+          { "value": "CAR_TRUCK", "text": "Car/Truck", "selected": true }
+        ] },
+        { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].ModelYear", "value": "2022" },
+        { "tag": "input", "type": "text", "id": "ConsumerData.Assets.Vehicles[5].VehIdentificationNumber", "value": "" },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Manufacturer", "options": [
+          { "value": "FORD", "text": "Ford", "selected": true }
+        ] },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].Model", "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "F150A", "text": "F-150" },
+          { "value": "F150B", "text": "F150" }
+        ] },
+        { "tag": "select", "id": "ConsumerData.Assets.Vehicles[5].SubModel", "disabled": true, "options": [
+          { "value": "", "text": "Select One", "selected": true }
+        ] },
+        { "tag": "button", "id": "confirmNewVehicle", "text": "Add" },
+        { "tag": "button", "id": "cancelVehicleComponent_5", "text": "Cancel" }
+      ] }
+    ]
+  },
+  "gather-controlled-add-bounded-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Add Car or Truck Year Manufacturer Model bounded options",
+    "nodes": [
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[0].ModelYear", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "2023", "text": "2023" },
+        { "value": "2024", "text": "2024" }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[0].Manufacturer", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "CHEVROLET", "text": "Chevrolet" },
+        { "value": "CHEVYTRUCKS", "text": "CHEVY TRUCKS" },
+        { "value": "HONDA", "text": "Honda" }
+      ] },
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[0].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "SILVERADO", "text": "Silverado" },
+        { "value": "TAHOE", "text": "Tahoe" },
+        { "value": "CIVIC", "text": "Civic" }
+      ] },
+      { "tag": "button", "id": "confirmNewVehicle", "text": "Add" }
+    ]
+  },
+  "gather-controlled-add-ambiguous-model-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Add Car or Truck ambiguous Ford model options",
+    "nodes": [
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[0].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "F150A", "text": "F-150" },
+        { "value": "F150B", "text": "F150" }
+      ] }
+    ]
+  },
+  "gather-controlled-add-broad-model-row": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Add Car or Truck broad model options should not be guessed",
+    "nodes": [
+      { "tag": "select", "id": "ConsumerData.Assets.Vehicles[0].Model", "options": [
+        { "value": "", "text": "Select One", "selected": true },
+        { "value": "ACCORD", "text": "Accord" },
+        { "value": "PILOT", "text": "Pilot" }
+      ] }
+    ]
+  },
   "snapshot-active-unknown-modal": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
     "bodyText": "Gather Data",

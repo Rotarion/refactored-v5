@@ -1154,6 +1154,8 @@ function testRapportGatePolicyAhkContracts() {
   assert.match(rapportAhk, /RAPPORT_GATE_MODEL_AMBIGUOUS/);
   assert.match(rapportAhk, /UNSUPPORTED_AFTER_BUCKET_PROBING/);
   assert.match(rapportAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed\([\s\S]*gatePolicyEnabled && gateSatisfied/);
+  assert.match(vehicleAhk, /if gateSatisfied \{[\s\S]*confirmedOrAdded > 0[\s\S]*staleAddRowPresent/);
+  assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerMarkSkippedAfterGate[\s\S]*SKIPPED_AFTER_GATE_SATISFIED/);
   assert.doesNotMatch(rapportAhk, /db-add-deferred/);
 }
 
@@ -3364,6 +3366,49 @@ function testVehicleContracts() {
   assert.strictEqual(partialDuplicateStatus.result, 'ADDED');
   assert.strictEqual(partialDuplicateStatus.partialPromoted, '1');
   assert.strictEqual(partialDuplicateStatus.duplicateAddRowOpenForConfirmedVehicle, '1');
+  const boundedAddFixture = fixtureScenario('gather-controlled-add-bounded-row');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'ModelYear',
+    wantedText: '2024'
+  }, boundedAddFixture.doc, boundedAddFixture.href), 'OK');
+  assert.strictEqual(boundedAddFixture.doc.getElementById('ConsumerData.Assets.Vehicles[0].ModelYear').value, '2024');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Manufacturer',
+    wantedText: 'CHEVY TRUCKS',
+    allowedMakeLabels: 'CHEVROLET|CHEVY TRUCKS|CHEVY VANS'
+  }, boundedAddFixture.doc, boundedAddFixture.href), 'OK');
+  assert.strictEqual(boundedAddFixture.doc.getElementById('ConsumerData.Assets.Vehicles[0].Manufacturer').value, 'CHEVYTRUCKS');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'Tahoe',
+    modelAliases: 'TAHOE',
+    normalizedModelKeys: 'TAHOE',
+    strictModelMatch: '1'
+  }, boundedAddFixture.doc, boundedAddFixture.href), 'OK');
+  assert.strictEqual(boundedAddFixture.doc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, 'TAHOE');
+  const ambiguousAddFixture = fixtureScenario('gather-controlled-add-ambiguous-model-row');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'F-Series',
+    modelAliases: 'F-Series',
+    normalizedModelKeys: 'F150',
+    strictModelMatch: '1'
+  }, ambiguousAddFixture.doc, ambiguousAddFixture.href), 'AMBIGUOUS');
+  assert.strictEqual(ambiguousAddFixture.doc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, '');
+  const broadAddFixture = fixtureScenario('gather-controlled-add-broad-model-row');
+  assert.strictEqual(runOperator('select_vehicle_dropdown_option', {
+    index: 0,
+    fieldName: 'Model',
+    wantedText: 'Civic',
+    modelAliases: 'CIVIC',
+    normalizedModelKeys: 'CIVIC',
+    strictModelMatch: '1'
+  }, broadAddFixture.doc, broadAddFixture.href), 'NO_OPTION');
+  assert.strictEqual(broadAddFixture.doc.getElementById('ConsumerData.Assets.Vehicles[0].Model').value, '');
   const staleAllConfirmedDoc = confirmedVehicleCardsDoc([
     '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED',
     '2013 Hyundai SONATA FAKEHYUN*******02 Edit Remove CONFIRMED',
@@ -3472,6 +3517,33 @@ function testVehicleContracts() {
   assert.strictEqual(staleUnsafeStatus.result, 'UNSAFE');
   assert.strictEqual(staleUnsafeStatus.safeToCancel, '0');
   assert.strictEqual(staleUnsafeStatus.reason, 'expected-vehicles-not-satisfied');
+  const staleSafeCancelFixture = fixtureScenario('snapshot-gather-stale-row-safe-cancel-empty');
+  const staleSafeCancelStatus = assertKeyBlock(runReadOnlySnapshot('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '1'
+  }, staleSafeCancelFixture), [
+    'result', 'rowIncomplete', 'yearValue', 'manufacturerValue', 'modelValue',
+    'cancelButtonScoped', 'safeToCancel', 'reason'
+  ]);
+  assert.strictEqual(staleSafeCancelStatus.result, 'FOUND');
+  assert.strictEqual(staleSafeCancelStatus.rowIncomplete, '1');
+  assert.strictEqual(staleSafeCancelStatus.yearValue, '');
+  assert.strictEqual(staleSafeCancelStatus.manufacturerValue, '');
+  assert.strictEqual(staleSafeCancelStatus.modelValue, '');
+  assert.strictEqual(staleSafeCancelStatus.cancelButtonScoped, '1');
+  assert.strictEqual(staleSafeCancelStatus.safeToCancel, '1');
+  assert.strictEqual(staleSafeCancelStatus.reason, 'safe');
+  const staleUnsafeFixture = fixtureScenario('snapshot-gather-stale-row-unsafe-needed-evidence');
+  const staleUnsafeModel = staleUnsafeFixture.doc.getElementById('ConsumerData.Assets.Vehicles[5].Model');
+  const staleUnsafeFixtureStatus = assertKeyBlock(runReadOnlySnapshot('gather_stale_add_vehicle_row_status', {
+    allExpectedVehiclesSatisfied: '0'
+  }, staleUnsafeFixture), ['result', 'safeToCancel', 'reason', 'yearValue', 'manufacturerValue', 'modelValue']);
+  assert.strictEqual(staleUnsafeFixtureStatus.result, 'UNSAFE');
+  assert.strictEqual(staleUnsafeFixtureStatus.safeToCancel, '0');
+  assert.strictEqual(staleUnsafeFixtureStatus.reason, 'expected-vehicles-not-satisfied');
+  assert.strictEqual(staleUnsafeFixtureStatus.yearValue, '2022');
+  assert.strictEqual(staleUnsafeFixtureStatus.manufacturerValue, 'FORD');
+  assert.strictEqual(staleUnsafeFixtureStatus.modelValue, '');
+  assert.strictEqual(staleUnsafeModel.value, '');
   const staleScopedMixedSectionDoc = confirmedVehicleCardsDoc([
     '2010 Nissan CUBE FAKECUBE*******03 Edit Remove CONFIRMED'
   ]);
@@ -4907,6 +4979,31 @@ function testGatherRapportSnapshotContracts() {
   assert.strictEqual(confirmed.result, 'OK');
   assert.strictEqual(confirmed.confirmedVehicleCount, '1');
   assert.ok(confirmed.confirmedVehicles.includes('MUSTANG'));
+
+  const oneSafeGate = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-one-safe-vehicle-gate-deferred')), requiredKeys);
+  assert.strictEqual(oneSafeGate.result, 'OK');
+  assert.strictEqual(oneSafeGate.confirmedVehicleCount, '1');
+  assert.strictEqual(oneSafeGate.potentialVehicleCount, '2');
+  assert.strictEqual(oneSafeGate.vehicleWarningPresent, '0');
+  assert.strictEqual(oneSafeGate.staleAddRowPresent, '0');
+  assert.strictEqual(oneSafeGate.createQuotesEnabled, '1');
+  assert.ok(oneSafeGate.confirmedVehicles.includes('COROLLA'));
+  assert.ok(oneSafeGate.potentialVehicles.includes('F-150'));
+  assert.ok(oneSafeGate.potentialVehicles.includes('F-250'));
+
+  const staleSafe = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-stale-row-safe-cancel-empty')), requiredKeys);
+  assert.strictEqual(staleSafe.result, 'OK');
+  assert.strictEqual(staleSafe.activeModalType, 'GATHER_STALE_ADD_VEHICLE_ROW');
+  assert.strictEqual(staleSafe.activePanelType, 'GATHER_STALE_ADD_VEHICLE_ROW');
+  assert.strictEqual(staleSafe.staleAddRowPresent, '1');
+  assert.strictEqual(staleSafe.blockerCode, 'GATHER_STALE_ADD_VEHICLE_ROW_OPEN');
+  assert.strictEqual(staleSafe.confirmedVehicleCount, '1');
+
+  const staleUnsafe = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-stale-row-unsafe-needed-evidence')), requiredKeys);
+  assert.strictEqual(staleUnsafe.result, 'OK');
+  assert.strictEqual(staleUnsafe.activeModalType, 'GATHER_STALE_ADD_VEHICLE_ROW');
+  assert.strictEqual(staleUnsafe.staleAddRowPresent, '1');
+  assert.strictEqual(staleUnsafe.blockerCode, 'GATHER_STALE_ADD_VEHICLE_ROW_OPEN');
 
   const nonRapport = assertKeyBlock(runReadOnlySnapshot(
     'gather_rapport_snapshot',
