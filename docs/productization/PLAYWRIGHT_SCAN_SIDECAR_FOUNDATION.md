@@ -14,7 +14,9 @@ This sidecar is a productization-only read path. It does not change AutoHotkey w
 - CDP output location: `logs/playwright_advisor_scan_latest.json`
 - TypeScript sidecar output location: `logs/playwright_ts_advisor_scan_latest.json`
 
-The sidecar connects to an already-running Chromium/Edge instance over Playwright CDP and evaluates only allowlisted read-only Advisor ops from the existing generated operator runtime.
+The CDP attach sidecar connects to an already-running Chromium/Edge instance and evaluates only allowlisted read-only Advisor ops from the existing generated operator runtime.
+
+It prefers `playwright` / `playwright-core` when one of those modules is already available. If neither module is installed, it falls back to a zero-dependency direct CDP path using Node built-in `fetch` and `WebSocket`.
 
 The TypeScript skeleton launches a dedicated Microsoft Edge persistent profile under `logs/playwright-edge-advisor-profile`, opens the initial Advisor URL through the browser launch command, then only waits for a matching Advisor page and performs the same read-only state reads.
 
@@ -42,6 +44,10 @@ CDP attach utility:
 
 - No browser launch.
 - No navigation.
+- No npm, npx, corepack, package-lock, or node_modules requirement for the direct CDP fallback.
+- Target discovery reads `http://127.0.0.1:9222/json` first, then `/json/list`.
+- Browser evaluation uses only CDP `Runtime.evaluate`.
+- Forbidden CDP action/navigation methods such as `Page.navigate`, `Input.*`, `Runtime.callFunctionOn`, screenshots, and screencasts are rejected by the method guard.
 
 TypeScript dedicated-profile utility:
 
@@ -58,6 +64,8 @@ $NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencie
 & $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222
 ```
 
+This works without Playwright installed when the bundled Node runtime provides built-in `fetch` and `WebSocket`.
+
 The default target URL token is `advisorpro.allstate.com`. The default output is:
 
 ```text
@@ -69,6 +77,13 @@ To run a smaller read-only bundle:
 ```powershell
 $NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
 & $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222 --op advisor_state_snapshot --op scan_current_page
+```
+
+To override the target URL token:
+
+```powershell
+$NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
+& $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222 --target-url-token advisorpro.allstate.com
 ```
 
 For the TypeScript dedicated Edge profile skeleton:

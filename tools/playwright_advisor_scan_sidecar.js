@@ -7,6 +7,16 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const OPERATOR_RUNTIME_PATH = path.join(REPO_ROOT, 'assets', 'js', 'advisor_quote', 'ops_result.js');
 const DEFAULT_OUTPUT_PATH = path.join(REPO_ROOT, 'logs', 'playwright_advisor_scan_latest.json');
 const TOOL_NAME = 'playwright_advisor_scan_sidecar';
+const DIRECT_CDP_METHODS = Object.freeze([
+  'Runtime.evaluate'
+]);
+const FORBIDDEN_CDP_METHOD_PATTERNS = Object.freeze([
+  /^Page\.navigate$/,
+  /^Input\./,
+  /^Page\.captureScreenshot$/,
+  /^Page\.startScreencast$/,
+  /^Runtime\.callFunctionOn$/
+]);
 
 const READ_ONLY_OPS = Object.freeze([
   'advisor_state_snapshot',
@@ -161,6 +171,12 @@ function parseArgv(argv, options = {}) {
       i = option.nextIndex;
       continue;
     }
+    if (token.startsWith('--target-url-token')) {
+      const option = readOption(argv, i);
+      config.targetUrlContains = splitList(option.value);
+      i = option.nextIndex;
+      continue;
+    }
     if (token.startsWith('--op')) {
       const option = readOption(argv, i);
       config.ops.push(...splitList(option.value));
@@ -260,6 +276,53 @@ function renderOperatorPayload(runtimeText, op, args = {}) {
     .replace('@@ARGS@@', JSON.stringify(args));
 }
 
+function buildDirectCdpEvaluateExpression(runtimeText, op, args = {}) {
+  const payload = renderOperatorPayload(runtimeText, op, args);
+  return [
+    '(() => {',
+    "  let copied = '';",
+    '  const copy = (value) => { copied = String(value ?? \'\'); return copied; };',
+    '  try {',
+    `    const returned = Function('copy', ${JSON.stringify(payload)})(copy);`,
+    "    return copied || String(returned ?? '');",
+    '  } catch (error) {',
+    "    const clean = (value, max = 320) => String(value ?? '').replace(/\\r?\\n+/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, max);",
+    "    return ['result=ERROR', 'op=' + clean(" + JSON.stringify(op) + ", 80), 'message=' + clean((error && error.message) || error, 280), 'url=' + clean((globalThis.location && location.href) || '', 240)].join('\\n');",
+    '  }',
+    '})()'
+  ].join('\n');
+}
+
+function assertCdpMethodAllowed(method) {
+  const name = String(method || '');
+  if (!DIRECT_CDP_METHODS.includes(name)) {
+    throw new Error(`Refusing unsupported CDP method: ${name}`);
+  }
+  if (FORBIDDEN_CDP_METHOD_PATTERNS.some((pattern) => pattern.test(name))) {
+    throw new Error(`Refusing forbidden CDP method: ${name}`);
+  }
+}
+
+function buildDirectCdpEvaluationRequests(runtimeText, ops, config = {}) {
+  assertReadOnlyOps(ops);
+  return ops.map((op) => {
+    const args = buildArgsForOp(op, config);
+    const expression = buildDirectCdpEvaluateExpression(runtimeText, op, args);
+    const request = {
+      op,
+      method: 'Runtime.evaluate',
+      params: {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: false
+      }
+    };
+    assertCdpMethodAllowed(request.method);
+    return request;
+  });
+}
+
 function parseKeyValueLines(raw) {
   const parsed = {};
   for (const line of String(raw || '').replace(/\r/g, '').split('\n')) {
@@ -339,15 +402,20 @@ function writeJsonFile(outputPath, payload) {
   fs.writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
-function loadPlaywright() {
+function loadPlaywright(options = {}) {
+  const requireFn = options.requireFn || require;
   for (const packageName of ['playwright', 'playwright-core']) {
     try {
-      return require(packageName);
+      return requireFn(packageName);
     } catch (error) {
       if (!error || error.code !== 'MODULE_NOT_FOUND') throw error;
     }
   }
-  throw new Error('Playwright is not installed. Install playwright or playwright-core before running the live CDP sidecar.');
+  return null;
+}
+
+function selectScanBackend(playwright) {
+  return playwright ? 'playwright-cdp' : 'direct-cdp';
 }
 
 function delay(ms) {
@@ -394,15 +462,8 @@ async function evaluateReadOnlyPayload(page, payload, timeoutMs, op) {
   }, payload), timeoutMs, `Advisor op ${op}`);
 }
 
-async function runScan(config) {
+async function runScanWithPlaywright(config, playwright) {
   assertReadOnlyOps(config.ops);
-  if (!config.noWrite) {
-    const resolved = resolveOutputPath(config.outputPath, config.cwd);
-    assertOutputPathSafe(resolved, config);
-    config.outputPath = resolved;
-  }
-
-  const playwright = loadPlaywright();
   const browser = await playwright.chromium.connectOverCDP(config.cdpUrl, { timeout: config.timeoutMs });
   try {
     const page = await selectTargetPage(browser, config);
@@ -452,13 +513,273 @@ async function runScan(config) {
       results
     };
 
-    if (!config.noWrite) writeJsonFile(config.outputPath, envelope);
     return envelope;
   } finally {
     if (browser && typeof browser.disconnect === 'function') {
       await browser.disconnect().catch(() => {});
     }
   }
+}
+
+function normalizeCdpBaseUrl(cdpUrl) {
+  const parsed = new URL(cdpUrl);
+  parsed.hash = '';
+  parsed.search = '';
+  return parsed;
+}
+
+function cdpHttpUrl(cdpUrl, endpoint) {
+  const parsed = normalizeCdpBaseUrl(cdpUrl);
+  parsed.pathname = endpoint;
+  return parsed.toString();
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs, options = {}) {
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('Direct CDP fallback requires a Node runtime with built-in fetch.');
+  }
+  const AbortControllerImpl = options.AbortControllerImpl || globalThis.AbortController;
+  const controller = typeof AbortControllerImpl === 'function' ? new AbortControllerImpl() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetchImpl(url, controller ? { signal: controller.signal } : {});
+    if (!response || !response.ok) {
+      const status = response ? `${response.status} ${response.statusText || ''}`.trim() : 'no response';
+      throw new Error(`HTTP ${status}`);
+    }
+    return await response.json();
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchCdpTargets(cdpUrl, timeoutMs, options = {}) {
+  const errors = [];
+  for (const endpoint of ['/json', '/json/list']) {
+    const url = cdpHttpUrl(cdpUrl, endpoint);
+    try {
+      const payload = await fetchJsonWithTimeout(url, timeoutMs, options);
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.targets)) return payload.targets;
+      errors.push(`${endpoint}: response was not a target array`);
+    } catch (error) {
+      errors.push(`${endpoint}: ${String(error && error.message || error)}`);
+    }
+  }
+  throw new Error(`Unable to read CDP target list. ${errors.join(' | ')}`);
+}
+
+function selectCdpTarget(targets, config) {
+  const pages = targets.filter((target) => {
+    return target
+      && target.type === 'page'
+      && typeof target.webSocketDebuggerUrl === 'string'
+      && target.webSocketDebuggerUrl;
+  });
+  if (config.pageIndex != null) {
+    const target = pages[config.pageIndex];
+    if (!target) throw new Error(`No CDP page target at index ${config.pageIndex}`);
+    return target;
+  }
+  const target = pages.find((candidate) => {
+    return config.allowNonAdvisor || urlMatches(candidate.url || '', config.targetUrlContains);
+  });
+  if (!target) {
+    throw new Error(`No matching CDP page target found for token(s): ${config.targetUrlContains.join(', ')}`);
+  }
+  return target;
+}
+
+class DirectCdpClient {
+  constructor(webSocketUrl, options = {}) {
+    this.webSocketUrl = webSocketUrl;
+    this.timeoutMs = options.timeoutMs || 5000;
+    this.WebSocketImpl = options.WebSocketImpl || globalThis.WebSocket;
+    this.nextId = 1;
+    this.pending = new Map();
+    this.socket = null;
+  }
+
+  connect() {
+    if (typeof this.WebSocketImpl !== 'function') {
+      return Promise.reject(new Error('Direct CDP fallback requires a Node runtime with built-in WebSocket.'));
+    }
+    return new Promise((resolve, reject) => {
+      const socket = new this.WebSocketImpl(this.webSocketUrl);
+      this.socket = socket;
+      let opened = false;
+      const timer = setTimeout(() => {
+        reject(new Error(`CDP WebSocket connect timed out after ${this.timeoutMs}ms`));
+        try { socket.close(); } catch {}
+      }, this.timeoutMs);
+      const cleanup = () => {
+        clearTimeout(timer);
+        socket.removeEventListener && socket.removeEventListener('open', onOpen);
+        socket.removeEventListener && socket.removeEventListener('error', onError);
+      };
+      const onOpen = () => {
+        opened = true;
+        cleanup();
+        resolve(this);
+      };
+      const onError = (event) => {
+        if (!opened) {
+          cleanup();
+          reject(new Error(`CDP WebSocket error: ${event && event.message ? event.message : 'connect failed'}`));
+        }
+      };
+      const onMessage = (event) => this.handleMessage(event);
+      const onClose = () => this.rejectAllPending(new Error('CDP WebSocket closed'));
+      socket.addEventListener('open', onOpen);
+      socket.addEventListener('error', onError);
+      socket.addEventListener('message', onMessage);
+      socket.addEventListener('close', onClose);
+    });
+  }
+
+  handleMessage(event) {
+    const raw = event && Object.prototype.hasOwnProperty.call(event, 'data') ? event.data : event;
+    const text = typeof raw === 'string' ? raw : String(raw || '');
+    let message = null;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      return;
+    }
+    if (!message || !message.id || !this.pending.has(message.id)) return;
+    const pending = this.pending.get(message.id);
+    this.pending.delete(message.id);
+    clearTimeout(pending.timer);
+    if (message.error) {
+      pending.reject(new Error(`CDP ${pending.method} failed: ${message.error.message || JSON.stringify(message.error)}`));
+      return;
+    }
+    pending.resolve(message.result || {});
+  }
+
+  send(method, params = {}) {
+    assertCdpMethodAllowed(method);
+    if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) {
+      return Promise.reject(new Error('CDP WebSocket is not open.'));
+    }
+    const id = this.nextId++;
+    const payload = JSON.stringify({ id, method, params });
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP ${method} timed out after ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
+      this.pending.set(id, { resolve, reject, timer, method });
+      this.socket.send(payload);
+    });
+  }
+
+  rejectAllPending(error) {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+      this.pending.delete(id);
+    }
+  }
+
+  close() {
+    this.rejectAllPending(new Error('CDP client closed'));
+    if (this.socket) {
+      try { this.socket.close(); } catch {}
+    }
+  }
+}
+
+function readRuntimeEvaluateResult(response) {
+  if (response.exceptionDetails) {
+    const details = response.exceptionDetails;
+    const message = details.text || (details.exception && details.exception.description) || 'Runtime.evaluate exception';
+    throw new Error(message);
+  }
+  const result = response.result || {};
+  if (Object.prototype.hasOwnProperty.call(result, 'value')) return String(result.value ?? '');
+  if (Object.prototype.hasOwnProperty.call(result, 'unserializableValue')) return String(result.unserializableValue ?? '');
+  if (result.description) return String(result.description);
+  return '';
+}
+
+async function runScanWithDirectCdp(config, options = {}) {
+  assertReadOnlyOps(config.ops);
+  const targets = await fetchCdpTargets(config.cdpUrl, config.timeoutMs, options);
+  const target = selectCdpTarget(targets, config);
+  const targetUrl = target.url || '';
+  if (!config.allowNonAdvisor && !urlMatches(targetUrl, config.targetUrlContains)) {
+    throw new Error(`Selected CDP target does not match allowed Advisor target token(s): ${targetUrl}`);
+  }
+
+  const runtimeText = options.runtimeText || loadOperatorRuntime();
+  const requests = buildDirectCdpEvaluationRequests(runtimeText, config.ops, config);
+  const client = options.client || new DirectCdpClient(target.webSocketDebuggerUrl, {
+    timeoutMs: config.timeoutMs,
+    WebSocketImpl: options.WebSocketImpl
+  });
+  if (!options.client) await client.connect();
+
+  try {
+    const startedAt = new Date().toISOString();
+    const results = [];
+    for (const request of requests) {
+      const opStarted = Date.now();
+      const response = await client.send(request.method, request.params);
+      const raw = readRuntimeEvaluateResult(response);
+      const parsed = parseOpOutput(request.op, raw);
+      results.push({
+        op: request.op,
+        readOnly: true,
+        ok: String(raw || '').trim() !== '',
+        elapsedMs: Date.now() - opStarted,
+        summary: summarizeOpResult(request.op, parsed),
+        parsed,
+        raw
+      });
+    }
+
+    return {
+      schemaVersion: 'advisor-playwright-scan-sidecar/v1',
+      tool: TOOL_NAME,
+      capturedAt: startedAt,
+      readOnly: true,
+      mutationAllowed: false,
+      connection: {
+        kind: 'direct-cdp',
+        cdpUrl: config.cdpUrl
+      },
+      target: {
+        url: targetUrl,
+        title: target.title || ''
+      },
+      ops: config.ops,
+      outputPath: config.noWrite ? '' : config.outputPath,
+      results
+    };
+  } finally {
+    if (!options.client) client.close();
+  }
+}
+
+async function runScan(config, options = {}) {
+  assertReadOnlyOps(config.ops);
+  if (!config.noWrite) {
+    const resolved = resolveOutputPath(config.outputPath, config.cwd);
+    assertOutputPathSafe(resolved, config);
+    config.outputPath = resolved;
+  }
+
+  const playwright = Object.prototype.hasOwnProperty.call(options, 'playwright')
+    ? options.playwright
+    : loadPlaywright(options);
+  const backend = selectScanBackend(playwright);
+  const envelope = backend === 'playwright-cdp'
+    ? await runScanWithPlaywright(config, playwright)
+    : await runScanWithDirectCdp(config, options);
+  if (!config.noWrite) writeJsonFile(config.outputPath, envelope);
+  return envelope;
 }
 
 function formatHelp() {
@@ -474,6 +795,7 @@ function formatHelp() {
     'Safety:',
     '  The CLI refuses any op not in its read-only allowlist.',
     '  It connects to an existing browser over CDP and does not launch, navigate, click, type, screenshot, or focus pages.',
+    '  If playwright/playwright-core is unavailable, it uses direct CDP /json target discovery plus Runtime.evaluate.',
     '  Scan output is refused outside logs/ unless --allow-output-outside-logs is passed for sanitized artifacts.'
   ].join('\n');
 }
@@ -512,21 +834,35 @@ if (require.main === module) {
 
 module.exports = {
   READ_ONLY_OPS,
+  DIRECT_CDP_METHODS,
   DEFAULT_BUNDLE_OPS,
   DEFAULT_ADVISOR_ARGS,
   OPERATOR_RUNTIME_PATH,
   DEFAULT_OUTPUT_PATH,
+  DirectCdpClient,
+  assertCdpMethodAllowed,
   assertOutputPathSafe,
   assertReadOnlyOps,
+  buildDirectCdpEvaluateExpression,
+  buildDirectCdpEvaluationRequests,
   buildArgsForOp,
+  cdpHttpUrl,
+  fetchCdpTargets,
   formatHelp,
   loadOperatorRuntime,
+  loadPlaywright,
   normalizeOps,
   parseArgv,
   parseKeyValueLines,
   parseOpOutput,
+  readRuntimeEvaluateResult,
   renderOperatorPayload,
   resolveOutputPath,
+  runScan,
+  runScanWithDirectCdp,
+  runScanWithPlaywright,
+  selectCdpTarget,
+  selectScanBackend,
   summarizeOpResult,
   urlMatches
 };

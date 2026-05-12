@@ -35,6 +35,17 @@ function testPayloadRenderingRefusesMutations() {
   );
 }
 
+function testDirectCdpFallbackSelection() {
+  const missingRequire = (packageName) => {
+    const error = new Error(`missing ${packageName}`);
+    error.code = 'MODULE_NOT_FOUND';
+    throw error;
+  };
+  assert.strictEqual(sidecar.loadPlaywright({ requireFn: missingRequire }), null);
+  assert.strictEqual(sidecar.selectScanBackend(null), 'direct-cdp');
+  assert.strictEqual(sidecar.selectScanBackend({ chromium: {} }), 'playwright-cdp');
+}
+
 function testAdvisorArgsMirrorSnapshotContract() {
   const scanArgs = sidecar.buildArgsForOp('scan_current_page', {
     label: 'CONTRACT_TEST',
@@ -62,6 +73,108 @@ function testActualRuntimeRendersReadOnlyOps() {
   }
 }
 
+function testDirectCdpRequestsAreReadOnlyRuntimeEvaluateOnly() {
+  const requests = sidecar.buildDirectCdpEvaluationRequests(RUNTIME_STUB, [
+    'advisor_state_snapshot',
+    'scan_current_page'
+  ], {
+    label: 'CONTRACT_TEST',
+    reason: 'direct-cdp'
+  });
+  assert.strictEqual(requests.length, 2);
+  for (const request of requests) {
+    assert.strictEqual(request.method, 'Runtime.evaluate');
+    assert.strictEqual(request.params.awaitPromise, true);
+    assert.strictEqual(request.params.returnByValue, true);
+    assert.strictEqual(request.params.userGesture, false);
+    assert.ok(request.params.expression.includes("Function('copy'"));
+    assert.ok(!request.params.expression.includes('Page.navigate'));
+    assert.ok(!request.params.expression.includes('Input.dispatchKeyEvent'));
+    assert.ok(!request.params.expression.includes('Input.insertText'));
+    assert.ok(!request.params.expression.includes('Runtime.callFunctionOn'));
+    assert.ok(!request.params.expression.includes('Page.captureScreenshot'));
+  }
+
+  assert.throws(
+    () => sidecar.buildDirectCdpEvaluationRequests(RUNTIME_STUB, ['click_by_id'], {}),
+    /Refusing non-read-only Advisor op/
+  );
+  assert.throws(
+    () => sidecar.buildDirectCdpEvaluateExpression(RUNTIME_STUB, 'fill_gather_defaults', {}),
+    /Refusing non-read-only Advisor op/
+  );
+}
+
+function testDirectCdpMethodGuard() {
+  assert.deepStrictEqual(sidecar.DIRECT_CDP_METHODS, ['Runtime.evaluate']);
+  sidecar.assertCdpMethodAllowed('Runtime.evaluate');
+  for (const method of [
+    'Page.navigate',
+    'Input.dispatchKeyEvent',
+    'Input.insertText',
+    'Runtime.callFunctionOn',
+    'Page.captureScreenshot',
+    'Page.startScreencast'
+  ]) {
+    assert.throws(() => sidecar.assertCdpMethodAllowed(method), /Refusing/);
+  }
+}
+
+async function testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly() {
+  const sentMethods = [];
+  const fakeClient = {
+    send(method, params) {
+      sentMethods.push({ method, params });
+      assert.strictEqual(method, 'Runtime.evaluate');
+      return Promise.resolve({
+        result: {
+          type: 'string',
+          value: JSON.stringify({
+            ok: true,
+            op: 'advisor_state_snapshot',
+            route: 'RAPPORT',
+            confidence: 0.88,
+            blockers: [],
+            allowedNextActions: [],
+            unsafeReason: null
+          })
+        }
+      });
+    },
+    close() {
+      throw new Error('provided test client should not be closed by sidecar');
+    }
+  };
+  const fetchImpl = async (url) => {
+    assert.ok(String(url).endsWith('/json'));
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => [{
+        type: 'page',
+        url: 'https://advisorpro.allstate.com/#/apps/intel/102/rapport',
+        title: 'Advisor Pro',
+        webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/1'
+      }]
+    };
+  };
+  const config = sidecar.parseArgv([
+    '--op=advisor_state_snapshot',
+    '--no-write',
+    '--timeout-ms=1000'
+  ], { env: {}, cwd: path.resolve(__dirname, '..') });
+  const envelope = await sidecar.runScanWithDirectCdp(config, {
+    client: fakeClient,
+    fetchImpl,
+    runtimeText: RUNTIME_STUB
+  });
+  assert.strictEqual(envelope.connection.kind, 'direct-cdp');
+  assert.strictEqual(envelope.target.url, 'https://advisorpro.allstate.com/#/apps/intel/102/rapport');
+  assert.deepStrictEqual(sentMethods.map((entry) => entry.method), ['Runtime.evaluate']);
+  assert.strictEqual(envelope.results.length, 1);
+}
+
 function testArgParsingAndOutputGuard() {
   const config = sidecar.parseArgv([
     '--cdp-url=http://127.0.0.1:9333',
@@ -74,6 +187,12 @@ function testArgParsingAndOutputGuard() {
   assert.deepStrictEqual(config.targetUrlContains, ['advisorpro.allstate.com', 'example.internal']);
   assert.deepStrictEqual(config.ops, ['advisor_state_snapshot', 'scan_current_page']);
   assert.strictEqual(config.timeoutMs, 1500);
+
+  const aliasConfig = sidecar.parseArgv([
+    '--target-url-token=advisor.example',
+    '--op=advisor_state_snapshot'
+  ], { env: {} });
+  assert.deepStrictEqual(aliasConfig.targetUrlContains, ['advisor.example']);
 
   assert.throws(
     () => sidecar.parseArgv(['--op=advisor_state_snapshot,click_by_id'], { env: {} }),
@@ -118,14 +237,21 @@ function testOutputParsingAndSummaries() {
   assert.strictEqual(sidecar.summarizeOpResult('scan_current_page', scanParsed).fieldCount, 1);
 }
 
-function run() {
+async function run() {
   testReadOnlyAllowlist();
   testPayloadRenderingRefusesMutations();
+  testDirectCdpFallbackSelection();
   testAdvisorArgsMirrorSnapshotContract();
   testActualRuntimeRendersReadOnlyOps();
+  testDirectCdpRequestsAreReadOnlyRuntimeEvaluateOnly();
+  testDirectCdpMethodGuard();
+  await testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly();
   testArgParsingAndOutputGuard();
   testOutputParsingAndSummaries();
   process.stdout.write('playwright_scan_sidecar_contract_tests: PASS\n');
 }
 
-run();
+run().catch((error) => {
+  process.stderr.write(String(error && error.stack || error));
+  process.exit(1);
+});
