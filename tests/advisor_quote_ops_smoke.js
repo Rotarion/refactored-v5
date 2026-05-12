@@ -1008,6 +1008,86 @@ function operatorRuntimeSize() {
   return fs.readFileSync(sourcePath, 'utf8').length;
 }
 
+const AHK_CALLED_ADVISOR_OPS = [
+  'address_verification_status',
+  'advisor_active_modal_status',
+  'advisor_state_snapshot',
+  'any_vehicle_already_added',
+  'asc_driver_rows_status',
+  'asc_drivers_vehicles_snapshot',
+  'asc_participant_detail_status',
+  'asc_reconcile_driver_rows',
+  'asc_reconcile_vehicle_rows',
+  'asc_resolve_participant_marital_and_spouse',
+  'asc_vehicle_rows_status',
+  'cancel_stale_add_vehicle_row',
+  'click_by_id',
+  'click_by_text',
+  'click_create_quotes_order_reports',
+  'click_customer_summary_start_here',
+  'click_gather_add_row_add_button',
+  'click_product_overview_subnav_from_rapport',
+  'click_product_overview_tile',
+  'click_select_product_continue',
+  'click_start_quoting_add_product',
+  'confirm_potential_vehicle',
+  'customer_summary_overview_status',
+  'detect_state',
+  'driver_is_already_added',
+  'ensure_auto_start_quoting_state',
+  'ensure_select_product_defaults',
+  'ensure_start_quoting_auto_checkbox',
+  'fill_gather_defaults',
+  'fill_participant_modal',
+  'fill_vehicle_modal',
+  'find_vehicle_add_button',
+  'focus_prospect_first_input',
+  'gather_confirmed_vehicles_status',
+  'gather_defaults_status',
+  'gather_rapport_snapshot',
+  'gather_stale_add_vehicle_row_status',
+  'gather_start_quoting_status',
+  'gather_vehicle_add_status',
+  'gather_vehicle_edit_status',
+  'gather_vehicle_row_status',
+  'handle_address_verification',
+  'handle_duplicate_prospect',
+  'handle_incidents',
+  'handle_vehicle_edit_modal',
+  'list_driver_slugs',
+  'modal_exists',
+  'prepare_vehicle_row',
+  'product_overview_tile_status',
+  'prospect_form_status',
+  'resident_operator_bootstrap',
+  'resident_runner_command',
+  'scan_current_page',
+  'select_gather_add_row_first_valid_submodel',
+  'select_product_status',
+  'select_remove_reason',
+  'select_vehicle_dropdown_first_valid_nonplaceholder',
+  'select_vehicle_dropdown_option',
+  'set_vehicle_year_and_wait_manufacturer',
+  'vehicle_already_listed',
+  'vehicle_marked_added',
+  'wait_condition'
+];
+
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function testAhkCalledAdvisorOperatorInventoryExistsInRuntime() {
+  const runtimePath = path.join(__dirname, '..', 'assets', 'js', 'advisor_quote', 'ops_result.js');
+  const runtime = fs.readFileSync(runtimePath, 'utf8');
+  assert.strictEqual(new Set(AHK_CALLED_ADVISOR_OPS).size, AHK_CALLED_ADVISOR_OPS.length, 'AHK op inventory contains duplicates');
+  assert.strictEqual(AHK_CALLED_ADVISOR_OPS.length, 62);
+  for (const op of AHK_CALLED_ADVISOR_OPS) {
+    const pattern = new RegExp(`case ['"]${escapeRegex(op)}['"]\\s*:`);
+    assert.ok(pattern.test(runtime), `generated Advisor JS runtime missing AHK-called op ${op}`);
+  }
+}
+
 function testClickHelperDoesNotDoubleSubmit() {
   const form = {
     requestSubmitCalls: 0,
@@ -5284,6 +5364,7 @@ function testHighRiskStrengthenedContracts() {
 }
 
 function run() {
+  testAhkCalledAdvisorOperatorInventoryExistsInRuntime();
   testClickHelperDoesNotDoubleSubmit();
   testResultCalculation();
   testVehicleMatching();

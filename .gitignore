@@ -35,14 +35,33 @@ conversations_raw_*.json
 # Logs / temp
 logs/
 *.log
+*.trace
+*.trace.json
 advisor_scan_latest.json
 advisor_js_injection_metrics_latest.json
+advisor_state_snapshot_latest.json
 run_state.json
 *.tmp
 *.bak
 *.old
+advisor_scans/
+advisor_state_snapshots/
+traces/
+run_bundles/
+support_packages/
+support_zips/
+support_bundles/
+raw_leads/
+lead_raw_*.json
+leads_raw_*.json
+*_support.zip
+*_support_*.zip
+*support_package*.zip
+*support_bundle*.zip
+*run_bundle*.zip
 
 # Screenshots / images likely to contain customer data
+screenshots/
 *.png
 *.jpg
 *.jpeg
