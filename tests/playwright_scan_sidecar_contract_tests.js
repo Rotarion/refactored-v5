@@ -133,6 +133,99 @@ function testDirectCdpMethodGuard() {
   }
 }
 
+async function testDirectCdpClientHandlesBrowserStyleWebSocketPayloads() {
+  const parserClient = new sidecar.DirectCdpClient('ws://127.0.0.1/devtools/page/parse-test', {
+    WebSocketImpl: function FakeUnusedWebSocket() {}
+  });
+  const inheritedMessageEvent = Object.create({
+    data: '{"id":1,"result":{"value":"INHERITED"}}'
+  });
+  assert.strictEqual(
+    await parserClient.messageEventText(inheritedMessageEvent),
+    '{"id":1,"result":{"value":"INHERITED"}}'
+  );
+
+  async function runWithPayload(payloadFactory) {
+    class FakeBrowserWebSocket {
+      constructor(url) {
+        this.url = url;
+        this.readyState = FakeBrowserWebSocket.CONNECTING;
+        this.listeners = new Map();
+        setTimeout(() => {
+          this.readyState = FakeBrowserWebSocket.OPEN;
+          this.dispatch('open', { type: 'open' });
+        }, 0);
+      }
+
+      addEventListener(name, handler) {
+        const list = this.listeners.get(name) || [];
+        list.push(handler);
+        this.listeners.set(name, list);
+      }
+
+      removeEventListener(name, handler) {
+        const list = this.listeners.get(name) || [];
+        this.listeners.set(name, list.filter((item) => item !== handler));
+      }
+
+      dispatch(name, event) {
+        for (const handler of this.listeners.get(name) || []) {
+          handler.call(this, event);
+        }
+        const propertyHandler = this[`on${name}`];
+        if (typeof propertyHandler === 'function') {
+          propertyHandler.call(this, event);
+        }
+      }
+
+      send(payload) {
+        const request = JSON.parse(payload);
+        assert.strictEqual(request.method, 'Runtime.evaluate');
+        const response = JSON.stringify({
+          id: request.id,
+          result: {
+            type: 'string',
+            value: 'OK'
+          }
+        });
+        setTimeout(() => {
+          this.dispatch('message', { type: 'message', data: payloadFactory(response) });
+        }, 0);
+      }
+
+      close() {
+        this.readyState = FakeBrowserWebSocket.CLOSED;
+        this.dispatch('close', { type: 'close' });
+      }
+    }
+    FakeBrowserWebSocket.CONNECTING = 0;
+    FakeBrowserWebSocket.OPEN = 1;
+    FakeBrowserWebSocket.CLOSED = 3;
+
+    const client = new sidecar.DirectCdpClient('ws://127.0.0.1/devtools/page/1', {
+      WebSocketImpl: FakeBrowserWebSocket,
+      timeoutMs: 1000
+    });
+    await client.connect();
+    const result = await client.send('Runtime.evaluate', {
+      expression: 'JSON.stringify({ readyState: document.readyState })',
+      returnByValue: true
+    }, {
+      timeoutMs: 1000
+    });
+    assert.strictEqual(result.value, 'OK');
+    client.close();
+  }
+
+  const encoder = new TextEncoder();
+  await runWithPayload((text) => text);
+  await runWithPayload((text) => Buffer.from(text, 'utf8'));
+  await runWithPayload((text) => encoder.encode(text));
+  await runWithPayload((text) => encoder.encode(text).buffer);
+  await runWithPayload((text) => ({ text: async () => text }));
+  await runWithPayload((text) => ({ arrayBuffer: async () => encoder.encode(text).buffer }));
+}
+
 async function testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly() {
   const sentMethods = [];
   const fakeClient = {
@@ -332,6 +425,7 @@ async function run() {
   testActualRuntimeRendersReadOnlyOps();
   testDirectCdpRequestsAreReadOnlyRuntimeEvaluateOnly();
   testDirectCdpMethodGuard();
+  await testDirectCdpClientHandlesBrowserStyleWebSocketPayloads();
   await testDirectCdpScanUsesTargetListAndRuntimeEvaluateOnly();
   await testDirectCdpTimeoutErrorMentionsOpTargetAndRecommendation();
   testArgParsingAndOutputGuard();

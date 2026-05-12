@@ -663,16 +663,56 @@ class DirectCdpClient {
       };
       const onMessage = (event) => this.handleMessage(event);
       const onClose = () => this.rejectAllPending(new Error('CDP WebSocket closed'));
-      socket.addEventListener('open', onOpen);
-      socket.addEventListener('error', onError);
-      socket.addEventListener('message', onMessage);
-      socket.addEventListener('close', onClose);
+      this.attachSocketHandler(socket, 'open', onOpen);
+      this.attachSocketHandler(socket, 'error', onError);
+      this.attachSocketHandler(socket, 'message', onMessage);
+      this.attachSocketHandler(socket, 'close', onClose);
     });
   }
 
-  handleMessage(event) {
-    const raw = event && Object.prototype.hasOwnProperty.call(event, 'data') ? event.data : event;
-    const text = typeof raw === 'string' ? raw : String(raw || '');
+  attachSocketHandler(socket, eventName, handler) {
+    if (socket && typeof socket.addEventListener === 'function') {
+      socket.addEventListener(eventName, handler);
+    }
+    const propertyName = `on${eventName}`;
+    const previous = socket ? socket[propertyName] : null;
+    socket[propertyName] = (event) => {
+      if (typeof previous === 'function') {
+        try { previous.call(socket, event); } catch {}
+      }
+      handler(event);
+    };
+  }
+
+  async messageEventText(event) {
+    const raw = event && typeof event === 'object' && 'data' in event ? event.data : event;
+    if (typeof raw === 'string') return raw;
+    if (raw == null) return '';
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(raw)) {
+      return raw.toString('utf8');
+    }
+    if (raw instanceof ArrayBuffer) {
+      return Buffer.from(raw).toString('utf8');
+    }
+    if (ArrayBuffer.isView(raw)) {
+      return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString('utf8');
+    }
+    if (typeof raw.text === 'function') {
+      return String(await raw.text());
+    }
+    if (typeof raw.arrayBuffer === 'function') {
+      return Buffer.from(await raw.arrayBuffer()).toString('utf8');
+    }
+    return String(raw || '');
+  }
+
+  async handleMessage(event) {
+    let text = '';
+    try {
+      text = await this.messageEventText(event);
+    } catch {
+      return;
+    }
     let message = null;
     try {
       message = JSON.parse(text);
@@ -692,7 +732,8 @@ class DirectCdpClient {
 
   send(method, params = {}, options = {}) {
     assertCdpMethodAllowed(method);
-    if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) {
+    const openState = this.WebSocketImpl.OPEN ?? (this.socket && this.socket.OPEN) ?? 1;
+    if (!this.socket || this.socket.readyState !== openState) {
       return Promise.reject(new Error('CDP WebSocket is not open.'));
     }
     const id = this.nextId++;
