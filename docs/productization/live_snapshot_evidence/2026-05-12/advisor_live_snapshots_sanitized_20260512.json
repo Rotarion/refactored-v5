@@ -1,0 +1,1141 @@
+{
+  "bundleId": "advisor_live_snapshot_sanitized_20260512",
+  "description": "Sanitized live read-only Advisor Pro state snapshots captured with Ctrl+Alt+Shift+S. No raw names, addresses, VINs, phones, emails, DOBs, screenshots, or live full page text retained.",
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "scenarioId": "live-entry-begin-quoting-start",
+      "sourceFileSanitizedFrom": "Beging quoting.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ENTRY_CREATE_FORM",
+      "classificationStatus": "ok",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:14:19",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+        "route": "ENTRY_CREATE_FORM",
+        "confidence": 0.84,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect.",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:14:18.806Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+          "route": "ENTRY_CREATE_FORM",
+          "confidence": 0.84,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/start",
+            "title:Allstate Advisor Pro℠",
+            "heading:Begin Quoting",
+            "url:/apps/intel/102/start",
+            "text:entry-start-actions",
+            "text:<PAGE_TEXT_SUMMARY_REDACTED>"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-entry-create-new-prospect-form",
+      "sourceFileSanitizedFrom": "Create New Prospect.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ENTRY_CREATE_FORM",
+      "classificationStatus": "ok",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:15:02",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+        "route": "ENTRY_CREATE_FORM",
+        "confidence": 0.84,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect.",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:15:02.486Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+          "route": "ENTRY_CREATE_FORM",
+          "confidence": 0.84,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/start",
+            "title:Allstate Advisor Pro℠",
+            "heading:Begin Quoting",
+            "heading:Create New Prospect",
+            "heading:Current Home Address",
+            "url:/apps/intel/102/start",
+            "text:entry-start-actions",
+            "text:<PAGE_TEXT_SUMMARY_REDACTED>"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-entry-standardized-address-alert",
+      "sourceFileSanitizedFrom": "Standarized Address.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ENTRY_CREATE_FORM_WITH_STANDARDIZED_ADDRESS_BLOCKER",
+      "classificationStatus": "partial_new_blocker",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:15:52",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+        "route": "ENTRY_CREATE_FORM",
+        "confidence": 0.78,
+        "allowedNextActions": [],
+        "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect. Blocking UI or alert evidence is present: alert:STANDARDIZED_ADDRESS_ALTERNATIVE_CITY_ZIP",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:15:52.501Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+          "route": "ENTRY_CREATE_FORM",
+          "confidence": 0.78,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/start",
+            "title:Allstate Advisor Pro℠",
+            "heading:Begin Quoting",
+            "heading:Create New Prospect",
+            "heading:Standardized Address",
+            "heading:Current Home Address",
+            "url:/apps/intel/102/start",
+            "text:entry-start-actions",
+            "text:<PAGE_TEXT_SUMMARY_REDACTED>"
+          ],
+          "blockers": [
+            "alert:STANDARDIZED_ADDRESS_ALTERNATIVE_CITY_ZIP"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "Advisor entry/start page recognized; read-only snapshot cannot safely choose whether to begin quoting or create a prospect. Blocking UI or alert evidence is present: alert:STANDARDIZED_ADDRESS_ALTERNATIVE_CITY_ZIP"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-product-overview-grid-route-gap",
+      "sourceFileSanitizedFrom": "Product Overview grid.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "PRODUCT_OVERVIEW",
+      "classificationStatus": "route_gap",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:16:41",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+        "route": "ADVISOR_OTHER",
+        "confidence": 0.45,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence.",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:16:41.458Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+          "route": "ADVISOR_OTHER",
+          "confidence": 0.45,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/overview",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "advisorpro-origin"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": true,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-rapport-manual-vehicles-selected",
+      "sourceFileSanitizedFrom": "Rapport with manual Vehicles selected.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "RAPPORT",
+      "classificationStatus": "ok",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:17:57",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+        "route": "RAPPORT",
+        "confidence": 0.88,
+        "allowedNextActions": [
+          "inspect_rapport",
+          "confirm_vehicles"
+        ],
+        "unsafeReason": null,
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:17:57.010Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+          "route": "RAPPORT",
+          "confidence": 0.88,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:<PERSON_REDACTED> (Primary) Age 21",
+            "heading:<ADDRESS_REDACTED> (Primary)",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "heading:<VEHICLE_REDACTED>",
+            "url:/apps/intel/102/rapport",
+            "text:Gather Data"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": true,
+            "vehicleCount": 6,
+            "driverCount": null,
+            "staleAddVehicleRow": false
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "inspect_rapport",
+            "confirm_vehicles"
+          ],
+          "unsafeReason": null
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-select-product-complete-ready",
+      "sourceFileSanitizedFrom": "select product page confirmation.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "SELECT_PRODUCT",
+      "classificationStatus": "ok",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:18:29",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
+        "route": "SELECT_PRODUCT",
+        "confidence": 0.92,
+        "allowedNextActions": [
+          "answer_select_product"
+        ],
+        "unsafeReason": null,
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:18:29.674Z",
+          "url": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
+          "route": "SELECT_PRODUCT",
+          "confidence": 0.92,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:Select Product",
+            "url:/selectProduct",
+            "control:SelectProduct.Product",
+            "control:selectProductContinue"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": true,
+            "autoSelected": true,
+            "saveContinueVisible": true
+          },
+          "selectProduct": {
+            "present": true,
+            "ratingState": "FL",
+            "product": "AUTO",
+            "productText": "Auto",
+            "effectiveDate": "05/12/2026",
+            "currentAddressPresent": true,
+            "currentlyInsuredAnswer": "YES",
+            "ownRentAnswer": "Own",
+            "continueVisible": true,
+            "continueEnabled": true,
+            "missingRequired": []
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "answer_select_product"
+          ],
+          "unsafeReason": null
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-asc-consumer-reports-route-gap",
+      "sourceFileSanitizedFrom": "consumer reports.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "CONSUMER_REPORTS",
+      "classificationStatus": "route_gap",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:19:03",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+        "route": "ADVISOR_OTHER",
+        "confidence": 0.45,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence.",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:19:02.835Z",
+          "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+          "route": "ADVISOR_OTHER",
+          "confidence": 0.45,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:order consumer reports",
+            "heading:Read the following word for word to the customer:",
+            "advisorpro-origin"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": false,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_MISSING_CONTINUE"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": false,
+            "routeId": "112",
+            "driversAndVehiclesHeadingPresent": false,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": false,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 0,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "NOT_ASC_DRIVERS_VEHICLES",
+            "blockers": [
+              "NOT_ASC_DRIVERS_VEHICLES"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-asc-drivers-vehicles-unresolved-driver-route-gap",
+      "sourceFileSanitizedFrom": "ASC main after driver confirmed.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ASC_DRIVERS_VEHICLES",
+      "classificationStatus": "route_gap",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:23:58",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+        "route": "ADVISOR_OTHER",
+        "confidence": 0.45,
+        "allowedNextActions": [
+          "human_review_required"
+        ],
+        "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence.",
+        "error": null,
+        "retryAttempted": false,
+        "retryReason": "",
+        "retrySucceeded": false,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:23:58.650Z",
+          "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+          "route": "ADVISOR_OTHER",
+          "confidence": 0.45,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "advisorpro-origin"
+          ],
+          "blockers": [],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "112",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 1,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED",
+            "blockers": [
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": "review_unresolved_drivers_vehicles"
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [
+            "human_review_required"
+          ],
+          "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence."
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-asc-remove-driver-modal-route-gap",
+      "sourceFileSanitizedFrom": "Remove driver window asc.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ASC_DRIVERS_VEHICLES_WITH_REMOVE_DRIVER_MODAL",
+      "classificationStatus": "route_gap_blocker_known",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:24:35",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+        "route": "ADVISOR_OTHER",
+        "confidence": 0.45,
+        "allowedNextActions": [],
+        "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence. Blocking UI or alert evidence is present: active:ASC_REMOVE_DRIVER_MODAL:<PERSON_REDACTED>",
+        "error": null,
+        "retryAttempted": false,
+        "retryReason": "",
+        "retrySucceeded": false,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:24:35.104Z",
+          "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+          "route": "ADVISOR_OTHER",
+          "confidence": 0.45,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "heading:<PERSON_REDACTED>",
+            "advisorpro-origin"
+          ],
+          "blockers": [
+            "active:ASC_REMOVE_DRIVER_MODAL:<PERSON_REDACTED>"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "112",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 0,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 2,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_REMOVE_DRIVER_MODAL_OPEN",
+            "blockers": [],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence. Blocking UI or alert evidence is present: active:ASC_REMOVE_DRIVER_MODAL:<PERSON_REDACTED>"
+        },
+        "rawText": null
+      }
+    },
+    {
+      "scenarioId": "live-asc-vehicle-modal-route-gap",
+      "sourceFileSanitizedFrom": "add vehicle asc.json",
+      "piiSanitized": true,
+      "sanitizationNotes": [
+        "Customer/person names redacted",
+        "Street address text redacted",
+        "VIN and masked VIN evidence redacted",
+        "Dynamic ASCPRODUCT route id normalized",
+        "Large page text summaries redacted"
+      ],
+      "expectedRouteFromHumanLabel": "ASC_DRIVERS_VEHICLES_WITH_VEHICLE_MODAL",
+      "classificationStatus": "route_gap_blocker_known",
+      "snapshot": {
+        "ok": true,
+        "capturedAt": "2026-05-12 15:25:21",
+        "source": "Ctrl+Alt+Shift+S",
+        "op": "advisor_state_snapshot",
+        "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+        "route": "ADVISOR_OTHER",
+        "confidence": 0.45,
+        "allowedNextActions": [],
+        "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence. Blocking UI or alert evidence is present: active:ASC_VEHICLE_MODAL:<VEHICLE_REDACTED>",
+        "error": null,
+        "retryAttempted": true,
+        "retryReason": "empty-result-or-bridge-unavailable",
+        "retrySucceeded": true,
+        "rawAdvisorStateSnapshot": {
+          "ok": true,
+          "op": "advisor_state_snapshot",
+          "ts": "2026-05-12T19:25:21.429Z",
+          "url": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+          "route": "ADVISOR_OTHER",
+          "confidence": 0.45,
+          "anchors": [
+            "url:https://advisorpro.allstate.com/#/apps/ASCPRODUCT/{ASC_PRODUCT_ID}/",
+            "title:Allstate Advisor Pro℠",
+            "heading:<PERSON_REDACTED> (View Customer)",
+            "heading:Drivers and vehicles",
+            "heading:Add drivers",
+            "heading:Add vehicles",
+            "heading:<VEHICLE_REDACTED>",
+            "advisorpro-origin"
+          ],
+          "blockers": [
+            "active:ASC_VEHICLE_MODAL:<VEHICLE_REDACTED>"
+          ],
+          "product": {
+            "autoVisible": false,
+            "autoSelected": false,
+            "saveContinueVisible": false
+          },
+          "selectProduct": {
+            "present": false,
+            "ratingState": "",
+            "product": "",
+            "productText": "",
+            "effectiveDate": "",
+            "currentAddressPresent": false,
+            "currentlyInsuredAnswer": null,
+            "ownRentAnswer": null,
+            "continueVisible": true,
+            "continueEnabled": false,
+            "missingRequired": [
+              "SELECT_PRODUCT_MISSING_RATING_STATE",
+              "SELECT_PRODUCT_MISSING_PRODUCT",
+              "SELECT_PRODUCT_MISSING_EFFECTIVE_DATE",
+              "SELECT_PRODUCT_MISSING_CURRENT_ADDRESS",
+              "SELECT_PRODUCT_CONTINUE_DISABLED"
+            ]
+          },
+          "ascDriversVehicles": {
+            "present": true,
+            "routeId": "112",
+            "driversAndVehiclesHeadingPresent": true,
+            "inlineParticipantPanelPresent": false,
+            "inlineParticipantSavePresent": false,
+            "inlineParticipantSaveEnabled": false,
+            "pageSaveContinuePresent": true,
+            "pageSaveContinueEnabled": false,
+            "unresolvedDriverCount": 1,
+            "unresolvedVehicleCount": 0,
+            "addedDriverCount": 1,
+            "removedDriverCount": 0,
+            "addedVehicleCount": 0,
+            "removedVehicleCount": 0,
+            "blockerCode": "ASC_VEHICLE_MODAL_OPEN",
+            "blockers": [
+              "UNRESOLVED_FOUND_DRIVERS:1"
+            ],
+            "nextRecommendedAction": ""
+          },
+          "prefillGate": {
+            "present": false,
+            "startHereVisible": false
+          },
+          "rapport": {
+            "present": false,
+            "vehicleCount": null,
+            "driverCount": null,
+            "staleAddVehicleRow": null
+          },
+          "iframe": {
+            "present": false,
+            "count": 0,
+            "hints": []
+          },
+          "allowedNextActions": [],
+          "unsafeReason": "Advisor Pro page recognized, but no supported workflow state was identified from read-only evidence. Blocking UI or alert evidence is present: active:ASC_VEHICLE_MODAL:<VEHICLE_REDACTED>"
+        },
+        "rawText": null
+      }
+    }
+  ]
+}
