@@ -1,0 +1,17 @@
+{
+  "name": "advisor-playwright-scan-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "scan": "node dist/index.js"
+  },
+  "dependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "devDependencies": {
+    "@types/node": ">=20.0.0",
+    "typescript": ">=5.0.0"
+  }
+}
