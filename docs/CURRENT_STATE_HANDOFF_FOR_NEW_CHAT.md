@@ -2,11 +2,14 @@
 
 Captured: 2026-05-06
 
-This is a current-state handoff for the Advisor Pro automation project. It is based on the current repo, current docs, current Git state, and latest available local logs. It intentionally excludes live customer PII and does not include raw scan or log dumps.
+Historical status: this file captured the `feature/advisor-resident-runner` branch on 2026-05-06. It is not the current source of truth for `hermes-state-snapshot-foundation` after commit `87c1bbe`. For current continuation, start with `CODEX_ARCHITECTURE_CONTINUATION_AUDIT.md`, `docs/PROJECT_ARCHITECTURE_AUDIT.md`, `ADVISOR_PRO_SCAN_WORKFLOW.md`, `docs/ADVISOR_JS_OPERATOR_CONTRACT.md`, and `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
+
+At capture time, this was a current-state handoff for the Advisor Pro automation project. It was based on the then-current repo, docs, Git state, and latest available local logs. It intentionally excludes live customer PII and does not include raw scan or log dumps.
 
 ## Branch And Git State
 
-- Branch: `feature/advisor-resident-runner`
+- Historical branch at capture: `feature/advisor-resident-runner`
+- Current branch at the 2026-05-12 continuation audit: `hermes-state-snapshot-foundation`
 - Current tracked working tree status at refresh: clean.
 - Untracked docs created by this handoff:
   - `docs/CONNECTORS_AND_BRIDGE_MAP.md`
@@ -40,7 +43,7 @@ df57991 fix: use vehicle DB for RAPPORT card matching
 - `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`: DB-backed Rapport vehicle contract.
 - `docs/AHK_TOOLCHAIN_CHECKS.md`: bounded AutoHotkey validation contract.
 
-Known doc/code tension: `ADVISOR_PRO_SCAN_WORKFLOW.md` still says unmatched Rapport vehicles should be skipped/deferred and Add Car or Truck should not open. Current code, `docs/PROJECT_ARCHITECTURE_AUDIT.md`, `docs/ADVISOR_GATHER_DATA_VEHICLE_ADD_NOTES.md`, and `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md` implement default `match-existing-then-add-complete`, which allows controlled DB-backed adds for complete DB-resolved vehicles after confirmed and potential-card checks fail safely.
+Historical doc/code tension at capture: `ADVISOR_PRO_SCAN_WORKFLOW.md` still said unmatched Rapport vehicles should be skipped/deferred and Add Car or Truck should not open. Current branch docs now align on default `match-existing-then-add-complete`, which allows controlled DB-backed adds for complete DB-resolved vehicles after confirmed and potential-card checks fail safely.
 
 ## Runtime Layout
 
@@ -70,7 +73,7 @@ Adapters and bridge surfaces:
 Advisor JS operator:
 
 - Source: `assets/js/advisor_quote/src/operator.template.js`
-- Generated runtime: `assets/js/advisor_quote/ops_result.js`
+- Generated runtime: `assets/js/advisor_quote/ops_result.js` (do not hand-edit; source is `assets/js/advisor_quote/src/` plus `assets/js/advisor_quote/build_operator.js`)
 - Builder: `assets/js/advisor_quote/build_operator.js`
 
 Tests and fixtures:
@@ -147,10 +150,10 @@ Each state is run through `AdvisorQuoteRunStateWithRetries()`. Each attempt writ
 - Fills defaults: email when present, age first licensed `16`, residence ownership/type.
 - Uses `gather_rapport_snapshot` before vehicle work.
 - Routes active Gather Edit Vehicle panels through the edit handler.
-- Current gap: active stale Gather add rows are detected by snapshot but `AdvisorQuoteResolveGatherSnapshotBlockers()` only handles `GATHER_EDIT_VEHICLE`; stale add rows currently fail as `RAPPORT_ACTIVE_BLOCKER_UNHANDLED`.
+- Current branch note: stale Gather add rows are no longer documented as an always-unhandled gap. Detection starts in `gather_rapport_snapshot`; row detail comes from `gather_stale_add_vehicle_row_status`; cleanup/commit policy is owned by `AdvisorQuoteResolveGatherSnapshotBlockers()` and RAPPORT vehicle helpers.
 - Classifies lead vehicles as complete/actionable, partial year/make, VIN-deferred, ignored missing-year, or blocking.
 - Uses DB-backed matching before any controlled add.
-- Fails if no vehicle is safely satisfied and Advisor still needs a vehicle.
+- Current branch gate policy: one safe confirmed, safely confirmed-from-potential, DB-added, or accepted vehicle can satisfy the RAPPORT vehicle gate. Remaining unresolved, partial, unknown, ambiguous, duplicate, or unsafe vehicles are logged/deferred/fail safe.
 
 ### Start Quoting
 
@@ -250,9 +253,9 @@ Current consumers:
 - Drivers/Vehicles uses `asc_drivers_vehicles_snapshot` on every ledger iteration.
 - Active modal/panel status is embedded into both route-specific snapshots.
 
-Known gap:
+Historical gap at capture:
 
-- Stale Gather add row is detectable as `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`, but the AHK RAPPORT blocker resolver does not yet route or cancel it. Latest logs show this as the current live blocker.
+- Stale Gather add row was detectable as `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`, but the AHK RAPPORT blocker resolver did not yet route or cancel it. Current branch docs now point to the implemented stale-row detection/cleanup source in the RAPPORT blocker resolver and vehicle helpers.
 
 ## Current ASC Ledger Behavior
 
@@ -331,7 +334,7 @@ No raw log or scan payload is included here.
 
 - `logs/run_state.json`: running is false, stop flag is false, last action is `advisor-quote-step-gather-data`, updated `2026-05-06 11:42:44`.
 - `logs/advisor_scan_latest.json`: latest scan captured `2026-05-06T15:42:52.556Z`, route is `/apps/intel/102/rapport`, title is Advisor Pro, with 9 headings, 19 fields, 40 buttons, 0 radios, and no dialogs. It contains live customer-visible page text and was summarized only.
-- `logs/advisor_quote_trace.log`: latest failure is RAPPORT. Snapshot detected `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`; current AHK blocker resolver treats that as unhandled and fails `RAPPORT_ACTIVE_BLOCKER_UNHANDLED`.
+- `logs/advisor_quote_trace.log`: historical latest failure at capture was RAPPORT. Snapshot detected `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`; the AHK blocker resolver then treated that as unhandled and failed `RAPPORT_ACTIVE_BLOCKER_UNHANDLED`.
 - Earlier same-session failure: RAPPORT hit `NO_SAFE_RAPPORT_VEHICLE_MATCH` after DB-backed add attempts could not safely satisfy any lead vehicle.
 - Earlier ASCPRODUCT failure: inline participant panel fill failed because the military radio control was not found/matched.
 - `logs/devtools_bridge_returns.log`: recent bridge summary had many OK returns, CRM/Blitz status payloads classified as error-looking key/value payloads, several stale clipboard/copy-result failures, and one stopped-before-console-prep event. Raw entries contain live CRM lead data and must not be staged or pasted.
@@ -350,7 +353,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AhkToolchain.ps
 
 AHK validation must use `tools\Test-AhkToolchain.ps1`. Do not run raw AutoHotkey interpreter/compiler checks.
 
-## Implemented Versus Only Discussed
+## Historical Implemented Versus Only Discussed At Capture
 
 Implemented now:
 
@@ -364,11 +367,11 @@ Implemented now:
 - Resident runner skeleton, tiny bridge, and read-only polling, disabled by default.
 - DevTools bridge logging and clipboard restoration.
 
-Only discussed or not fully wired:
+Only discussed or not fully wired at capture:
 
 - Resident runner as a production replacement for per-op injection.
 - Mutating resident runner commands.
-- Stale Gather add-row routing/cancel inside the RAPPORT snapshot blocker gate.
+- Historical at capture: stale Gather add-row routing/cancel inside the RAPPORT snapshot blocker gate. Current branch docs now treat stale-row detection/cleanup as implemented behavior that still needs regression coverage.
 - Full migration away from legacy Drivers/Vehicles helpers.
 - Full extraction of business policy out of JS DOM executor code.
 - Live-proofed handling for every Advisor layout variation.
@@ -377,7 +380,7 @@ Only discussed or not fully wired:
 
 Next live validation should focus on:
 
-1. RAPPORT stale Gather add-row handling after a failed or partial DB-backed add.
+1. Regression coverage for current RAPPORT stale Gather add-row handling after a failed or partial DB-backed add.
 2. RAPPORT controlled add with submodel-required rows where model/submodel choices are ambiguous.
 3. ASC inline participant panel where military/required radio controls are absent or hidden.
 4. ASC spouse override behavior under the committed default, especially Single/unknown leads with one unique in-window Advisor-surfaced spouse candidate.

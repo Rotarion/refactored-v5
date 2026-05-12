@@ -2,6 +2,8 @@
 
 This is the scan-backed workflow reference for the implemented Advisor Pro quote automation. It keeps only selectors, text anchors, route families, and business rules that the current workflow depends on.
 
+Current branch sync note: this file is synchronized for `hermes-state-snapshot-foundation` after commit `87c1bbe`. If older handoff or restructure notes conflict with this file, treat those older notes as historical and use this file together with `docs/PROJECT_ARCHITECTURE_AUDIT.md`, `docs/ADVISOR_JS_OPERATOR_CONTRACT.md`, and `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
+
 ## Entry
 
 - Hotkey: `Ctrl+Alt+-` / AHK `^!-`
@@ -15,6 +17,7 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Runtime flag: `advisorSnapshotObserverEnabled := true`
 - Observer helper: `AdvisorQuoteCaptureStateSnapshotObserver(checkpointName, metadata := "")`
 - The observer is read-only and non-fatal. It invokes only `advisor_state_snapshot`; snapshot failures are written as failed envelopes and must not stop the quote workflow.
+- Source of truth: AHK capture wrappers live in `workflows\advisor_quote_workflow.ahk`; the JS route/snapshot reader lives in `assets\js\advisor_quote\src\operator.template.js` and generated runtime `assets\js\advisor_quote\ops_result.js`.
 - Per-run snapshots are written to `logs\advisor_state_snapshots\runs\<runId>\` as `001_<checkpoint>.json`, `002_<checkpoint>.json`, and so on.
 - The per-run summary is `logs\advisor_state_snapshots\runs\<runId>\run_summary.json`.
 - Summary fields include snapshot counts, last route/url/checkpoint/confidence, blocker and unsafe-reason evidence, conservative terminal disposition codes for duplicate/current-customer, ASC product error, and unknown-unsafe states, plus `reachedCoverages` when the snapshot route is `COVERAGES`.
@@ -45,6 +48,7 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Continue text: `Save & Continue to Gather Data`
 - Implemented effect: resolve the scoped Auto tile, select it only when not already selected, verify selected-state evidence, then continue to Rapport.
 - This is not the older `/selectProduct` form page. The current implementation uses text/card resolution for this grid, not the `SelectProduct.Product` dropdown.
+- Source of truth: Product Overview and Select Product orchestration lives in `workflows\advisor\advisor_quote_product_overview.ahk`; selectors/defaults live in `domain\advisor_quote_db.ahk`; JS operator reads/actions live in `assets\js\advisor_quote\src\operator.template.js`.
 
 ## Gather Data / Rapport
 
@@ -64,12 +68,22 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Existing vehicle cards are matched by exact year, DB-backed Advisor make label/family, DB-normalized model key, and VIN evidence when available.
 - Confirmed cards are read first; exactly one DB-backed confirmed card satisfies a lead vehicle.
 - Potential/public-record cards can be confirmed only when exactly one scoped DB-backed card matches.
-- If no safe existing Advisor card matches, the lead vehicle is skipped/deferred in Rapport. Do not open Add Car or Truck for that unmatched vehicle.
+- Current default mode is `match-existing-then-add-complete`. If no safe existing Advisor card matches and the lead vehicle is complete plus DB-resolved, the workflow may use the controlled DB-backed Add Car/Truck path after confirmed-card and potential-card checks fail safely.
+- One safe confirmed, safely confirmed-from-potential, DB-added, or otherwise accepted vehicle can satisfy the RAPPORT vehicle gate when `advisorRapportGateVehicleEnabled` is enabled. The gate is a Start Quoting safety threshold, not proof that every lead vehicle was created in Rapport.
+- Remaining partial, unknown, ambiguous, duplicate, or unsafe vehicles are logged and deferred/fail safe. They are not manufactured from broad dropdowns and are excluded from missing expected confirmed-vehicle reconciliation unless a later safe evidence path promotes them.
+- ASC Drivers and Vehicles is expected to reconcile quote membership for available lead-matching vehicle rows after RAPPORT. It does not create brand-new lead vehicles from unresolved Rapport input.
 - Broad dropdown construction is not allowed for unmatched Rapport vehicles. Do not select the first model from a broad dropdown.
 - First valid non-placeholder Sub-Model selection is acceptable only inside an already-open Edit Vehicle panel when Advisor requires completion and no safer VIN/trim evidence distinguishes options.
 - If an open Edit Vehicle panel already has required fields populated and `Update` is enabled, click `Update` and verify the panel closes or the matching vehicle becomes confirmed.
 - Partial year/make lead vehicles may be promoted only from a unique confirmed card with visible model text and VIN or masked-VIN evidence.
-- The later Drivers and Vehicles page only reconciles quote membership. It does not create lead vehicles.
+- Source of truth: RAPPORT orchestration lives in `workflows\advisor\advisor_quote_rapport.ahk`; RAPPORT vehicle classification, gate, ledger, controlled add, partial promotion, and stale row cleanup live in `workflows\advisor\advisor_quote_rapport_vehicles.ahk`; DB resolution lives in `domain\advisor_vehicle_catalog.ahk`; durable DB-backed matching rules live in `docs\ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
+
+## Stale Gather Vehicle Rows
+
+- Stale add rows are detected by `gather_rapport_snapshot` and detailed through `gather_stale_add_vehicle_row_status`.
+- Current cleanup is source-controlled in `AdvisorQuoteResolveGatherSnapshotBlockers()` and the RAPPORT vehicle helpers. It may inspect the stale row, use safe first-valid submodel fallback only under the configured narrow policy, click the scoped add button when the row is complete/actionable, or cancel only an empty/incomplete scoped row that is safe to close.
+- A stale row must remain a blocker when it contains unsafe, ambiguous, or still-needed evidence. The workflow should fail with trace evidence rather than guess.
+- Older notes that say stale Gather add rows are always unhandled are historical and no longer describe the current branch.
 
 ## Start Quoting On Rapport
 
@@ -90,6 +104,7 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Own/rent radios: `input#SelectProduct.CustomerOwnOrRent`
 - Continue button: `button#selectProductContinue`
 - Defaults: product `AUTO`, rating state `FL`, current insured `YES`, own/rent `OWN`.
+- Source of truth: this fallback is owned by `workflows\advisor\advisor_quote_product_overview.ahk` and the JS operator. It must remain gated by Product Overview / Auto evidence and must not become a parallel product-selection workflow.
 
 ## Consumer Reports
 
@@ -187,3 +202,4 @@ This is the scan-backed workflow reference for the implemented Advisor Pro quote
 - Do not assume the correct browser tab merely because Edge or Chrome is focused.
 - Preserve clipboard contents where practical; document any destructive clipboard action when preservation is not practical.
 - Scan-backed selectors and text anchors in this file are the source of truth for Advisor Pro workflow patches.
+- Do not edit `assets\js\advisor_quote\ops_result.js` by hand. Edit `assets\js\advisor_quote\src\operator.template.js` or included snippets, build with `assets\js\advisor_quote\build_operator.js`, and validate with the Advisor JS smoke test.

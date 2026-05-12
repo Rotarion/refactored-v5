@@ -2,7 +2,9 @@
 
 Captured: 2026-05-06
 
-This audit is intentionally direct. It covers current structure, not historical intent.
+Historical status: this audit captured `feature/advisor-resident-runner` on 2026-05-06. It remains useful as a risk inventory, but it is not the current source of truth for `hermes-state-snapshot-foundation` after commit `87c1bbe`. Use `CODEX_ARCHITECTURE_CONTINUATION_AUDIT.md`, `docs/PROJECT_ARCHITECTURE_AUDIT.md`, `ADVISOR_PRO_SCAN_WORKFLOW.md`, `docs/ADVISOR_JS_OPERATOR_CONTRACT.md`, and `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md` for current behavior.
+
+At capture time, this audit was intentionally direct and covered then-current structure, not historical intent. Current branch behavior is documented in the source-of-truth docs listed above.
 
 ## Structurally Sound Now
 
@@ -22,9 +24,9 @@ This audit is intentionally direct. It covers current structure, not historical 
 
 - `workflows/advisor_quote_workflow.ahk` is still too large and owns too many concerns.
 - `assets/js/advisor_quote/src/operator.template.js` is also too large and mixes DOM reads, DOM mutations, business policy, state detection, snapshots, and runner code.
-- Active docs conflict on Rapport unmatched vehicle behavior. Current code allows controlled DB-backed add; one scan workflow note still says do not open Add Car or Truck for unmatched vehicles.
+- Historical at capture: active docs conflicted on Rapport unmatched vehicle behavior. Current docs now align on controlled DB-backed add for complete DB-resolved vehicles and defer/fail-safe handling for partial, unknown, ambiguous, duplicate, or unsafe vehicles.
 - ASC spouse override is now committed default behavior, but the policy is still spread across DB settings, AHK ledger selection, and JS participant modal behavior.
-- RAPPORT snapshot detects stale add rows but AHK treats them as an unhandled active blocker.
+- RAPPORT stale add-row handling remains high-risk, but current branch docs no longer treat it as an always-unhandled active blocker. Detection, detail reads, safe cleanup, and safe commit policy are owned by the RAPPORT blocker resolver and vehicle helpers.
 - Start Quoting logic is spread across Product Overview flags, Rapport status reads, scoped handoff, and recovery paths.
 - ASC spouse policy is split across AHK ledger evaluation and JS participant resolver.
 - Legacy Drivers/Vehicles functions remain in the file after the ledger loop and can confuse future patches.
@@ -32,15 +34,16 @@ This audit is intentionally direct. It covers current structure, not historical 
 
 ## Refactor Next
 
-Refactor only after the current live failure is understood from logs and a sanitized scan. The next restructuring target should be narrow: make the RAPPORT snapshot blocker gate route stale Gather add rows safely.
+Refactor only after the current live failure is understood from logs and a sanitized scan. Historical recommendation at capture was to make the RAPPORT snapshot blocker gate route stale Gather add rows safely.
 
-The current latest failure is not a missing selector in the main vehicle loop. It is the snapshot gate stopping on `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`. Patch the gate first, or run a read-only audit if the stale row shape is unclear.
+Current branch docs now describe stale Gather add-row detection and cleanup as implemented behavior. The next safe work in this area is regression coverage and sanitized scan verification unless a new trace proves the behavior is still failing.
 
 ## Do Not Touch Yet
 
 - Do not rewrite the resident runner into the production engine.
 - Do not move large blocks between files while there are active live RAPPORT/ASC failures.
 - Do not edit `assets/js/advisor_quote/ops_result.js` manually.
+- Edit Advisor JS source under `assets/js/advisor_quote/src/` and use `assets/js/advisor_quote/build_operator.js` to regenerate/check the runtime.
 - Do not broaden vehicle dropdown matching.
 - Do not weaken DB ambiguity handling.
 - Do not remove legacy functions until call sites are proven inactive and tests/logs cover the replacement path.
@@ -96,10 +99,10 @@ Do not move business patches into the runner until per-op logic is stable and co
 
 ## Generated JS Size And Console Pressure
 
-Current approximate sizes:
+Current approximate sizes after the 2026-05-12 continuation audit:
 
-- `assets/js/advisor_quote/src/operator.template.js`: 327 KB, about 6.6K lines.
-- `assets/js/advisor_quote/ops_result.js`: 338 KB, about 6.9K lines.
+- `assets/js/advisor_quote/src/operator.template.js`: about 407 KB, about 8.0K lines.
+- `assets/js/advisor_quote/ops_result.js`: about 431 KB, about 8.6K lines.
 
 Every per-op injection pushes a large script through DevTools. That is still a pressure point:
 
@@ -114,7 +117,7 @@ The tiny resident bridge is the right direction for repeated read-only polling, 
 
 | Order | Step | Risk | Validation requirement |
 | --- | --- | --- | --- |
-| 1 | Add a narrow RAPPORT stale add-row decision path in `AdvisorQuoteResolveGatherSnapshotBlockers()` using the existing `gather_stale_add_vehicle_row_status` and `cancel_stale_add_vehicle_row` ops. | Medium | JS smoke for stale-row fixture if present or add sanitized fixture; AHK checker; live sanitized scan before patch if row shape is uncertain. |
+| 1 | Historical at capture: add a narrow RAPPORT stale add-row decision path. Current branch docs now describe this as implemented; next work should add/verify stale-row fixtures and sanitized scan regression evidence before changing behavior again. | Medium | JS smoke for stale-row fixture if present or add sanitized fixture; AHK checker only after AHK changes; live sanitized scan before any new behavior patch if row shape is uncertain. |
 | 2 | Split ASC spouse policy into a small AHK policy helper section and make JS participant resolver a narrower field applier/status resolver. | High | AHK helper tests for Single, Married exact spouse, unique age-window, ambiguous, override enabled/disabled; JS smoke for participant resolver. |
 | 3 | Isolate legacy ASC helpers behind clear names or remove only after call-site proof. | Medium | Search/call-site audit, AHK checker, JS smoke, one live Drivers/Vehicles validation. |
 | 4 | Extract Rapport vehicle orchestration into a dedicated AHK module or section with DB add, confirm-card, partial promotion, stale-row cleanup, and final guard separated. | High | AHK helper tests for classification and DB resolver; JS smoke for vehicle ops; live sanitized RAPPORT validation. |

@@ -1,6 +1,6 @@
 # Advisor Vehicle DB Matching Redesign
 
-Status: current implemented behavior on `feature/advisor-resident-runner`.
+Status: current implemented behavior on `hermes-state-snapshot-foundation` after commit `87c1bbe`.
 Scope: Gather Data / Rapport vehicle matching only.
 
 This document is part of the active Markdown set. It records durable behavior that should remain true after the vehicle DB quick fix, not a one-off patch log.
@@ -11,9 +11,13 @@ This document is part of the active Markdown set. It records durable behavior th
 - Runtime lookup index: `data/vehicle_db_runtime_index.tsv`
 - Index builder: `tools/build_vehicle_runtime_index.js`
 - AHK owner: `domain/advisor_vehicle_catalog.ahk`
-- Browser executor: `assets/js/advisor_quote/ops_result.js`
+- Browser executor: generated runtime `assets/js/advisor_quote/ops_result.js`
+- Editable JS source: `assets/js/advisor_quote/src/operator.template.js` plus included snippets under `assets/js/advisor_quote/src/`
+- JS build/check script: `assets/js/advisor_quote/build_operator.js`
 
 The compact DB is not embedded in the JS operator. AHK loads the derived TSV once per process and passes only bounded match arguments into JS.
+
+Do not hand-edit `assets/js/advisor_quote/ops_result.js`. It is generated runtime output.
 
 ## DB Audit Summary
 
@@ -70,6 +74,8 @@ Non-overmatch guards remain required:
 
 Gather Data / Rapport is evidence-first, then controlled-add for complete DB-resolved vehicles. The default mode is `match-existing-then-add-complete`; `match-existing-only` remains supported to preserve the stricter Step 1 behavior.
 
+Current gate policy: with `advisorRapportGateVehicleEnabled` enabled, one safe confirmed vehicle, safely confirmed potential/public-record vehicle, DB-added vehicle, or otherwise accepted vehicle can satisfy the RAPPORT vehicle gate. This gate lets Start Quoting proceed. It is not a claim that every lead vehicle was created in Rapport.
+
 1. Resolve each complete lead vehicle through the DB.
 2. Read confirmed Advisor vehicle cards first.
 3. If exactly one confirmed card matches exact year, DB make family/label, and DB-normalized model evidence, count the vehicle as satisfied.
@@ -85,6 +91,19 @@ Gather Data / Rapport is evidence-first, then controlled-add for complete DB-res
 Rapport must not construct vehicles from broad dropdowns. Add Car/Truck is allowed only after confirmed and potential cards fail to match safely and only for complete DB-resolved vehicles. Partial year/make-only vehicles, DB misses, ambiguous DB results, and ambiguous model dropdowns remain deferred.
 
 Skipped/deferred vehicles are logged but not counted as missing expected confirmed vehicles.
+
+ASC Drivers/Vehicles can later reconcile quote membership for safe lead-matching rows already available in the ASCPRODUCT flow. It does not create brand-new vehicles from unresolved, partial, unknown, or ambiguous Rapport input.
+
+## Stale Gather Add Rows
+
+Stale Gather add rows are no longer documented as an always-unhandled blocker on the current branch.
+
+- Detection starts in `gather_rapport_snapshot`, which can surface `GATHER_STALE_ADD_VEHICLE_ROW_OPEN`.
+- Detailed row state comes from `gather_stale_add_vehicle_row_status`.
+- Cleanup/commit policy is owned by `AdvisorQuoteResolveGatherSnapshotBlockers()` and RAPPORT vehicle helpers in `workflows/advisor/advisor_quote_rapport.ahk` and `workflows/advisor/advisor_quote_rapport_vehicles.ahk`.
+- A stale row may be completed only when scoped row evidence is safe under the existing DB/submodel policy.
+- A stale row may be canceled only when the scoped row is empty/incomplete and safe to close.
+- Unsafe, ambiguous, or still-needed stale rows remain blockers and should fail with trace evidence rather than guess.
 
 ## Failure And Trace Codes
 
@@ -107,7 +126,7 @@ Skipped/deferred vehicles are logged but not counted as missing expected confirm
 - `VEHICLE_EDIT_UPDATE_DID_NOT_COMMIT`
 - `VEHICLE_SUBMODEL_REQUIRED_UNRESOLVED`
 
-If no vehicle is safely satisfied or DB-added and Advisor still requires at least one vehicle, the workflow fails with `NO_SAFE_RAPPORT_VEHICLE_MATCH` and includes resolver diagnostics plus complete, unknown, and partial deferred vehicle summaries.
+If the RAPPORT gate is not satisfied and Advisor still requires at least one vehicle, the workflow fails with `NO_SAFE_RAPPORT_VEHICLE_MATCH` and includes resolver diagnostics plus complete, unknown, and partial deferred vehicle summaries.
 
 ## Edit Vehicle Rule
 

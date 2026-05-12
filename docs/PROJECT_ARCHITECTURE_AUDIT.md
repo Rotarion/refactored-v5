@@ -3,6 +3,7 @@
 Consolidated: `2026-05-05`
 Repository: `Final_V5.6_js_operator_refactor`
 Scope: current implemented code and workflow impact only.
+Branch sync: refreshed for `hermes-state-snapshot-foundation` after commit `87c1bbe`.
 
 This document replaces the older one-off audits, migration plans, patch notes, source maps, risk logs, and discovery reports. Historical notes were merged here only when they still describe implemented behavior.
 
@@ -15,6 +16,7 @@ This document replaces the older one-off audits, migration plans, patch notes, s
 - `docs/ADVISOR_JS_OPERATOR_CONTRACT.md`: stable JS operator prompt path, now a concise pointer to the generated operator contract summary here.
 - `docs/ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`: current DB-backed Rapport vehicle matching contract.
 - `docs/PROJECT_ARCHITECTURE_AUDIT.md`: this current implementation overview.
+- `CODEX_ARCHITECTURE_CONTINUATION_AUDIT.md`: current Codex continuation map for `hermes-state-snapshot-foundation`; use it to orient future sessions, not as runtime source.
 
 ## Entry Points
 
@@ -73,7 +75,9 @@ workflows/
   single_lead_create.ahk
 ```
 
-Generated runtime artifacts belong under `logs/`. Advisor scan snapshots are written under `logs/advisor_scans/` with `logs/advisor_scan_latest.json` as the latest pointer. The read-only Advisor state snapshot debug capture writes `logs/advisor_state_snapshot_latest.json` and timestamped archives under `logs/advisor_state_snapshots/`.
+Runtime logs and scan artifacts belong under `logs/`. Advisor scan snapshots are written under `logs/advisor_scans/` with `logs/advisor_scan_latest.json` as the latest pointer. The read-only Advisor state snapshot debug capture writes `logs/advisor_state_snapshot_latest.json` and timestamped archives under `logs/advisor_state_snapshots/`.
+
+The Advisor JS operator runtime is generated but tracked at `assets/js/advisor_quote/ops_result.js`. It is not a hand-edit source file. Editable source starts at `assets/js/advisor_quote/src/operator.template.js` and included snippets under `assets/js/advisor_quote/src/`; `assets/js/advisor_quote/build_operator.js` renders/checks the runtime.
 
 ## Include Order
 
@@ -145,6 +149,8 @@ Workflow impact:
 - Default Rapport vehicle mode is `match-existing-then-add-complete`: confirmed/potential Advisor evidence is preferred, then complete DB-resolved unmatched vehicles may use the controlled Add Car/Truck flow.
 - `match-existing-only` remains supported for strict defer-only behavior. Partial, unknown, ambiguous, duplicate, or unsafe vehicle candidates are still deferred and excluded from missing expected reconciliation.
 - Partial year/make vehicles are promoted only from unique VIN-bearing confirmed cards with visible model evidence.
+- Current RAPPORT gate policy: one safe confirmed, safely confirmed-from-potential, DB-added, or accepted vehicle can satisfy the RAPPORT vehicle gate when `advisorRapportGateVehicleEnabled` is enabled. That gate allows Start Quoting to proceed; it does not claim every lead vehicle was created in Rapport.
+- Remaining unresolved, partial, unknown, ambiguous, duplicate, or unsafe vehicles are logged/deferred/fail safe. ASC Drivers/Vehicles can reconcile quote membership for safe lead-matching rows later, but it is not the source for constructing brand-new unresolved lead vehicles.
 
 ## JavaScript Operator Contract
 
@@ -154,12 +160,14 @@ Build script: `assets/js/advisor_quote/build_operator.js`
 
 The AHK bridge renders `@@OP@@` and `@@ARGS@@`, injects the generated single-file operator into DevTools, and receives either raw strings or key/value line blocks through `copy(String(...))`.
 
+Do not edit `assets/js/advisor_quote/ops_result.js` manually. Edit the source template or snippets under `assets/js/advisor_quote/src/`, then run the generated-runtime check/build/smoke sequence documented in `docs/ADVISOR_JS_OPERATOR_CONTRACT.md`.
+
 Current top-level Advisor operator groups:
 
 - State and wait reads: `detect_state`, `wait_condition`, `scan_current_page`
 - Prospect and duplicate handling: `focus_prospect_first_input`, `prospect_form_status`, `address_verification_status`, `handle_address_verification`, `handle_duplicate_prospect`
 - Customer Summary/Product Overview: `customer_summary_overview_status`, `click_customer_summary_start_here`, `product_overview_tile_status`, `click_product_overview_tile`, `ensure_product_overview_tile_selected`, `click_product_overview_subnav_from_rapport`
-- Read-only page snapshots: `advisor_active_modal_status`, `gather_rapport_snapshot`, `asc_drivers_vehicles_snapshot`
+- Read-only page snapshots: `advisor_state_snapshot`, `advisor_active_modal_status`, `gather_rapport_snapshot`, `asc_drivers_vehicles_snapshot`
 - Rapport defaults and vehicle handling: `fill_gather_defaults`, `gather_defaults_status`, `vehicle_already_listed`, `confirm_potential_vehicle`, `prepare_vehicle_row`, `gather_vehicle_row_status`, `set_vehicle_year_and_wait_manufacturer`, `select_vehicle_dropdown_option`, `gather_vehicle_add_status`, `gather_vehicle_edit_status`, `handle_vehicle_edit_modal`, `gather_confirmed_vehicles_status`, `gather_stale_add_vehicle_row_status`, `cancel_stale_add_vehicle_row`
 - Start Quoting and Select Product: `gather_start_quoting_status`, `ensure_start_quoting_auto_checkbox`, `ensure_auto_start_quoting_state`, `click_create_quotes_order_reports`, `click_start_quoting_add_product`, `set_select_product_defaults`, `select_product_status`
 - ASC Product: `consumer_reports_ready`, `asc_participant_detail_status`, `asc_resolve_participant_marital_and_spouse`, `asc_driver_rows_status`, `asc_reconcile_driver_rows`, `asc_vehicle_rows_status`, `asc_reconcile_vehicle_rows`, `fill_participant_modal`, `select_remove_reason`, `fill_vehicle_modal`, `handle_incidents`
@@ -171,6 +179,7 @@ Workflow impact:
 - Snapshot ops are read-only route-specific status readers. They collect route family, active modal/panel, save gate, row/card counts, blocker codes, capped evidence, and missing fields without clicking, typing, saving, confirming, removing, creating quotes, or navigating.
 - AHK wrappers `AdvisorQuoteGetActiveModalStatus()`, `AdvisorQuoteGetGatherRapportSnapshot()`, and `AdvisorQuoteGetAscDriversVehiclesSnapshot()` parse the snapshot key/value blocks and write trace events. The snapshots remain read-only; existing page action handlers still perform any clicks, fills, saves, removes, or updates.
 - RAPPORT checks `gather_rapport_snapshot` before normal vehicle-loop work and routes an active Gather Edit Vehicle panel through the existing edit handler before continuing.
+- RAPPORT stale Gather add rows are now a documented blocker-resolution path, not merely an unhandled snapshot code. Detection starts with `gather_rapport_snapshot`; row detail comes from `gather_stale_add_vehicle_row_status`; cleanup or commit is controlled by `AdvisorQuoteResolveGatherSnapshotBlockers()` and RAPPORT vehicle helpers.
 - Drivers/Vehicles is ledger-driven: each iteration reads `asc_drivers_vehicles_snapshot`, reads row/status details when no modal or panel blocks the page, builds an AHK ledger, chooses one action, verifies progress, and re-reads before choosing again.
 - The Drivers/Vehicles ledger handles active ASC Remove Driver modals, inline participant panels, primary driver add, policy-driven spouse resolution, extra driver removal, ASC vehicle membership rows, and the final Save and Continue gate. Existing action ops still perform mutations; snapshots and ledger reads do not.
 - Default ASC spouse policy is evidence-bound: exact spouse name still wins, Married can use a unique age-window Advisor-surfaced candidate, and Single/unknown can be overridden only when `ascSpouseOverrideSingleEnabled=true` and exactly one Advisor driver row within `ascSpouseAgeWindowYears` appears in the spouse dropdown. Ambiguity fails safe, same-last-name-only evidence is insufficient, and no external public-record lookup is used. The default remove-driver reason remains code `0006` / "This driver has their own car insurance".
@@ -179,6 +188,26 @@ Workflow impact:
 - `select_remove_reason` returns key/value diagnostics including `result`, `reasonCode`, `reasonSelected`, `clicked`, `method`, and `failedFields`; AHK clicks the remove modal save button only after the configured reason verifies selected.
 - Several waits succeed from absence, especially modal-closed waits; callers must pair them with route/state evidence when risk is high.
 - Argument names are part of the contract and should not be casually renamed: `wantedText`, `fieldName`, `index`, `incidentContinueId`, `ageFirstLicensed`, and `propertyOwnership` are used by AHK callers and smoke fixtures.
+
+Required validation after intentional Advisor JS operator changes:
+
+```powershell
+node .\assets\js\advisor_quote\build_operator.js --check
+node .\assets\js\advisor_quote\build_operator.js
+node .\assets\js\advisor_quote\build_operator.js --check
+node .\tests\advisor_quote_ops_smoke.js
+```
+
+Use `C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe` in place of `node` if PATH is restricted.
+
+## Advisor Source Of Truth Map
+
+- Route classification: JS `detectAdvisorRuntimeState(...)`, op `detect_state`, op `advisor_state_snapshot`, and AHK state retry wrappers in `workflows\advisor_quote_workflow.ahk`.
+- `advisor_state_snapshot`: source JS in `assets\js\advisor_quote\src\operator.template.js`; generated runtime in `assets\js\advisor_quote\ops_result.js`; AHK observer in `workflows\advisor_quote_workflow.ahk`; outputs under `logs\advisor_state_snapshot_latest.json` and `logs\advisor_state_snapshots\`.
+- RAPPORT vehicle flow: `workflows\advisor\advisor_quote_rapport.ahk`, `workflows\advisor\advisor_quote_rapport_vehicles.ahk`, `domain\advisor_vehicle_catalog.ahk`, and `docs\ADVISOR_VEHICLE_DB_MATCHING_REDESIGN.md`.
+- Product Overview / Select Product: `workflows\advisor\advisor_quote_product_overview.ahk`, defaults/selectors in `domain\advisor_quote_db.ahk`, JS operator ops in `assets\js\advisor_quote\src\operator.template.js`, and scan anchors in `ADVISOR_PRO_SCAN_WORKFLOW.md`.
+- AHK-to-JS operator contract: `docs\ADVISOR_JS_OPERATOR_CONTRACT.md`, `workflows\advisor\advisor_quote_transport.ahk`, generated runtime `assets\js\advisor_quote\ops_result.js`, and build source `assets\js\advisor_quote\src\`.
+- Scan/logging output: scan/snapshot capture functions in `workflows\advisor_quote_workflow.ahk`; current scan pointer `logs\advisor_scan_latest.json`; scan archives under `logs\advisor_scans\`; state snapshot pointer `logs\advisor_state_snapshot_latest.json`; state snapshot archives under `logs\advisor_state_snapshots\`; trace log `logs\advisor_quote_trace.log`.
 
 ## Resident Runner
 
