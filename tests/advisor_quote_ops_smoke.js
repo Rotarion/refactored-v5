@@ -4905,6 +4905,78 @@ function testAdvisorStateSnapshotContracts() {
   assert.ok(unknown.unsafeReason);
 }
 
+function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
+  const args = baseArgs();
+  const ascLiveArgs = baseArgs({
+    urls: Object.assign({}, BASE_URLS, { ascProductContains: '' })
+  });
+
+  const standardizedAddress = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    fixtureScenario('live-entry-standardized-address-alert')
+  ));
+  assert.strictEqual(standardizedAddress.route, 'ENTRY_CREATE_FORM');
+  assert.ok(standardizedAddress.blockers.includes('alert:ENTRY_STANDARDIZED_ADDRESS_ALERT'));
+  assert.deepStrictEqual(standardizedAddress.allowedNextActions, []);
+  assert.ok(standardizedAddress.unsafeReason.includes('ENTRY_STANDARDIZED_ADDRESS_ALERT'));
+
+  const productOverview = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    args,
+    fixtureScenario('live-product-overview-grid-route-gap')
+  ));
+  assert.strictEqual(productOverview.route, 'PRODUCT_OVERVIEW');
+  assert.strictEqual(productOverview.product.autoVisible, false);
+  assert.strictEqual(productOverview.product.autoSelected, false);
+  assert.deepStrictEqual(productOverview.allowedNextActions, []);
+  assert.ok(productOverview.unsafeReason.includes('Auto product tile'));
+
+  const consumerReports = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-consumer-reports-route-gap')
+  ));
+  assert.strictEqual(consumerReports.route, 'CONSUMER_REPORTS');
+  assert.notStrictEqual(consumerReports.route, 'ADVISOR_OTHER');
+  assert.ok(consumerReports.anchors.some((anchor) => anchor.includes('order consumer reports')));
+  assert.ok(consumerReports.allowedNextActions.includes('review_consumer_reports'));
+
+  const ascUnresolved = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-drivers-vehicles-unresolved-driver-route-gap')
+  ));
+  assert.strictEqual(ascUnresolved.route, 'ASC_DRIVERS_VEHICLES');
+  assert.strictEqual(ascUnresolved.ascDriversVehicles.present, true);
+  assert.strictEqual(ascUnresolved.ascDriversVehicles.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
+  assert.strictEqual(ascUnresolved.ascDriversVehicles.unresolvedDriverCount, 1);
+  assert.ok(ascUnresolved.allowedNextActions.includes('human_review_required'));
+  assert.ok(!ascUnresolved.allowedNextActions.includes('save_inline_participant_panel'));
+
+  const ascRemoveModal = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-remove-driver-modal-route-gap')
+  ));
+  assert.strictEqual(ascRemoveModal.route, 'ASC_DRIVERS_VEHICLES');
+  assert.strictEqual(ascRemoveModal.ascDriversVehicles.present, true);
+  assert.strictEqual(ascRemoveModal.ascDriversVehicles.blockerCode, 'ASC_REMOVE_DRIVER_MODAL_OPEN');
+  assert.ok(ascRemoveModal.blockers.some((blocker) => blocker.startsWith('active:ASC_REMOVE_DRIVER_MODAL')));
+  assert.deepStrictEqual(ascRemoveModal.allowedNextActions, []);
+
+  const ascVehicleModal = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-vehicle-modal-route-gap')
+  ));
+  assert.strictEqual(ascVehicleModal.route, 'ASC_DRIVERS_VEHICLES');
+  assert.strictEqual(ascVehicleModal.ascDriversVehicles.present, true);
+  assert.strictEqual(ascVehicleModal.ascDriversVehicles.blockerCode, 'ASC_VEHICLE_MODAL_OPEN');
+  assert.ok(ascVehicleModal.blockers.some((blocker) => blocker.startsWith('active:ASC_VEHICLE_MODAL')));
+  assert.deepStrictEqual(ascVehicleModal.allowedNextActions, []);
+}
+
 function testAdvisorActiveModalSnapshotContracts() {
   const requiredKeys = [
     'result', 'routeFamily', 'url', 'activeModalType', 'activePanelType', 'saveGate',
@@ -5236,6 +5308,7 @@ function run() {
   testAscReconciliationContracts();
   testDriverAndModalContracts();
   testAdvisorStateSnapshotContracts();
+  testAdvisorStateSnapshotSanitizedLiveRouteFixtures();
   testAdvisorActiveModalSnapshotContracts();
   testGatherRapportSnapshotContracts();
   testAscDriversVehiclesSnapshotContracts();

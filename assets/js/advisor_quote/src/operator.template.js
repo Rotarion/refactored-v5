@@ -5336,11 +5336,20 @@ copy(String((() => {
   const advisorStateBlockers = (source = {}) => {
     const blockers = [];
     const alerts = collectVisibleAlerts().map((item) => compact(item, 180)).filter(Boolean);
-    blockers.push(...alerts.map((item) => `alert:${item}`));
+    blockers.push(...alerts.map(advisorStateAlertBlocker));
     const active = readAdvisorActiveModalStatusFields(source);
     if (active.activeModalType && active.activeModalType !== 'NONE' && active.activeModalType !== 'INCIDENTS')
       blockers.push(`active:${active.activeModalType}${active.modalTitle ? ':' + active.modalTitle : ''}`);
     return advisorStateUnique(blockers).slice(0, 8);
+  };
+  const advisorStateAlertBlocker = (alertText) => {
+    const text = compact(alertText, 180);
+    const normalized = normLower(text);
+    if (normalized.includes('standardized address')
+      || normalized.includes('standardized address alternative city zip')
+      || (normalized.includes('alternative') && normalized.includes('city') && normalized.includes('zip')))
+      return 'alert:ENTRY_STANDARDIZED_ADDRESS_ALERT';
+    return `alert:${text}`;
   };
   const advisorStateHeadingAnchors = () => Array.from(document.querySelectorAll('h1,h2,h3,[role=heading]'))
     .filter(visible)
@@ -5368,6 +5377,27 @@ copy(String((() => {
       entryEvidence,
       visibleEvidence: compact(visibleEvidence, 240)
     };
+  };
+  const advisorStateProductOverviewUrlCandidate = (source = {}) => {
+    const url = lower(pageUrl());
+    const urls = getUrlArgs(source);
+    const configuredNeedle = lower(urls.productOverviewContains || '');
+    return !isCustomerSummaryOverviewPage(source)
+      && (url.includes('/apps/intel/102/overview') || (!!configuredNeedle && url.includes(configuredNeedle)));
+  };
+  const advisorStateConsumerReportsCandidate = (source = {}) => {
+    if (!isAscProductRoute()) return false;
+    const text = bodyText();
+    const headings = advisorStateVisibleHeadingTexts().join(' | ');
+    const selectors = getSelectorArgs(source);
+    const yesBtn = findByStableId(selectors.consumerReportsConsentYesId || source.consumerReportsConsentYesId || 'orderReportsConsent-yes-btn');
+    return includesText(text, 'order consumer reports')
+      || /\border consumer reports\b/i.test(headings)
+      || !!yesBtn;
+  };
+  const advisorStateAscDriversVehiclesCandidate = (ascDriversVehicles) => {
+    if (ascDriversVehicles && ascDriversVehicles.present) return true;
+    return isAscProductRoute() && includesText(bodyText(), 'drivers and vehicles');
   };
   const advisorStateAscPageKind = (source = {}) => {
     const url = lower(pageUrl());
@@ -5443,6 +5473,12 @@ copy(String((() => {
     const customerStatus = customerSummaryOverviewStatus(source);
     const entryStart = advisorStateEntryStartInfo();
     const ascKind = advisorStateAscPageKind();
+    const productOverviewRoute = isProductOverviewPage(source);
+    const productOverviewCandidate = advisorStateProductOverviewUrlCandidate(source);
+    const consumerReportsRoute = isConsumerReportsPage(source);
+    const consumerReportsCandidate = advisorStateConsumerReportsCandidate(source);
+    const driversVehiclesRoute = isDriversAndVehiclesPage(source);
+    const driversVehiclesCandidate = advisorStateAscDriversVehiclesCandidate(ascDriversVehicles);
 
     if (entryStart.present) {
       route = entryStart.duplicateEvidence ? 'DUPLICATE_CURRENT_CUSTOMER' : 'ENTRY_CREATE_FORM';
@@ -5461,11 +5497,11 @@ copy(String((() => {
       confidence = 0.55;
       unsafeReason = 'Customer summary evidence is incomplete; human review is required before choosing a next action.';
       anchors.push('partial:customer-summary', customerStatus.evidence);
-    } else if (isProductOverviewPage(source)) {
+    } else if (productOverviewRoute || productOverviewCandidate) {
       route = 'PRODUCT_OVERVIEW';
-      confidence = product.autoVisible ? 0.92 : 0.82;
-      unsafeReason = product.autoVisible ? null : 'Product overview detected, but the Auto product tile was not resolved.';
-      anchors.push('url:/apps/intel/102/overview', 'text:Select Product', product.autoVisible ? 'product:Auto' : '');
+      confidence = product.autoVisible ? 0.92 : (productOverviewRoute ? 0.82 : 0.72);
+      unsafeReason = product.autoVisible ? null : 'Product overview route detected, but the Auto product tile/status evidence was not resolved.';
+      anchors.push('url:/apps/intel/102/overview', productOverviewRoute ? 'text:Select Product' : 'route-candidate:url-only', product.autoVisible ? 'product:Auto' : '');
     } else if (isSelectProductFormPage(source)) {
       route = 'SELECT_PRODUCT';
       confidence = selectProduct.product || selectProduct.ratingState ? 0.92 : 0.84;
@@ -5478,12 +5514,12 @@ copy(String((() => {
       confidence = 0.88;
       unsafeReason = null;
       anchors.push('url:/apps/intel/102/rapport', 'text:Gather Data', rapport.present ? 'snapshot:gather_rapport' : '');
-    } else if (isConsumerReportsPage(source)) {
+    } else if (consumerReportsRoute || consumerReportsCandidate) {
       route = 'CONSUMER_REPORTS';
-      confidence = 0.86;
+      confidence = consumerReportsRoute ? 0.86 : 0.8;
       unsafeReason = null;
       anchors.push('url:/apps/ASCPRODUCT/', 'text:order consumer reports');
-    } else if (isDriversAndVehiclesPage(source)) {
+    } else if (driversVehiclesRoute || driversVehiclesCandidate) {
       route = 'ASC_DRIVERS_VEHICLES';
       confidence = ascDriversVehicles.driversAndVehiclesHeadingPresent ? 0.91 : 0.82;
       unsafeReason = ascDriversVehicles.blockers.length
@@ -5495,11 +5531,11 @@ copy(String((() => {
       confidence = 0.82;
       unsafeReason = null;
       anchors.push('url:/apps/ASCPRODUCT/', ascKind === 'PURCHASE' ? 'text:purchase' : 'text:coverages');
-    } else if (isDriversAndVehiclesPage(source) || isIncidentsPage(source) || isQuoteLandingPage(source) || isAscProductPage(source)) {
+    } else if (driversVehiclesRoute || isIncidentsPage(source) || isQuoteLandingPage(source) || isAscProductPage(source)) {
       route = 'ADVISOR_OTHER';
       confidence = 0.68;
       unsafeReason = 'Advisor Pro ASC page recognized, but this snapshot does not expose a supported top-level route for it yet.';
-      anchors.push('url:/apps/ASCPRODUCT/', isDriversAndVehiclesPage(source) ? 'text:Drivers and vehicles' : '', isIncidentsPage(source) ? 'text:Incidents' : '');
+      anchors.push('url:/apps/ASCPRODUCT/', driversVehiclesRoute ? 'text:Drivers and vehicles' : '', isIncidentsPage(source) ? 'text:Incidents' : '');
     } else if (url.includes('advisorpro.allstate.com') || text.includes('allstate advisor pro')) {
       route = 'ADVISOR_OTHER';
       confidence = 0.45;

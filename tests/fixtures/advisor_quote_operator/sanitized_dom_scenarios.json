@@ -1412,6 +1412,87 @@
       ] }
     ]
   },
+  "live-entry-standardized-address-alert": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/start",
+    "bodyText": "Begin Quoting Create New Prospect Standardized Address Current Home Address",
+    "nodes": [
+      { "tag": "h1", "text": "Begin Quoting" },
+      { "tag": "h2", "text": "Create New Prospect" },
+      { "tag": "h2", "text": "Standardized Address" },
+      { "tag": "h3", "text": "Current Home Address" },
+      { "tag": "div", "className": "c-alert", "text": "Standardized Address alternative city zip requires review" },
+      { "tag": "button", "id": "PrimaryApplicant-Continue-button", "text": "Create New Prospect" }
+    ]
+  },
+  "live-product-overview-grid-route-gap": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/overview",
+    "bodyText": "Sanitized customer overview Product Overview",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" }
+    ]
+  },
+  "live-asc-consumer-reports-route-gap": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Order Consumer Reports Read the following word for word to the customer",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "order consumer reports" },
+      { "tag": "h2", "text": "Read the following word for word to the customer:" }
+    ]
+  },
+  "live-asc-drivers-vehicles-unresolved-driver-route-gap": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "drivers and vehicles Add drivers Add vehicles Save and Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "h2", "text": "Add drivers" },
+      { "tag": "h2", "text": "Add vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Added to quote" },
+      { "tag": "div", "className": "driver-row", "text": "Test Secondary Driver Age 37 Add", "children": [
+        { "tag": "button", "id": "test-secondary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "live-asc-remove-driver-modal-route-gap": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "drivers and vehicles Add drivers Add vehicles Remove Driver Test Secondary Why do you want to remove this person? Save",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "h2", "text": "Add drivers" },
+      { "tag": "h2", "text": "Add vehicles" },
+      { "tag": "div", "role": "dialog", "text": "Remove Driver Test Secondary Why do you want to remove this person?", "children": [
+        { "tag": "h2", "text": "Test Secondary" },
+        { "tag": "label", "text": "This driver has their own car insurance", "children": [
+          { "tag": "input", "type": "radio", "id": "nonDriverReasonOthers_0006", "name": "nonDriverReasonEntCd", "value": "0006", "checked": true }
+        ] },
+        { "tag": "button", "id": "REMOVE_PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "live-asc-vehicle-modal-route-gap": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "drivers and vehicles Add drivers Add vehicles Vehicle Details Ownership Garaging Save",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "h2", "text": "Add drivers" },
+      { "tag": "h2", "text": "Add vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Secondary Driver Age 37 Add", "children": [
+        { "tag": "button", "id": "test-secondary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "role": "dialog", "text": "Vehicle Details Ownership Garaging", "children": [
+        { "tag": "h2", "text": "Vehicle Details" },
+        { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "ASSET_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-select-product-live-prefilled": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
     "bodyText": "Select Product Rating State Florida Product Auto Effective Date 05/11/2026 Current Address 201 N 66TH TER, HOLLYWOOD, FL, 33024 Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Continue",
