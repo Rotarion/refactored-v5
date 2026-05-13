@@ -5256,7 +5256,7 @@ copy(String((() => {
       return {
         ok: false,
         method: radioResult.method,
-        traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+        traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS',
         before,
         after: readAscParticipantMovingViolationsState(panelRoot)
       };
@@ -5266,7 +5266,9 @@ copy(String((() => {
       return {
         ok: false,
         method: semanticTarget.method,
-        traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+        traceCode: semanticTarget.method === 'ambiguous-semantic-target'
+          ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS'
+          : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
         before,
         after: readAscParticipantMovingViolationsState(panelRoot)
       };
@@ -5281,7 +5283,7 @@ copy(String((() => {
       after
     };
   };
-  const readAscNonDriverParticipantPanelReadiness = (root = findAscInlineParticipantPanelRoot()) => {
+  const readAscParticipantPanelReadiness = (root = findAscInlineParticipantPanelRoot()) => {
     const panelRoot = root && root.querySelectorAll ? root : null;
     const moving = readAscParticipantMovingViolationsState(panelRoot);
     const requiredWarning = panelRoot ? ascParticipantPanelRequiredWarningPresent(panelRoot) : false;
@@ -5297,6 +5299,7 @@ copy(String((() => {
       readyToSave: saveEnabled && !requiredMissing ? '1' : '0'
     };
   };
+  const readAscNonDriverParticipantPanelReadiness = readAscParticipantPanelReadiness;
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
     const saveButton = findAscInlineParticipantSaveButton();
     const panelPresent = advisorInlineParticipantPanelPresent();
@@ -5308,19 +5311,22 @@ copy(String((() => {
         activeParticipantRowKey: '',
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
+        activeParticipantPanelKind: '',
         activeParticipantSavePresent: savePresent ? '1' : '0',
         activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
+        activeParticipantPanelRequiredMissing: '0',
         activeParticipantRequiredMissing: '0',
         activeParticipantMovingViolationsQuestionPresent: '0',
         activeParticipantMovingViolationsSelectedValue: '',
         activeParticipantMovingViolationsDefaultApplied: '0',
         activeParticipantPanelReadyToSave: '0',
+        activeParticipantPanelSavePostcondition: '',
         activeParticipantPanelAction: ''
       };
     }
     const root = findAscInlineParticipantPanelRoot() || document;
     const panelText = getText(root) || bodyText();
-    const readiness = readAscNonDriverParticipantPanelReadiness(root);
+    const readiness = readAscParticipantPanelReadiness(root);
     const moving = readiness.moving;
     const matches = driverRows
       .map((row, index) => ({ row, index }))
@@ -5337,23 +5343,30 @@ copy(String((() => {
       rowStatus = 'UNKNOWN';
       rowKey = 'ambiguous';
     }
+    const panelKind = rowStatus === 'NON_DRIVER'
+      ? 'NON_DRIVER'
+      : ((rowStatus === 'ADDED' || rowStatus === 'FOUND_UNRESOLVED') ? 'PRIMARY_OR_ADDING_DRIVER' : 'UNKNOWN');
     let action = 'FAIL_SAFE';
     if (rowStatus === 'NON_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_NON_DRIVER_PANEL';
     else if (rowStatus === 'NON_DRIVER' && saveEnabled) action = 'COMPLETE_NON_DRIVER_PANEL';
-    else if (rowStatus === 'NON_DRIVER') action = 'FAIL_SAFE';
-    else if (rowStatus === 'ADDED' || rowStatus === 'FOUND_UNRESOLVED') action = 'FILL_ADDED_DRIVER_PANEL';
+    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_PRIMARY_DRIVER_PANEL';
+    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled) action = 'COMPLETE_PRIMARY_DRIVER_PANEL';
+    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER') action = 'FILL_ADDED_DRIVER_PANEL';
     return {
       activeParticipantPanelPresent: '1',
       activeParticipantRowKey: rowKey,
       activeParticipantNameMasked: rowKey ? '[REDACTED]' : '',
       activeParticipantRowStatus: rowStatus,
+      activeParticipantPanelKind: panelKind,
       activeParticipantSavePresent: savePresent ? '1' : '0',
       activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
+      activeParticipantPanelRequiredMissing: readiness.requiredMissing,
       activeParticipantRequiredMissing: readiness.requiredMissing,
       activeParticipantMovingViolationsQuestionPresent: moving.questionPresent,
       activeParticipantMovingViolationsSelectedValue: moving.selectedValue,
       activeParticipantMovingViolationsDefaultApplied: '0',
       activeParticipantPanelReadyToSave: readiness.readyToSave,
+      activeParticipantPanelSavePostcondition: '',
       activeParticipantPanelAction: action
     };
   };
@@ -5393,13 +5406,16 @@ copy(String((() => {
           activeParticipantRowKey: '',
           activeParticipantNameMasked: '',
           activeParticipantRowStatus: '',
+          activeParticipantPanelKind: '',
           activeParticipantSavePresent: '0',
           activeParticipantSaveEnabled: '0',
+          activeParticipantPanelRequiredMissing: '0',
           activeParticipantRequiredMissing: '0',
           activeParticipantMovingViolationsQuestionPresent: '0',
           activeParticipantMovingViolationsSelectedValue: '',
           activeParticipantMovingViolationsDefaultApplied: '0',
           activeParticipantPanelReadyToSave: '0',
+          activeParticipantPanelSavePostcondition: '',
           activeParticipantPanelAction: '',
           pageSaveContinuePresent: '0',
           pageSaveContinueEnabled: '0',
@@ -5425,9 +5441,14 @@ copy(String((() => {
       const unresolvedDriverCount = Number(driverStatus.unresolvedDriverCount || 0);
       const unresolvedVehicleCount = Number(vehicleStatus.unresolvedVehicleCount || 0);
       const blockers = [];
-      if (inlinePresent && activeParticipant.activeParticipantRequiredMissing === '1') blockers.push('ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+      if (inlinePresent && activeParticipant.activeParticipantRequiredMissing === '1') {
+        blockers.push(activeParticipant.activeParticipantPanelKind === 'PRIMARY_OR_ADDING_DRIVER'
+          ? 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'
+          : 'ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD');
+      }
       if (inlinePresent && inlineSaveButton && !isDisabledLike(inlineSaveButton) && activeParticipant.activeParticipantPanelReadyToSave === '1') blockers.push('INLINE_PANEL_READY_TO_SAVE');
       if (inlinePresent && activeParticipant.activeParticipantRowStatus === 'NON_DRIVER') blockers.push('ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN');
+      if (inlinePresent && activeParticipant.activeParticipantPanelKind === 'PRIMARY_OR_ADDING_DRIVER') blockers.push('ASC_PRIMARY_PARTICIPANT_PANEL_OPEN');
       if (unresolvedDriverCount > 0) blockers.push(`UNRESOLVED_FOUND_DRIVERS:${unresolvedDriverCount}`);
       if (unresolvedVehicleCount > 0) blockers.push(`UNRESOLVED_FOUND_VEHICLES:${unresolvedVehicleCount}`);
       let activeModalType = active.activeModalType;
@@ -5442,12 +5463,16 @@ copy(String((() => {
       } else if (inlinePresent) {
         activePanelType = 'ASC_INLINE_PARTICIPANT_PANEL';
         activeModalType = activeModalType === 'NONE' ? 'ASC_INLINE_PARTICIPANT_PANEL' : activeModalType;
-        blockerCode = activeParticipant.activeParticipantRowStatus === 'NON_DRIVER'
+        blockerCode = activeParticipant.activeParticipantPanelKind === 'UNKNOWN'
+          ? 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS'
+          : (activeParticipant.activeParticipantPanelKind === 'PRIMARY_OR_ADDING_DRIVER' && activeParticipant.activeParticipantRequiredMissing === '1'
+            ? 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'
+            : (activeParticipant.activeParticipantRowStatus === 'NON_DRIVER'
           ? 'ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN'
           : (inlineSaveButton && !isDisabledLike(inlineSaveButton)
             ? 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE'
-            : 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED');
-        nextRecommendedAction = inlineSaveButton && !isDisabledLike(inlineSaveButton) ? 'save_inline_participant_panel' : '';
+            : 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED')));
+        nextRecommendedAction = activeParticipant.activeParticipantPanelKind !== 'UNKNOWN' && inlineSaveButton && !isDisabledLike(inlineSaveButton) ? 'save_inline_participant_panel' : '';
         nextRecommendedReadOnlyStatus = 'asc_participant_detail_status';
       } else if (activeModalType === 'ASC_VEHICLE_MODAL') {
         blockerCode = 'ASC_VEHICLE_MODAL_OPEN';
@@ -5499,13 +5524,16 @@ copy(String((() => {
         activeParticipantRowKey: activeParticipant.activeParticipantRowKey,
         activeParticipantNameMasked: activeParticipant.activeParticipantNameMasked,
         activeParticipantRowStatus: activeParticipant.activeParticipantRowStatus,
+        activeParticipantPanelKind: activeParticipant.activeParticipantPanelKind,
         activeParticipantSavePresent: activeParticipant.activeParticipantSavePresent,
         activeParticipantSaveEnabled: activeParticipant.activeParticipantSaveEnabled,
+        activeParticipantPanelRequiredMissing: activeParticipant.activeParticipantPanelRequiredMissing,
         activeParticipantRequiredMissing: activeParticipant.activeParticipantRequiredMissing,
         activeParticipantMovingViolationsQuestionPresent: activeParticipant.activeParticipantMovingViolationsQuestionPresent,
         activeParticipantMovingViolationsSelectedValue: activeParticipant.activeParticipantMovingViolationsSelectedValue,
         activeParticipantMovingViolationsDefaultApplied: activeParticipant.activeParticipantMovingViolationsDefaultApplied,
         activeParticipantPanelReadyToSave: activeParticipant.activeParticipantPanelReadyToSave,
+        activeParticipantPanelSavePostcondition: activeParticipant.activeParticipantPanelSavePostcondition,
         activeParticipantPanelAction: activeParticipant.activeParticipantPanelAction,
         pageSaveContinuePresent: snapshotBool(saveButton),
         pageSaveContinueEnabled: snapshotBool(saveButton && !isDisabledLike(saveButton)),
@@ -5551,13 +5579,16 @@ copy(String((() => {
         activeParticipantRowKey: '',
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
+        activeParticipantPanelKind: '',
         activeParticipantSavePresent: '0',
         activeParticipantSaveEnabled: '0',
+        activeParticipantPanelRequiredMissing: '0',
         activeParticipantRequiredMissing: '0',
         activeParticipantMovingViolationsQuestionPresent: '0',
         activeParticipantMovingViolationsSelectedValue: '',
         activeParticipantMovingViolationsDefaultApplied: '0',
         activeParticipantPanelReadyToSave: '0',
+        activeParticipantPanelSavePostcondition: '',
         activeParticipantPanelAction: '',
         pageSaveContinuePresent: '0',
         pageSaveContinueEnabled: '0',
@@ -6694,7 +6725,9 @@ copy(String((() => {
     'set_select_product_defaults',
     'select_vehicle_dropdown_option',
     'select_vehicle_dropdown_first_valid_nonplaceholder',
+    'asc_click_active_participant_save',
     'asc_ensure_non_driver_participant_panel_ready',
+    'asc_ensure_active_participant_panel_ready',
     'fill_participant_modal',
     'select_remove_reason',
     'fill_vehicle_modal',
@@ -8512,18 +8545,46 @@ copy(String((() => {
       return document.getElementById(saveButtonId) ? '1' : '0';
     }
 
+    case 'asc_click_active_participant_save': {
+      const root = findAscInlineParticipantPanelRoot();
+      const saveButton = findAscInlineParticipantSaveButton();
+      if (!root || !saveButton || !visible(saveButton) || isDisabledLike(saveButton))
+        return lineResult({
+          result: 'NO',
+          method: !root ? 'panel-root-missing' : (!saveButton ? 'save-missing' : (isDisabledLike(saveButton) ? 'save-disabled' : 'save-not-visible')),
+          clicked: '0'
+        });
+      const clicked = clickCenterEl(saveButton);
+      return lineResult({
+        result: clicked ? 'OK' : 'NO',
+        method: clicked ? 'scoped-panel-save' : 'scoped-panel-save-click-failed',
+        clicked: clicked ? '1' : '0'
+      });
+    }
+
+    case 'asc_ensure_active_participant_panel_ready':
     case 'asc_ensure_non_driver_participant_panel_ready': {
       const root = findAscInlineParticipantPanelRoot();
-      const before = readAscNonDriverParticipantPanelReadiness(root);
+      const active = readAscActiveParticipantPanelFields(collectAscDriverRows());
+      const panelKind = safe(args.panelKind || active.activeParticipantPanelKind || 'UNKNOWN') || 'UNKNOWN';
+      const isPrimaryPanel = panelKind === 'PRIMARY_OR_ADDING_DRIVER';
+      const isNonDriverPanel = panelKind === 'NON_DRIVER';
+      const readyResultCode = isPrimaryPanel ? 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE' : 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE';
+      const requiredTraceCode = isPrimaryPanel ? 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED' : 'ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD';
+      const selectedTraceCode = isPrimaryPanel ? 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED' : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED';
+      const before = readAscParticipantPanelReadiness(root);
       if (!root) {
         return lineResult({
           result: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
           method: 'participant-panel-root-missing',
           traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+          activeParticipantPanelKind: panelKind,
           panelPresent: '0',
           savePresent: before.savePresent,
           saveEnabled: before.saveEnabled,
+          activeParticipantPanelRequiredMissing: '1',
           activeParticipantRequiredMissing: '1',
+          activeParticipantPanelReadyToSave: '0',
           movingViolationsQuestionPresent: before.moving.questionPresent,
           movingViolationsSelectedValue: before.moving.selectedValue,
           movingViolationsDefaultApplied: '0',
@@ -8532,27 +8593,58 @@ copy(String((() => {
           failedFields: 'participantPanel'
         });
       }
-      let selection = { ok: true, method: 'not-needed', traceCode: 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE', before: before.moving, after: before.moving };
+      if (!isPrimaryPanel && !isNonDriverPanel) {
+        return lineResult({
+          result: 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS',
+          method: 'unknown-participant-panel-kind',
+          traceCode: 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS',
+          activeParticipantPanelKind: panelKind,
+          activeParticipantRowStatus: active.activeParticipantRowStatus,
+          activeParticipantPanelAction: active.activeParticipantPanelAction,
+          panelPresent: '1',
+          savePresent: before.savePresent,
+          saveEnabled: before.saveEnabled,
+          activeParticipantPanelRequiredMissing: before.requiredMissing,
+          activeParticipantRequiredMissing: before.requiredMissing,
+          activeParticipantPanelReadyToSave: before.readyToSave,
+          movingViolationsQuestionPresent: before.moving.questionPresent,
+          movingViolationsControlPresent: before.moving.controlPresent,
+          movingViolationsWarningPresent: before.moving.warningPresent,
+          movingViolationsSelectedValue: before.moving.selectedValue,
+          movingViolationsSelectionSource: before.moving.selectedSource,
+          movingViolationsDefaultApplied: '0',
+          requiresClientVerification: '0',
+          source: safe(args.source || 'PROVISIONAL_WORKFLOW_DEFAULT'),
+          failedFields: 'participantPanelKind'
+        });
+      }
+      let selection = { ok: true, method: 'not-needed', traceCode: readyResultCode, before: before.moving, after: before.moving };
       let defaultApplied = '0';
       if (before.moving.requiredMissing === '1') {
         selection = selectAscParticipantMovingViolationsNo(root);
         defaultApplied = selection.ok && selection.after && selection.after.selectedValue === 'NO' && selection.before && !selection.before.selectedValue ? '1' : '0';
       }
-      const after = readAscNonDriverParticipantPanelReadiness(root);
+      const after = readAscParticipantPanelReadiness(root);
       const ready = after.readyToSave === '1';
       const result = ready
-        ? 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE'
-        : (selection.traceCode === 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED'
+        ? readyResultCode
+        : (selection.traceCode === 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS'
+          ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS'
+          : (selection.traceCode === 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED'
           ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED'
-          : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+          : requiredTraceCode));
       return lineResult({
         result,
         method: selection.method,
-        traceCode: ready ? (defaultApplied === '1' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED' : 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE') : selection.traceCode,
-        initialTraceCode: before.moving.requiredMissing === '1' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED' : '',
+        traceCode: ready ? (defaultApplied === '1' ? selectedTraceCode : readyResultCode) : selection.traceCode,
+        initialTraceCode: before.moving.requiredMissing === '1' ? requiredTraceCode : '',
+        activeParticipantPanelKind: panelKind,
+        activeParticipantRowStatus: active.activeParticipantRowStatus,
+        activeParticipantPanelAction: active.activeParticipantPanelAction,
         panelPresent: '1',
         savePresent: after.savePresent,
         saveEnabled: after.saveEnabled,
+        activeParticipantPanelRequiredMissing: after.requiredMissing,
         activeParticipantRequiredMissing: after.requiredMissing,
         activeParticipantPanelReadyToSave: after.readyToSave,
         movingViolationsQuestionPresent: after.moving.questionPresent,

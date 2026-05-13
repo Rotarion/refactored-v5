@@ -1512,6 +1512,33 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-primary-inline-panel-moving-violations-required-mesh": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Primary Driver Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver One Age 66 Add", "children": [
+        { "tag": "button", "id": "test-found-driver-one-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Test Primary Driver Let's get some more details Driver details", "children": [
+        { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+        { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2013 Nissan Altima VIN: MASKEDALT*******01 Add", "children": [
+        { "tag": "button", "id": "2013-nissan-altima-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Found Driver One Non-driver Let's get some more details Have you had any moving violations in the past five years? Yes No Additional Yes No Please make a selection. Save and Continue",
@@ -1534,26 +1561,50 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-unknown-inline-panel-moving-violations-required-mesh": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Unknown Person Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Unknown Person Let's get some more details Driver details Have you had any moving violations in the past five years? Please make a selection.", "children": [
+        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-inline-participant": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
-    "bodyText": "Drivers and vehicles Let's get some more details Save",
+    "bodyText": "Drivers and vehicles Test Primary Driver Let's get some more details Save",
     "nodes": [
-      { "tag": "h2", "text": "Let's get some more details" },
-      { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
-      { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
-      { "tag": "input", "type": "radio", "id": "militaryInd_false", "name": "agreement.agreementParticipant.militaryInd", "value": "false", "checked": true },
-      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Test Primary Driver Let's get some more details", "children": [
+        { "tag": "h2", "text": "Let's get some more details" },
+        { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+        { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
+        { "tag": "input", "type": "radio", "id": "militaryInd_false", "name": "agreement.agreementParticipant.militaryInd", "value": "false", "checked": true },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
+      ] }
     ]
   },
   "snapshot-asc-inline-ready-unresolved-113": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/113/",
-    "bodyText": "Drivers and vehicles Add drivers Add vehicles Let's get some more details Save Save and Continue",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Primary Driver Let's get some more details Save Save and Continue",
     "nodes": [
       { "tag": "h1", "text": "Drivers and vehicles" },
-      { "tag": "h2", "text": "Let's get some more details" },
-      { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
-      { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
-      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+      { "tag": "section", "className": "participant-panel", "text": "Test Primary Driver Let's get some more details", "children": [
+        { "tag": "h2", "text": "Let's get some more details" },
+        { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+        { "tag": "input", "type": "email", "id": "emailAddress.emailAddress", "value": "driver@example.test" },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" }
+      ] },
       { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
         { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
       ] },
