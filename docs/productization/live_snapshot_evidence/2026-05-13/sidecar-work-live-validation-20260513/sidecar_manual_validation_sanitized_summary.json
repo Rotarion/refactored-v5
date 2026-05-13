@@ -1,0 +1,268 @@
+{
+  "runId": "sidecar-work-live-validation-20260513",
+  "scanCount": 17,
+  "countsByRoute": {
+    "ADVISOR_OTHER": 4,
+    "ENTRY_CREATE_FORM": 3,
+    "DUPLICATE_CURRENT_CUSTOMER": 1,
+    "PRODUCT_OVERVIEW": 1,
+    "RAPPORT": 1,
+    "ASC_DRIVERS_VEHICLES": 5,
+    "COVERAGES": 2
+  },
+  "lastRoute": "COVERAGES",
+  "lastConfidence": 0.78,
+  "lastUnsafe": "1",
+  "routeSequence": [
+    {
+      "sequence": 1,
+      "archivedFile": "001_ADVISOR_OTHER_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ADVISOR_OTHER",
+      "normalizedRouteFamily": "/apps/foundations/101/homepage",
+      "confidence": 0.45,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 2,
+      "archivedFile": "002_ADVISOR_OTHER_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ADVISOR_OTHER",
+      "normalizedRouteFamily": "/apps/foundations/101/homepage",
+      "confidence": 0.45,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 3,
+      "archivedFile": "003_ADVISOR_OTHER_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ADVISOR_OTHER",
+      "normalizedRouteFamily": "/apps/foundations/101/homepage",
+      "confidence": 0.45,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 4,
+      "archivedFile": "004_ENTRY_CREATE_FORM_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ENTRY_CREATE_FORM",
+      "normalizedRouteFamily": "/apps/intel/102/start",
+      "confidence": 0.84,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 5,
+      "archivedFile": "005_ENTRY_CREATE_FORM_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ENTRY_CREATE_FORM",
+      "normalizedRouteFamily": "/apps/intel/102/start",
+      "confidence": 0.84,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 6,
+      "archivedFile": "006_ENTRY_CREATE_FORM_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ENTRY_CREATE_FORM",
+      "normalizedRouteFamily": "/apps/intel/102/start",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 1,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "STANDARDIZED_ADDRESS_ALERT"
+      ]
+    },
+    {
+      "sequence": 7,
+      "archivedFile": "007_DUPLICATE_CURRENT_CUSTOMER_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "DUPLICATE_CURRENT_CUSTOMER",
+      "normalizedRouteFamily": "/apps/intel/102/start",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 2,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 8,
+      "archivedFile": "008_PRODUCT_OVERVIEW_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "PRODUCT_OVERVIEW",
+      "normalizedRouteFamily": "/apps/intel/102/overview",
+      "confidence": 0.92,
+      "unsafe": "0",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": []
+    },
+    {
+      "sequence": 9,
+      "archivedFile": "009_RAPPORT_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "RAPPORT",
+      "normalizedRouteFamily": "/apps/intel/102/rapport",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 2,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 10,
+      "archivedFile": "010_ASC_DRIVERS_VEHICLES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 1,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 11,
+      "archivedFile": "011_ASC_DRIVERS_VEHICLES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.91,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 12,
+      "archivedFile": "012_ASC_DRIVERS_VEHICLES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.91,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 13,
+      "archivedFile": "013_ASC_DRIVERS_VEHICLES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.91,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 14,
+      "archivedFile": "014_ASC_DRIVERS_VEHICLES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ASC_DRIVERS_VEHICLES",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 1,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "UNKNOWN_UNSAFE"
+      ]
+    },
+    {
+      "sequence": 15,
+      "archivedFile": "015_ADVISOR_OTHER_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "ADVISOR_OTHER",
+      "normalizedRouteFamily": "/apps/ASCPRODUCT/{id}/",
+      "confidence": 0.68,
+      "unsafe": "1",
+      "blockerCount": 0,
+      "allowedNextActionCount": 1,
+      "pageCategories": [
+        "ASC_PRIOR_INSURANCE_HISTORY_UNSUPPORTED"
+      ]
+    },
+    {
+      "sequence": 16,
+      "archivedFile": "016_COVERAGES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "COVERAGES",
+      "normalizedRouteFamily": "/apps/foundations/{id}/coverages",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 2,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "COVERAGES_PROMPT_OR_BLOCKER"
+      ]
+    },
+    {
+      "sequence": 17,
+      "archivedFile": "017_COVERAGES_advisor_state_snapshot.json",
+      "op": "advisor_state_snapshot",
+      "route": "COVERAGES",
+      "normalizedRouteFamily": "/apps/foundations/{id}/coverages",
+      "confidence": 0.78,
+      "unsafe": "1",
+      "blockerCount": 1,
+      "allowedNextActionCount": 0,
+      "pageCategories": [
+        "COVERAGES_PROMPT_OR_BLOCKER"
+      ]
+    }
+  ],
+  "observedPageCategories": [
+    "STANDARDIZED_ADDRESS_ALERT",
+    "ASC_PRIOR_INSURANCE_HISTORY_UNSUPPORTED",
+    "COVERAGES_PROMPT_OR_BLOCKER",
+    "UNKNOWN_UNSAFE"
+  ],
+  "readOnlyValidation": {
+    "opNames": [
+      "advisor_state_snapshot"
+    ],
+    "mutationObserved": false,
+    "screenshotsIncluded": false
+  },
+  "futureReadOnlyRecommendation": "Add an ASC prior-insurance-history read-only snapshot/classifier route. Treat prior insurance duration as requiring known lead data or client verification; do not assume a default."
+}
