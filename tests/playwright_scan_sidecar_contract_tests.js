@@ -422,7 +422,10 @@ async function testRunArchiveWritesLatestRunFileAndSummary() {
   const summaryPath = path.resolve(__dirname, '..', envelope.archive.summaryPath);
   assert.ok(fs.existsSync(summaryPath), 'summary file should be written');
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+  assert.strictEqual(summary.schemaVersion, 'advisor-playwright-scan-run-summary/v1');
   assert.strictEqual(summary.runId, runId);
+  assert.ok(summary.createdAt, 'summary should include createdAt');
+  assert.ok(summary.updatedAt, 'summary should include updatedAt');
   assert.strictEqual(summary.scanCount, 1);
   assert.strictEqual(summary.lastRoute, 'PRODUCT_OVERVIEW');
   assert.strictEqual(summary.lastConfidence, 0.72);
@@ -522,6 +525,15 @@ function testOutputParsingAndSummaries() {
   assert.strictEqual(sidecar.summarizeOpResult('scan_current_page', scanParsed).fieldCount, 1);
 }
 
+function testHelpDocumentsArchiveControlsAndSafety() {
+  const help = sidecar.formatHelp();
+  assert.ok(help.includes('archive: logs/playwright_advisor_scans/runs/<runId>/'));
+  assert.ok(help.includes('--run-id <id>'));
+  assert.ok(help.includes('--archive-dir <path>'));
+  assert.ok(help.includes('--no-write'));
+  assert.ok(help.includes('does not launch, navigate, click, type, screenshot, or focus pages'));
+}
+
 async function run() {
   testReadOnlyAllowlist();
   testPayloadRenderingRefusesMutations();
@@ -536,6 +548,7 @@ async function run() {
   await testRunArchiveWritesLatestRunFileAndSummary();
   testArgParsingAndOutputGuard();
   testOutputParsingAndSummaries();
+  testHelpDocumentsArchiveControlsAndSafety();
   process.stdout.write('playwright_scan_sidecar_contract_tests: PASS\n');
 }
 

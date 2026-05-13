@@ -7,6 +7,8 @@ This sidecar is a productization-only read path. It does not change AutoHotkey w
 
 ## Scope
 
+Current roadmap phase: Phase 2, scan-only Playwright/CDP sidecar foundation. The checkpoint is a read-only observer and evidence-archive layer for manual live validation, not a quoting engine or workflow replacement.
+
 - CDP attach CLI: `tools/playwright_advisor_scan_sidecar.js`
 - Dedicated Edge TypeScript sidecar: `sidecars/advisor-playwright-scan/src/index.ts`
 - CDP contract test: `tests/playwright_scan_sidecar_contract_tests.js`
@@ -100,7 +102,7 @@ The sidecar also maintains:
 logs/playwright_advisor_scans/runs/<runId>/run_summary.json
 ```
 
-The run summary records the run id, creation time, scan count, last target, last route/confidence/unsafe value, counts by route, and the list of archived scan files. `--archive-dir` can move the archive root, but it is still refused outside `logs/`. `--label` remains available as human-readable scan metadata; filenames stay route/op based so raw URLs and page titles are not copied into archive filenames.
+The run summary uses schema `advisor-playwright-scan-run-summary/v1` and records the run id, creation/update time, scan count, last target, last route/confidence/unsafe value, counts by route, and the list of archived scan files. `--archive-dir` can move the archive root, but it is still refused outside `logs/`. `--label` remains available as human-readable scan metadata; filenames stay route/op based so raw URLs and page titles are not copied into archive filenames. When writes are enabled, CLI output prints `archiveRunId=`, `archiveSummary=`, and `archiveFiles=` so the operator can find the evidence folder without opening raw JSON first.
 
 Example with an explicit run id:
 
@@ -122,6 +124,14 @@ To override the target URL token:
 $NODE="C:\Users\sflzsl7k\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
 & $NODE .\tools\playwright_advisor_scan_sidecar.js --cdp-url http://127.0.0.1:9222 --target-url-token advisorpro.allstate.com
 ```
+
+Manual live validation checklist template:
+
+```text
+docs/productization/PLAYWRIGHT_SCAN_MANUAL_LIVE_VALIDATION_CHECKLIST.md
+```
+
+Use that checklist for repeated live CDP scans. Commit only sanitized findings; keep raw latest/archive JSON under ignored `logs/` paths.
 
 For the TypeScript dedicated Edge profile skeleton:
 

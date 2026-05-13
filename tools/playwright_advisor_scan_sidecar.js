@@ -535,8 +535,10 @@ function archiveFilename(sequence, result, config = {}) {
 
 function buildInitialRunSummary(runId, createdAt) {
   return {
+    schemaVersion: 'advisor-playwright-scan-run-summary/v1',
     runId,
     createdAt,
+    updatedAt: createdAt,
     scanCount: 0,
     lastTarget: null,
     lastRoute: '',
@@ -554,8 +556,10 @@ function writeScanArchive(envelope, config) {
   const runDir = path.join(archiveDir, 'runs', runId);
   const summaryPath = path.join(runDir, 'run_summary.json');
   const summary = readJsonFileIfPresent(summaryPath, buildInitialRunSummary(runId, envelope.capturedAt || new Date().toISOString()));
+  if (!summary.schemaVersion) summary.schemaVersion = 'advisor-playwright-scan-run-summary/v1';
   if (!summary.runId) summary.runId = runId;
   if (!summary.createdAt) summary.createdAt = envelope.capturedAt || new Date().toISOString();
+  summary.updatedAt = new Date().toISOString();
   if (!summary.countsByRoute || typeof summary.countsByRoute !== 'object') summary.countsByRoute = {};
   if (!Array.isArray(summary.scanFiles)) summary.scanFiles = [];
 
@@ -1097,6 +1101,13 @@ function formatHelp() {
     '  archive: logs/playwright_advisor_scans/runs/<runId>/',
     '  ops: advisor_state_snapshot, advisor_active_modal_status, gather_rapport_snapshot, asc_drivers_vehicles_snapshot, scan_current_page',
     '  direct CDP evaluation timeout: 30000ms (override with --cdp-eval-timeout-ms)',
+    '  generated run id: timestamp unless --run-id is supplied',
+    '',
+    'Archive controls:',
+    '  --run-id <id>          stable run folder name for repeated manual validation scans',
+    '  --label <text>        human-readable scan metadata; not used in filenames',
+    '  --archive-dir <path>  archive root; must stay under logs/',
+    '  --no-write            print the scan envelope to stdout and skip latest/archive writes',
     '',
     'Safety:',
     '  The CLI refuses any op not in its read-only allowlist.',
@@ -1126,6 +1137,11 @@ async function main() {
   const summaries = envelope.results.map((result) => `${result.op}:${JSON.stringify(result.summary)}`).join(' ');
   process.stdout.write(`${TOOL_NAME}: OK\n`);
   process.stdout.write(`output=${envelope.outputPath}\n`);
+  if (envelope.archive) {
+    process.stdout.write(`archiveRunId=${envelope.archive.runId}\n`);
+    process.stdout.write(`archiveSummary=${envelope.archive.summaryPath}\n`);
+    process.stdout.write(`archiveFiles=${envelope.archive.scanFiles.join(',')}\n`);
+  }
   process.stdout.write(`target=${envelope.target.url}\n`);
   process.stdout.write(`summary=${summaries}\n`);
 }
