@@ -33,6 +33,7 @@ global advisorQuoteProductTileAutoSelectedOnOverview := false
 global advisorQuoteProductOverviewSaved := false
 global advisorQuoteGatherAutoCommitted := false
 global advisorQuoteProductTileRecoveryAttempted := false
+global advisorQuoteAscLastAddedVehicleYear := ""
 global advisorQuoteUseResidentOperatorTransport := true
 global advisorQuoteResidentTransportReadOnlyEnabled := true
 global advisorQuoteResidentTransportMutationEnabled := false
@@ -964,7 +965,12 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
                 maritalResult := AdvisorQuoteStatusValue(maritalStatus, "result")
                 if !AdvisorQuoteIsStateInList(maritalResult, ["SINGLE_CONFIRMED", "SINGLE_SET", "SELECTED", "ALREADY_SELECTED", "NO_DROPDOWN"]) {
                     failureReason := "ASC_PARTICIPANT_POLICY_RESOLVE_FAILED: " AdvisorQuoteBuildAscMaritalStatusDetail(maritalStatus)
-                    failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-participant-policy-failed")
+                    if (AdvisorQuoteStatusInteger(snapshot, "unresolvedDriverCount") > 0 || AdvisorQuoteStatusInteger(snapshot, "unresolvedVehicleCount") > 0) {
+                        failureReason := "ASC_PARTICIPANT_POLICY_DEFERRED_UNRESOLVED_ROWS_PRESENT: " failureReason
+                        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-participant-policy-deferred-unresolved-rows")
+                    } else {
+                        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-participant-policy-failed")
+                    }
                     return false
                 }
             Case "add_primary_driver":
@@ -1123,6 +1129,11 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
         ledger["primaryDriverStatus"] := (primaryName = "") ? "ambiguous" : "missing"
     }
 
+    if (ledger["primaryDriverStatus"] = "needs_add")
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_primary_driver", "driver", primaryName, "primary-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+    if (ledger["primaryDriverStatus"] != "added")
+        return AdvisorQuoteAscLedgerFail(ledger, "ASC_PRIMARY_DRIVER_ROW_" StrUpper(ledger["primaryDriverStatus"]), AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+
     spouseEval := AdvisorQuoteAscEvaluateSpouse(profile, participantStatus, driverRows, db)
     ledger["spousePolicy"] := spouseEval["policy"]
     ledger["spouseStatus"] := spouseEval["status"]
@@ -1140,17 +1151,10 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
         return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_CANDIDATE_AMBIGUOUS:" spouseEval["reason"], spouseEval["evidence"])
     if (ledger["spouseStatus"] = "blocked")
         return AdvisorQuoteAscLedgerFail(ledger, spouseEval["reason"], spouseEval["evidence"])
-    if AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db) {
-        participantAction := (ledger["spouseOverrideApplied"] = "1") ? "resolve_spouse_marital_panel" : "resolve_participant_policy"
-        return AdvisorQuoteAscLedgerNext(ledger, "OK", participantAction, "panel", ledger["selectedSpouseName"], "participant-policy-not-resolved", spouseEval["evidence"])
-    }
-
-    if (ledger["primaryDriverStatus"] = "needs_add")
-        return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_primary_driver", "driver", primaryName, "primary-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
-    if (ledger["primaryDriverStatus"] != "added")
-        return AdvisorQuoteAscLedgerFail(ledger, "ASC_PRIMARY_DRIVER_ROW_" StrUpper(ledger["primaryDriverStatus"]), AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+    participantPolicyNeedsAction := AdvisorQuoteAscParticipantPolicyNeedsAction(profile, participantStatus, ledger, db)
 
     expectedNames := AdvisorQuoteAscExpectedDriverNames(profile, ledger["selectedSpouseName"])
+    spouseDriverNeedsAdd := false
     if (ledger["selectedSpouseName"] != "" && ledger["spouseStatus"] != "not_applicable") {
         spouseRow := AdvisorQuoteAscFindDriverRow(driverRows, ledger["selectedSpouseName"])
         if IsObject(spouseRow) {
@@ -1158,7 +1162,7 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
                 ledger["spouseStatus"] := "added"
             else if (AdvisorQuoteStatusValue(spouseRow, "add") = "1") {
                 ledger["spouseStatus"] := "needs_add"
-                return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_spouse_driver", "driver", ledger["selectedSpouseName"], "spouse-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+                spouseDriverNeedsAdd := true
             } else
                 return AdvisorQuoteAscLedgerFail(ledger, "ASC_SPOUSE_ROW_AMBIGUOUS", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
         }
@@ -1174,7 +1178,18 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
     ledger["extraDriverCount"] := String(extras.Length)
     ledger["extraDriversToRemove"] := JoinArray(extras, "||")
     if (extras.Length > 0)
-        return AdvisorQuoteAscLedgerNext(ledger, "OK", "remove_extra_driver", "driver", extras[1], "extra-driver-remove-candidate", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "remove_extra_driver", "driver", extras[1], "ASC_LEDGER_DRIVER_REMOVE_SELECTED", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
+
+    if (participantPolicyNeedsAction && spouseDriverNeedsAdd) {
+        participantAction := (ledger["spouseOverrideApplied"] = "1") ? "resolve_spouse_marital_panel" : "resolve_participant_policy"
+        evidence := spouseEval["evidence"]
+        if (AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount") > 0 || AdvisorQuoteStatusInteger(vehicleStatus, "unresolvedVehicleCount") > 0)
+            evidence .= "|ASC_PARTICIPANT_POLICY_DEFERRED_UNRESOLVED_ROWS_PRESENT"
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", participantAction, "panel", ledger["selectedSpouseName"], "ASC_LEDGER_SPOUSE_CANDIDATE_SELECTED", evidence)
+    }
+
+    if (spouseDriverNeedsAdd)
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_spouse_driver", "driver", ledger["selectedSpouseName"], "spouse-driver-needs-add", AdvisorQuoteStatusValue(driverStatus, "driverSummaries"))
 
     unresolvedDrivers := AdvisorQuoteStatusInteger(driverStatus, "unresolvedDriverCount")
     ledger["unresolvedDriverCount"] := String(unresolvedDrivers)
@@ -1195,8 +1210,12 @@ AdvisorQuoteBuildAscDriversVehiclesLedger(profile, snapshot, driverStatus := "",
     if (expectedVehicleCount > 0 && addedVehicles < expectedVehicleCount) {
         ledger["vehiclesToAdd"] := AdvisorQuoteVehicleListSummary(vehiclePolicy["completeVehicles"])
         if (unresolvedVehicles > 0)
-            return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_vehicle_row", "vehicle", ledger["vehiclesToAdd"], "expected-vehicle-row-needs-add", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+            return AdvisorQuoteAscLedgerNext(ledger, "OK", "add_vehicle_row", "vehicle", ledger["vehiclesToAdd"], "ASC_LEDGER_NEXT_ACTION_ADD_MATCHED_VEHICLE", "ASC_DRIVER_ROWS_RESOLVED_VEHICLES_PENDING|" AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
         return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_VERIFY_FAILED", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
+    }
+    if (participantPolicyNeedsAction) {
+        participantAction := (ledger["spouseOverrideApplied"] = "1") ? "resolve_spouse_marital_panel" : "resolve_participant_policy"
+        return AdvisorQuoteAscLedgerNext(ledger, "OK", participantAction, "panel", ledger["selectedSpouseName"], "participant-policy-not-resolved", spouseEval["evidence"])
     }
     if (expectedVehicleCount = 0 && addedVehicles < 1)
         return AdvisorQuoteAscLedgerFail(ledger, "ASC_VEHICLE_ROW_VERIFY_FAILED:no-expected-or-added-vehicle", AdvisorQuoteStatusValue(vehicleStatus, "vehicleSummaries"))
@@ -1920,11 +1939,18 @@ AdvisorQuoteGetAscVehicleRowsStatus() {
 }
 
 AdvisorQuoteRunAscVehicleReconcile(policy) {
+    global advisorQuoteAscLastAddedVehicleYear
     args := Map(
         "expectedVehicles", AdvisorQuoteBuildExpectedVehiclesArgList(policy["completeVehicles"]),
         "partialVehicles", AdvisorQuoteBuildAscPartialVehiclesArgList(policy["partialYearMakeVehicles"])
     )
-    return AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_vehicle_rows", args))
+    status := AdvisorQuoteParseKeyValueLines(AdvisorQuoteRunOp("asc_reconcile_vehicle_rows", args))
+    addedVehicleEvidence := AdvisorQuoteStatusValue(status, "addedVehicles")
+    if (addedVehicleEvidence = "")
+        addedVehicleEvidence := AdvisorQuoteStatusValue(status, "promotedPartialVehicles")
+    if RegExMatch(addedVehicleEvidence, "\b(19|20)\d{2}\b", &m)
+        advisorQuoteAscLastAddedVehicleYear := m[0]
+    return status
 }
 
 AdvisorQuoteBuildAscVehicleRowsStatusDetail(status) {
@@ -1939,6 +1965,7 @@ AdvisorQuoteBuildAscVehicleRowsStatusDetail(status) {
 
 AdvisorQuoteBuildAscVehicleReconcileDetail(status) {
     return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", method=" AdvisorQuoteStatusValue(status, "method")
         . ", addedVehicles=" AdvisorQuoteStatusValue(status, "addedVehicles")
         . ", removedVehicles=" AdvisorQuoteStatusValue(status, "removedVehicles")
         . ", promotedPartialVehicles=" AdvisorQuoteStatusValue(status, "promotedPartialVehicles")
@@ -2296,8 +2323,12 @@ AdvisorQuoteBuildRemoveReasonStatusDetail(status) {
 }
 
 AdvisorQuoteFillVehicleModal(profile, db) {
+    global advisorQuoteAscLastAddedVehicleYear
     threshold := Integer(db["defaults"]["vehicleFinanceYearThreshold"])
-    raw := AdvisorQuoteRunOp("fill_vehicle_modal", Map("threshold", threshold))
+    args := Map("threshold", threshold)
+    if (Trim(String(advisorQuoteAscLastAddedVehicleYear ?? "")) != "")
+        args["vehicleYear"] := advisorQuoteAscLastAddedVehicleYear
+    raw := AdvisorQuoteRunOp("fill_vehicle_modal", args)
     status := AdvisorQuoteParseKeyValueLines(raw)
     if (status.Count = 0)
         return raw = "OK"
@@ -2311,6 +2342,9 @@ AdvisorQuoteFillVehicleModal(profile, db) {
             . ", garagingAddressSameAsOtherClicked=" AdvisorQuoteStatusValue(status, "garagingAddressSameAsOtherClicked")
             . ", purchaseDateFalseClicked=" AdvisorQuoteStatusValue(status, "purchaseDateFalseClicked")
             . ", ownershipClicked=" AdvisorQuoteStatusValue(status, "ownershipClicked")
+            . ", ownershipExpected=" AdvisorQuoteStatusValue(status, "ownershipExpected")
+            . ", ownershipReadback=" AdvisorQuoteStatusValue(status, "ownershipReadback")
+            . ", ownershipTraceCode=" AdvisorQuoteStatusValue(status, "ownershipTraceCode")
     )
     return AdvisorQuoteStatusValue(status, "result") = "OK"
 }
@@ -2440,6 +2474,7 @@ AdvisorQuoteInitTrace(profile) {
     global advisorQuoteProductOverviewAutoPending, advisorQuoteProductOverviewAutoVerified
     global advisorQuoteProductTileAutoSelectedOnOverview, advisorQuoteProductOverviewSaved, advisorQuoteGatherAutoCommitted, advisorQuoteProductTileRecoveryAttempted
     global advisorQuoteRequiresClientVerification, advisorQuoteCreditHitNotReceived, advisorQuoteProvisionalFields, advisorQuoteProvisionalSource
+    global advisorQuoteAscLastAddedVehicleYear
     AdvisorQuoteResetConsoleBridge()
     AdvisorQuoteInitScanBundle()
     AdvisorQuoteResetSnapshotObserverRun()
@@ -2454,6 +2489,7 @@ AdvisorQuoteInitTrace(profile) {
     advisorQuoteProductOverviewSaved := false
     advisorQuoteGatherAutoCommitted := false
     advisorQuoteProductTileRecoveryAttempted := false
+    advisorQuoteAscLastAddedVehicleYear := ""
     person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
     fullName := person.Has("fullName") ? Trim(String(person["fullName"])) : ""
     if (fullName = "")

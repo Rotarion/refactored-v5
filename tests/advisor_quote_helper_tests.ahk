@@ -364,7 +364,8 @@ AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseStatus"), "n
 AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "selectedSpouseName"), "Test Near Candidate", "Single override should select the near-age candidate")
 AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseOverrideApplied"), "1", "Single override should trace override application")
 AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "spouseCandidateWithinWindowCount"), "1", "Single override should trace one in-window candidate")
-AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "nextAction"), "resolve_spouse_marital_panel", "Single override should route to spouse marital resolver before row actions")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "nextAction"), "remove_extra_driver", "Single override should remove obvious extras before spouse marital resolver")
+AssertEqual(AdvisorQuoteStatusValue(ascSingleOverrideLedger, "nextActionTarget"), "Test Older Driver", "Single override should preserve the selected spouse and remove only out-of-window extras")
 
 ascSingleOverrideSelectedLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     ascSingleLedgerProfile,
@@ -527,6 +528,18 @@ ascVehicleNeedsAddLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     TestAscParticipantStatus("Single")
 )
 AssertEqual(AdvisorQuoteStatusValue(ascVehicleNeedsAddLedger, "nextAction"), "add_vehicle_row", "Ledger should add expected ASC vehicle membership row")
+AssertEqual(AdvisorQuoteStatusValue(ascVehicleNeedsAddLedger, "reason"), "ASC_LEDGER_NEXT_ACTION_ADD_MATCHED_VEHICLE", "Vehicle-add ledger reason should be explicit")
+
+ascNonDriverVehiclesPendingLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|nonDriver=0|add=0|remove=0||Test Other Driver|age=66|added=0|nonDriver=1|unresolved=0|add=1|remove=0", "0", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=0|vin=1", "1", "0"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascNonDriverVehiclesPendingLedger, "nextAction"), "add_vehicle_row", "Non-driver rows should be resolved enough for vehicle progression")
+AssertEqual(AdvisorQuoteStatusValue(ascNonDriverVehiclesPendingLedger, "reason"), "ASC_LEDGER_NEXT_ACTION_ADD_MATCHED_VEHICLE", "Non-driver vehicle progression should not fail as unresolved drivers")
+AssertTrue(InStr(AdvisorQuoteStatusValue(ascNonDriverVehiclesPendingLedger, "evidence"), "ASC_DRIVER_ROWS_RESOLVED_VEHICLES_PENDING") > 0, "Vehicle progression should log resolved-driver pending-vehicle evidence")
 
 ascSaveDisabledLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     ascSingleLedgerProfile,
@@ -894,13 +907,13 @@ TestAscParticipantStatus(maritalStatus, spouseText := "", spouseOptions := "") {
     )
 }
 
-TestAscDriverStatus(driverSummaries, unresolvedDriverCount := "0", addedDriverCount := "0") {
+TestAscDriverStatus(driverSummaries, unresolvedDriverCount := "0", addedDriverCount := "0", removedDriverCount := "0") {
     return Map(
         "result", "FOUND",
         "driverCount", String(AdvisorQuoteAscSplitSummaryRecords(driverSummaries).Length),
         "unresolvedDriverCount", unresolvedDriverCount,
         "addedDriverCount", addedDriverCount,
-        "removedDriverCount", "0",
+        "removedDriverCount", removedDriverCount,
         "driverSummaries", driverSummaries
     )
 }

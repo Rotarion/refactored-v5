@@ -178,7 +178,7 @@ Current branch sync note: this file is synchronized for `hermes-state-snapshot-f
   - finance: `input#vehicleOwnershipCd_0007`
 - Garaging same as home: `input#garagingAddressSameAsOther-control-item-0`
 - Purchased within 90 days No: `input#purchaseDate_false`
-- Implemented defaults: garaging Yes, recent purchase No, ownership Finance when vehicle year is greater than `2015`; leave ownership blank for `2015` or older.
+- Implemented defaults: garaging Yes, recent purchase No, ownership Finance when vehicle year is greater than `2015`; ownership Own for `2015` or older.
 
 ## Incidents
 
@@ -206,7 +206,7 @@ Current branch sync note: this file is synchronized for `hermes-state-snapshot-f
 - Military: `No`
 - Moving violations: `No`
 - Defensive driving: `No` only when the question appears
-- Vehicle ownership: `Finance` for `year > 2015`, blank for `year <= 2015`
+- Vehicle ownership: `Finance` for `year > 2015`, `Own` for `year <= 2015`
 - Garaging: `Yes`
 - Purchased in last 90 days: `No`
 - Remove-driver reason: own car insurance

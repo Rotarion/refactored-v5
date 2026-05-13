@@ -1538,6 +1538,7 @@ copy(String((() => {
       const editButton = rowButtons.find((node) => /-edit$/i.test(safe(node.id))) || null;
       const slugSource = safe((addButton || removeButton || editButton || {}).id).replace(/-(addToQuote|add|remove|edit)$/i, '');
       const lowerText = normLower(text);
+      const nonDriverResolved = /\b(?:non[-\s]?driver|removed|not\s+added|excluded)\b/.test(lowerText);
       rows.push({
         row,
         text,
@@ -1548,7 +1549,8 @@ copy(String((() => {
         removeButton,
         editButton,
         added: (!!editButton && !addButton) || lowerText.includes('added to quote') || lowerText.includes('added driver'),
-        unresolved: !!addButton || !!removeButton
+        nonDriverResolved,
+        unresolved: !nonDriverResolved && (!!addButton || !!removeButton)
       });
     }
     return rows.sort((a, b) => a.text.length - b.text.length);
@@ -1557,18 +1559,19 @@ copy(String((() => {
     const rows = collectAscDriverRows();
     const unresolved = rows.filter((row) => row.unresolved && !row.added);
     const added = rows.filter((row) => row.added);
-    const removed = rows.filter((row) => normLower(row.text).includes('removed'));
+    const removed = rows.filter((row) => row.nonDriverResolved || normLower(row.text).includes('removed'));
     const saveButton = findAscSaveButton();
     const evidence = [];
     if (rows.length) evidence.push('driver-rows');
     if (saveButton) evidence.push('save-button');
+    if (removed.length) evidence.push('ASC_DRIVER_ROW_NON_DRIVER_RESOLVED');
     return {
       result: rows.length ? 'FOUND' : 'NONE',
       driverCount: String(rows.length),
       unresolvedDriverCount: String(unresolved.length),
       addedDriverCount: String(added.length),
       removedDriverCount: String(removed.length),
-      driverSummaries: compact(rows.map((row) => `${row.name}|age=${row.age}|added=${row.added ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}`).join('||'), 360),
+      driverSummaries: compact(rows.map((row) => `${row.name}|age=${row.age}|added=${row.added ? 1 : 0}|nonDriver=${row.nonDriverResolved ? 1 : 0}|unresolved=${row.unresolved ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}|addButtonId=${safe(row.addButton && row.addButton.id)}|removeButtonId=${safe(row.removeButton && row.removeButton.id)}`).join('||'), 620),
       saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
       evidence: compact(evidence.join('|'), 240),
       missing: rows.length ? '' : 'driver-rows'
@@ -1600,6 +1603,10 @@ copy(String((() => {
     for (const row of rows) {
       if (!isExpected(row)) continue;
       if (row.added) continue;
+      if (row.nonDriverResolved) {
+        unresolvedDrivers.push(row.name);
+        continue;
+      }
       if (row.addButton) {
         const clicked = clickCenterEl(row.addButton);
         addClickedCount = clicked ? 1 : 0;
@@ -1622,6 +1629,7 @@ copy(String((() => {
     }
     for (const row of rows) {
       if (isExpected(row)) continue;
+      if (row.nonDriverResolved) continue;
       if (row.removeButton) {
         const clicked = clickCenterEl(row.removeButton);
         removeClickedCount = clicked ? 1 : 0;
@@ -1903,6 +1911,14 @@ copy(String((() => {
     })).filter((vehicle) => vehicle.year && vehicle.make);
   };
   const hasVehicleVinEvidenceText = (text) => /\bVIN\b\s*[:#]?\s*[A-Z0-9*]{6,}/i.test(text) || /\b[A-HJ-NPR-Z0-9*]{8,17}\b/i.test(text);
+  const ascLeadModelLooksGenericOrTrim = (vehicle) => {
+    const model = normalizeVehicleText(vehicle && vehicle.model);
+    if (!model) return true;
+    if (/DIESEL|ENGINE|MOTOR|TURBO|HYBRID|ELECTRIC|PLUGIN|PHEV|EV|V6|V8|V10|4X4|4WD|AWD|FWD|RWD|CREW|CAB|LIMITED|SPORT|TOURING|BASE|PREMIUM|LUXURY|PLATINUM|XL|XLT|LT|LS|LTZ|SLT|SE|SEL|LE|XLE|EX|LX|TRD|HD/.test(model))
+      return true;
+    const key = normalizeVehicleModelKey(model);
+    return key.length <= 2 || /^(UNKNOWN|OTHER|TRUCK|CAR|SUV|SEDAN|COUPE|VAN|PICKUP)$/.test(key);
+  };
   const collectAscVehicleRows = () => {
     const nodes = Array.from(document.querySelectorAll('div,section,article,li,tr,fieldset'))
       .filter(visible)
@@ -1984,7 +2000,7 @@ copy(String((() => {
       addedVehicleCount: String(added.length),
       removedVehicleCount: String(removed.length),
       confirmedOrAddedVehicleCount: String(added.length),
-      vehicleSummaries: compact(rows.map((row) => `${compact(row.text, 90)}|added=${row.added ? 1 : 0}|vin=${row.vinEvidence ? 1 : 0}`).join('||'), 420),
+      vehicleSummaries: compact(rows.map((row) => `${compact(row.text, 90)}|added=${row.added ? 1 : 0}|vin=${row.vinEvidence ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}|addButtonId=${safe(row.addButton && row.addButton.id)}|removeButtonId=${safe(row.removeButton && row.removeButton.id)}`).join('||'), 640),
       saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
       evidence: rows.length ? 'vehicle-rows' : '',
       missing: rows.length ? '' : 'vehicle-rows'
@@ -1999,21 +2015,80 @@ copy(String((() => {
     const promotedPartialVehicles = [];
     const deferredPartialVehicles = [];
     const missingComplete = [];
-    const rowMatchesComplete = (row, vehicle) => scoreVehicleCandidate(row.text, vehicle).score >= 90;
+    const ascVehicleCandidate = (row, index, vehicle) => {
+      const details = scoreVehicleCandidate(row.text, vehicle);
+      const yearDelta = details.yearDelta === '' ? 999 : Number(details.yearDelta);
+      const absYearDelta = Math.abs(yearDelta);
+      const vinEvidence = !!row.vinEvidence || !!details.publicVinEvidence || !!details.vinMatch || !!details.vinSuffixMatch;
+      let method = '';
+      let rank = 0;
+      if (details.yearMatch && details.makeMatch && details.modelMatch) {
+        method = 'ASC_LEDGER_VEHICLE_MATCH_EXACT_YMM';
+        rank = 400;
+      } else if (details.makeMatch && details.modelMatch && absYearDelta <= 2) {
+        method = 'ASC_LEDGER_VEHICLE_MATCH_YEAR_TOLERANCE';
+        rank = 300 - absYearDelta;
+      } else if (details.yearMatch && details.makeMatch && !details.modelMatch && vinEvidence && ascLeadModelLooksGenericOrTrim(vehicle)) {
+        method = 'ASC_LEDGER_VEHICLE_MATCH_VIN_BACKED_MODEL_CORRECTION';
+        rank = 220;
+      }
+      if (!method) return null;
+      return {
+        row,
+        index,
+        vehicle,
+        details,
+        method,
+        rank: rank + (vinEvidence ? 20 : 0),
+        vinEvidence,
+        yearDelta,
+        absYearDelta
+      };
+    };
+    const chooseAscVehicleCandidate = (candidates) => {
+      if (!candidates.length) return { candidate: null, ambiguous: false, candidates: [] };
+      const sorted = candidates.slice().sort((a, b) => {
+        if (b.rank !== a.rank) return b.rank - a.rank;
+        if (a.absYearDelta !== b.absYearDelta) return a.absYearDelta - b.absYearDelta;
+        if (a.vinEvidence !== b.vinEvidence) return a.vinEvidence ? -1 : 1;
+        return a.row.text.length - b.row.text.length;
+      });
+      const top = sorted[0];
+      const tied = sorted.filter((candidate) => candidate.rank === top.rank && candidate.absYearDelta === top.absYearDelta && candidate.vinEvidence === top.vinEvidence);
+      return { candidate: top, ambiguous: tied.length > 1, candidates: tied };
+    };
     for (const vehicle of complete) {
-      const index = rows.findIndex((row, idx) => !matchedRowIndexes.has(idx) && rowMatchesComplete(row, vehicle));
-      if (index < 0) {
+      const candidates = rows
+        .map((row, index) => matchedRowIndexes.has(index) ? null : ascVehicleCandidate(row, index, vehicle))
+        .filter(Boolean);
+      const picked = chooseAscVehicleCandidate(candidates);
+      if (picked.ambiguous) {
+        return lineResult({
+          result: 'AMBIGUOUS',
+          method: 'ASC_LEDGER_VEHICLE_MATCH_AMBIGUOUS',
+          addedVehicles: '',
+          removedVehicles: '',
+          promotedPartialVehicles: '',
+          deferredPartialVehicles: '',
+          confirmedVehicleCount: String(rows.filter((candidate) => candidate.added).length),
+          unresolvedVehicles: compact(picked.candidates.map((candidate) => candidate.row.text).join('||'), 240),
+          failedFields: 'vehicleMatch',
+          evidence: vehicleLabel(vehicle)
+        });
+      }
+      if (!picked.candidate) {
         missingComplete.push(vehicleLabel(vehicle));
         continue;
       }
-      matchedRowIndexes.add(index);
-      const row = rows[index];
+      const candidate = picked.candidate;
+      matchedRowIndexes.add(candidate.index);
+      const row = candidate.row;
       if (!row.added && row.addButton) {
         const clicked = clickCenterEl(row.addButton);
         if (clicked) addedVehicles.push(vehicleLabel(vehicle));
         return lineResult({
           result: clicked ? 'PARTIAL' : 'FAILED',
-          method: 'complete-vehicle-add',
+          method: candidate.method,
           addedVehicles: addedVehicles.join('||'),
           removedVehicles: '',
           promotedPartialVehicles: '',
@@ -2021,7 +2096,7 @@ copy(String((() => {
           confirmedVehicleCount: String(rows.filter((candidate) => candidate.added).length),
           unresolvedVehicles: vehicleLabel(vehicle),
           failedFields: clicked ? '' : 'vehicleAdd',
-          evidence: compact(row.text, 180)
+          evidence: compact(`${row.text}|yearDelta=${candidate.yearDelta}|vin=${candidate.vinEvidence ? 1 : 0}|modelMatch=${candidate.details.modelMatch ? 1 : 0}`, 220)
         });
       }
     }
@@ -2081,22 +2156,6 @@ copy(String((() => {
       } else {
         deferredPartialVehicles.push(`${partial.year} ${partial.make}`);
       }
-    }
-    const unrelated = rows.find((row, index) => !matchedRowIndexes.has(index) && !row.added && row.removeButton);
-    if (unrelated) {
-      const clicked = clickCenterEl(unrelated.removeButton);
-      return lineResult({
-        result: clicked ? 'PARTIAL' : 'FAILED',
-        method: 'unrelated-vehicle-remove',
-        addedVehicles: '',
-        removedVehicles: clicked ? compact(unrelated.text, 120) : '',
-        promotedPartialVehicles: promotedPartialVehicles.join('||'),
-        deferredPartialVehicles: deferredPartialVehicles.join('||'),
-        confirmedVehicleCount: String(rows.filter((row) => row.added).length),
-        unresolvedVehicles: compact(unrelated.text, 120),
-        failedFields: clicked ? '' : 'vehicleRemove',
-        evidence: compact(unrelated.text, 180)
-      });
     }
     const satisfiedCount = rows.filter((row, index) => matchedRowIndexes.has(index) && row.added).length + promotedPartialVehicles.length;
     return lineResult({
@@ -5108,7 +5167,7 @@ copy(String((() => {
         nextRecommendedReadOnlyStatus = 'modal_exists';
       } else if (unresolvedDriverCount > 0 || unresolvedVehicleCount > 0) {
         blockerCode = 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED';
-        nextRecommendedAction = 'review_unresolved_drivers_vehicles';
+        nextRecommendedAction = unresolvedDriverCount > 0 ? 'review_unresolved_drivers_vehicles' : 'add_matched_vehicle_row';
         nextRecommendedReadOnlyStatus = unresolvedDriverCount > 0 ? 'asc_driver_rows_status' : 'asc_vehicle_rows_status';
       } else if (saveButton && isDisabledLike(saveButton)) {
         blockerCode = 'ASC_MAIN_SAVE_DISABLED';
@@ -8326,8 +8385,10 @@ copy(String((() => {
 
     case 'fill_vehicle_modal': {
       const txt = safe((document.body && document.body.innerText) || '');
+      const suppliedYear = Number(safe(args.vehicleYear || args.year || '').match(/\b(19|20)\d{2}\b/)?.[0] || 0);
       const m = txt.match(/\b(19|20)\d{2}\b/);
       const year = m ? Number(m[0]) : 0;
+      const detectedYear = suppliedYear || year;
       const clickId = (id) => {
         const el = document.getElementById(id);
         if (!el || !visible(el) || isDisabledLike(el)) return { applied: '0', method: 'missing' };
@@ -8337,16 +8398,70 @@ copy(String((() => {
         const verified = !!el.checked || isSelectedNode(el) || isSelectedNode(target);
         return { applied: clicked && verified ? '1' : '0', method: clicked ? 'click' : 'click-failed' };
       };
+      const ownershipIdForKind = (kind) => kind === 'finance' ? 'vehicleOwnershipCd_0007' : 'vehicleOwnershipCd_0001';
+      const ownershipLabelMatches = (node, kind) => {
+        const label = normLower(`${safe(node && node.id)} ${safe(node && node.name)} ${safe(node && node.value)} ${readInputLabel(node)} ${getText((node && node.closest && node.closest('label,.radio,.option,.field,div')) || null)}`);
+        if (kind === 'finance') return /\bfinanc(?:e|ed|ing)\b/.test(label);
+        return /\bown(?:ed|ership)?\b/.test(label) && !/\bunknown\b/.test(label);
+      };
+      const findOwnershipCandidates = (kind) => {
+        const explicit = document.getElementById(ownershipIdForKind(kind));
+        const explicitVisible = explicit && visible(explicit) ? [explicit] : [];
+        if (explicitVisible.length) return explicitVisible;
+        return Array.from(document.querySelectorAll('input[type=radio],button,[role=radio],[role=button]'))
+          .filter(visible)
+          .filter((node) => /ownership/i.test(`${safe(node.id)} ${safe(node.name)} ${getText((node.closest && node.closest('fieldset,section,div')) || node)}`))
+          .filter((node) => ownershipLabelMatches(node, kind));
+      };
+      const selectOwnership = (kind) => {
+        if (!kind) return { applied: '0', method: 'year-missing', traceCode: 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED', readback: '0', currentText: '', currentValue: '' };
+        const candidates = findOwnershipCandidates(kind);
+        if (candidates.length !== 1) {
+          return {
+            applied: '0',
+            method: candidates.length ? 'ambiguous' : 'missing',
+            traceCode: 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED',
+            readback: '0',
+            currentText: compact(candidates.map((node) => readInputLabel(node) || safe(node.id)).join('||'), 180),
+            currentValue: compact(candidates.map((node) => safe(node.value || node.id)).join('||'), 180)
+          };
+        }
+        const el = candidates[0];
+        if (isDisabledLike(el)) {
+          return { applied: '0', method: 'disabled', traceCode: 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED', readback: '0', currentText: compact(readInputLabel(el) || safe(el.id), 120), currentValue: safe(el.value || el.id) };
+        }
+        const target = getInputClickTarget(el) || el;
+        const clicked = el.checked || clickCenterEl(target);
+        const selected = !!el.checked || isSelectedNode(el) || isSelectedNode(target);
+        if (!selected) {
+          try { el.checked = true; } catch {}
+          try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+          try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+        }
+        const readback = !!el.checked || isSelectedNode(el) || isSelectedNode(target);
+        return {
+          applied: readback ? '1' : '0',
+          method: readback ? (clicked ? 'click' : 'direct-check') : 'readback-failed',
+          traceCode: readback
+            ? (kind === 'finance' ? 'ASC_VEHICLE_MODAL_OWNERSHIP_FINANCE_SELECTED' : 'ASC_VEHICLE_MODAL_OWNERSHIP_OWN_SELECTED')
+            : 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED',
+          readback: readback ? '1' : '0',
+          currentText: compact(readInputLabel(el) || safe(el.id), 120),
+          currentValue: safe(el.value || el.id)
+        };
+      };
       const garaging = clickId('garagingAddressSameAsOther-control-item-0');
       const purchaseDate = clickId('purchaseDate_false');
       const threshold = Number(args.threshold || 2015);
-      const ownership = year > threshold
-        ? clickId('vehicleOwnershipCd_0007')
-        : { applied: 'SKIP', method: 'not-required' };
+      const ownershipExpected = detectedYear
+        ? (detectedYear > threshold ? 'finance' : 'own')
+        : '';
+      const ownership = selectOwnership(ownershipExpected);
       const requiredChecks = [
         { name: 'garagingAddressSameAsOther', value: garaging.applied },
         { name: 'purchaseDateFalse', value: purchaseDate.applied },
-        ...(year > threshold ? [{ name: 'ownership', value: ownership.applied }] : [])
+        { name: 'vehicleYear', value: detectedYear ? '1' : '0' },
+        { name: 'ownership', value: ownership.applied }
       ];
       const result = resultFromChecks(requiredChecks, []);
       return lineResult({
@@ -8355,7 +8470,12 @@ copy(String((() => {
         garagingAddressSameAsOtherClicked: garaging.applied,
         purchaseDateFalseClicked: purchaseDate.applied,
         ownershipClicked: ownership.applied,
-        detectedYear: String(year),
+        ownershipExpected,
+        ownershipReadback: ownership.readback,
+        ownershipCurrentText: ownership.currentText,
+        ownershipCurrentValue: ownership.currentValue,
+        ownershipTraceCode: ownership.traceCode,
+        detectedYear: String(detectedYear),
         failedFields: failedCheckNames(requiredChecks)
       });
     }

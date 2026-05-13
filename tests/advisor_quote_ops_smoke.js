@@ -810,10 +810,10 @@ function driversVehiclesDoc(extraNodes = []) {
   ]);
 }
 
-function ascDriverRow({ name, age, slug, added = false, add = false, remove = false }) {
+function ascDriverRow({ name, age, slug, added = false, add = false, remove = false, nonDriver = false }) {
   const row = new FakeElement('div', {
     className: 'driver-row',
-    text: `${name} Age ${age}${added ? ' Added to quote' : ''}`
+    text: `${name} Age ${age}${added ? ' Added to quote' : ''}${nonDriver ? ' Non-driver' : ''}`
   });
   const markAdded = () => {
     row._text = `${name} Age ${age} Added to quote`;
@@ -821,7 +821,9 @@ function ascDriverRow({ name, age, slug, added = false, add = false, remove = fa
     row.appendChild(createButton(`${slug}-edit`, 'Edit'));
   };
   const markRemoved = () => {
-    row.hidden = true;
+    row._text = `${name} Age ${age} Non-driver`;
+    row.children = [];
+    row.appendChild(createButton(`${slug}-addToQuote`, 'Add'));
   };
   if (added)
     row.appendChild(createButton(`${slug}-edit`, 'Edit'));
@@ -1252,6 +1254,16 @@ function testRapportGatePolicyAhkContracts() {
   assert.match(vehicleAhk, /if gateSatisfied \{[\s\S]*confirmedOrAdded > 0[\s\S]*staleAddRowPresent[\s\S]*!vehicleWarningBlocks/);
   assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerMarkSkippedAfterGate[\s\S]*SKIPPED_AFTER_GATE_SATISFIED/);
   assert.doesNotMatch(rapportAhk, /db-add-deferred/);
+}
+
+function testAscDriversVehiclesAhkContracts() {
+  const workflowAhk = readRepoText('workflows/advisor_quote_workflow.ahk');
+
+  assert.match(workflowAhk, /primaryDriverStatus[\s\S]*needs_add[\s\S]*add_primary_driver[\s\S]*AdvisorQuoteAscEvaluateSpouse/);
+  assert.match(workflowAhk, /ASC_LEDGER_DRIVER_REMOVE_SELECTED/);
+  assert.match(workflowAhk, /participantPolicyNeedsAction[\s\S]*add_vehicle_row[\s\S]*participant-policy-not-resolved/);
+  assert.match(workflowAhk, /ASC_PARTICIPANT_POLICY_DEFERRED_UNRESOLVED_ROWS_PRESENT/);
+  assert.match(workflowAhk, /AdvisorQuoteBuildAscVehicleReconcileDetail[\s\S]*method=/);
 }
 
 function testRapportVinBackedPublicRecordVehiclePolicy() {
@@ -2427,9 +2439,13 @@ function testReturnShapeContracts() {
   assert.ok(saveDisabledRequiredStatus.missingRequiredControls.includes('ageFirstLicensed'));
 
   const vehicleModal = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, createVehicleModalDoc()), [
-    'result', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked', 'ownershipClicked', 'detectedYear'
+    'result', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked', 'ownershipClicked',
+    'ownershipExpected', 'ownershipReadback', 'ownershipTraceCode', 'detectedYear'
   ]);
   assert.strictEqual(vehicleModal.result, 'OK');
+  assert.strictEqual(vehicleModal.ownershipExpected, 'finance');
+  assert.strictEqual(vehicleModal.ownershipReadback, '1');
+  assert.strictEqual(vehicleModal.ownershipTraceCode, 'ASC_VEHICLE_MODAL_OWNERSHIP_FINANCE_SELECTED');
 
   const scanRaw = runOperator('scan_current_page', { label: 'SMOKE', reason: 'contract' }, new FakeDocument([
     textNode('Customer heading', 'h1'),
@@ -4546,13 +4562,19 @@ function createParticipantModalDoc() {
   ]);
 }
 
-function createVehicleModalDoc() {
-  return pageDoc('2022 Tesla Model 3 vehicle details', [
+function createVehicleModalDoc({ year = '2022', includeFinance = true, includeOwn = true, duplicateFinance = false } = {}) {
+  const nodes = [
     createRadio('garagingAddressSameAsOther-control-item-0', 'garaging', 'yes'),
-    createRadio('purchaseDate_false', 'purchaseDate', 'false'),
-    createRadio('vehicleOwnershipCd_0007', 'ownership', 'finance'),
-    createButton('ADD_ASSET_SAVE-btn', 'Save')
-  ]);
+    createRadio('purchaseDate_false', 'purchaseDate', 'false')
+  ];
+  if (includeOwn)
+    nodes.push(createRadio('vehicleOwnershipCd_0001', 'ownership', 'own'));
+  if (includeFinance)
+    nodes.push(createRadio('vehicleOwnershipCd_0007', 'ownership', 'finance'));
+  if (duplicateFinance)
+    nodes.push(createRadio('vehicleOwnershipCd_0007-duplicate', 'vehicleOwnership', 'financed'));
+  nodes.push(createButton('ADD_ASSET_SAVE-btn', 'Save'));
+  return pageDoc(`${year} Tesla Model 3 vehicle details`, nodes);
 }
 
 function createIncidentActionDoc(hasReason, hasContinue) {
@@ -4807,6 +4829,36 @@ function testAscReconciliationContracts() {
   assert.strictEqual(driverDone.result, 'OK', JSON.stringify(driverDone));
   assert.strictEqual(driverDone.unresolvedDrivers, '');
 
+  const nonDriverVehiclesPendingDoc = ascDriversVehiclesDoc({
+    saveDisabled: true,
+    drivers: [
+      ascDriverRow({ name: 'Test Primary Driver', age: 40, slug: 'test-primary-driver', added: true }),
+      ascDriverRow({ name: 'Test Other Driver One', age: 66, slug: 'test-other-one', add: true, nonDriver: true }),
+      ascDriverRow({ name: 'Test Other Driver Two', age: 37, slug: 'test-other-two', add: true, nonDriver: true })
+    ],
+    vehicles: [
+      ascVehicleRow({ text: '2013 Nissan Altima VIN: MASKEDALT*******01', slug: '2013-nissan-altima', add: true }),
+      ascVehicleRow({ text: '2020 Unrelated Vehicle VIN: MASKEDXXX*******02', slug: '2020-unrelated', add: true })
+    ]
+  });
+  const nonDriverStatus = assertKeyBlock(runOperator('asc_driver_rows_status', {}, nonDriverVehiclesPendingDoc, ascHref), [
+    'result', 'unresolvedDriverCount', 'addedDriverCount', 'removedDriverCount', 'driverSummaries', 'evidence'
+  ]);
+  assert.strictEqual(nonDriverStatus.result, 'FOUND');
+  assert.strictEqual(nonDriverStatus.unresolvedDriverCount, '0');
+  assert.strictEqual(nonDriverStatus.addedDriverCount, '1');
+  assert.strictEqual(nonDriverStatus.removedDriverCount, '2');
+  assert.ok(nonDriverStatus.driverSummaries.includes('nonDriver=1'));
+  assert.ok(nonDriverStatus.evidence.includes('ASC_DRIVER_ROW_NON_DRIVER_RESOLVED'));
+  const nonDriverSnapshot = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', baseArgs(), nonDriverVehiclesPendingDoc, ascHref), [
+    'blockerCode', 'unresolvedDriverCount', 'unresolvedVehicleCount', 'nextRecommendedAction', 'nextRecommendedReadOnlyStatus'
+  ]);
+  assert.strictEqual(nonDriverSnapshot.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
+  assert.strictEqual(nonDriverSnapshot.unresolvedDriverCount, '0');
+  assert.strictEqual(nonDriverSnapshot.unresolvedVehicleCount, '2');
+  assert.strictEqual(nonDriverSnapshot.nextRecommendedAction, 'add_matched_vehicle_row');
+  assert.strictEqual(nonDriverSnapshot.nextRecommendedReadOnlyStatus, 'asc_vehicle_rows_status');
+
   let vehicleDoc = ascDriversVehiclesDoc({
     vehicles: [
       ascVehicleRow({ text: '2019 Honda CR-V VIN: FAKECRV1*******01', slug: 'honda-crv', add: true }),
@@ -4843,6 +4895,82 @@ function testAscReconciliationContracts() {
     partialVehicles: [{ year: '2010', make: 'Nissan', allowedMakeLabels: 'NISSAN' }]
   }, partialAmbiguousDoc, ascHref), ['result', 'failedFields']);
   assert.strictEqual(partialAmbiguous.result, 'AMBIGUOUS');
+
+  const exactVehicleDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2013 Nissan Altima VIN: MASKEDALT*******01', slug: 'nissan-altima', add: true }),
+      ascVehicleRow({ text: '2013 Nissan Maxima VIN: MASKEDMAX*******02', slug: 'nissan-maxima', add: true })
+    ]
+  });
+  const exactVehicle = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [{ year: '2013', make: 'Nissan', model: 'Altima', allowedMakeLabels: 'NISSAN', modelAliases: 'ALTIMA', normalizedModelKeys: 'ALTIMA', strictModelMatch: '1' }]
+  }, exactVehicleDoc, ascHref), ['result', 'method', 'addedVehicles']);
+  assert.strictEqual(exactVehicle.result, 'PARTIAL');
+  assert.strictEqual(exactVehicle.method, 'ASC_LEDGER_VEHICLE_MATCH_EXACT_YMM');
+  assert.ok(exactVehicle.addedVehicles.includes('2013 Nissan Altima'));
+
+  const yearToleranceDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2011 Toyota Camry Add', slug: 'toyota-camry-2011', add: true }),
+      ascVehicleRow({ text: '2015 Toyota Camry VIN: MASKEDCAM*******03 Add', slug: 'toyota-camry-2015', add: true }),
+      ascVehicleRow({ text: '2014 Toyota Camry VIN: MASKEDCAM*******04 Add', slug: 'toyota-camry-2014', add: true })
+    ]
+  });
+  const yearTolerance = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [{ year: '2013', make: 'Toyota', model: 'Camry', allowedMakeLabels: 'TOYOTA', modelAliases: 'CAMRY', normalizedModelKeys: 'CAMRY', strictModelMatch: '1' }]
+  }, yearToleranceDoc, ascHref), ['result', 'method', 'evidence']);
+  assert.strictEqual(yearTolerance.result, 'PARTIAL');
+  assert.strictEqual(yearTolerance.method, 'ASC_LEDGER_VEHICLE_MATCH_YEAR_TOLERANCE');
+  assert.match(yearTolerance.evidence, /2014 Toyota Camry/);
+
+  const vinPreferredDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2012 Honda CR-V Add', slug: 'honda-crv-no-vin', add: true }),
+      ascVehicleRow({ text: '2014 Honda CR-V VIN: MASKEDCRV*******05 Add', slug: 'honda-crv-vin', add: true })
+    ]
+  });
+  const vinPreferred = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [{ year: '2013', make: 'Honda', model: 'CR-V', allowedMakeLabels: 'HONDA', modelAliases: 'CR-V|CRV', normalizedModelKeys: 'CRV', strictModelMatch: '1' }]
+  }, vinPreferredDoc, ascHref), ['result', 'method', 'evidence']);
+  assert.strictEqual(vinPreferred.result, 'PARTIAL');
+  assert.strictEqual(vinPreferred.method, 'ASC_LEDGER_VEHICLE_MATCH_YEAR_TOLERANCE');
+  assert.match(vinPreferred.evidence, /vin=1/);
+
+  const vinCorrectionDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2006 Chevrolet Silverado 2500HD VIN: MASKEDSIL*******06 Add', slug: 'chevy-silverado', add: true }),
+      ascVehicleRow({ text: '2006 Chevrolet Malibu Add', slug: 'chevy-malibu', add: true })
+    ]
+  });
+  const vinCorrection = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [{ year: '2006', make: 'Chevrolet', model: 'Diesel Engine', allowedMakeLabels: 'CHEVROLET|CHEVY TRUCKS', strictModelMatch: '1' }]
+  }, vinCorrectionDoc, ascHref), ['result', 'method', 'evidence']);
+  assert.strictEqual(vinCorrection.result, 'PARTIAL');
+  assert.strictEqual(vinCorrection.method, 'ASC_LEDGER_VEHICLE_MATCH_VIN_BACKED_MODEL_CORRECTION');
+  assert.match(vinCorrection.evidence, /modelMatch=0/);
+
+  const vinCorrectionNoVinDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2006 Chevrolet Silverado 2500HD Add', slug: 'chevy-silverado-no-vin', add: true })
+    ]
+  });
+  const vinCorrectionNoVin = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [{ year: '2006', make: 'Chevrolet', model: 'Diesel Engine', allowedMakeLabels: 'CHEVROLET|CHEVY TRUCKS', strictModelMatch: '1' }]
+  }, vinCorrectionNoVinDoc, ascHref), ['result', 'method', 'failedFields']);
+  assert.strictEqual(vinCorrectionNoVin.result, 'FAILED');
+  assert.strictEqual(vinCorrectionNoVin.method, 'complete-vehicle-missing');
+
+  const extraVehicleDoc = ascDriversVehiclesDoc({
+    vehicles: [
+      ascVehicleRow({ text: '2020 Unrelated Vehicle VIN: MASKEDXXX*******07', slug: 'unrelated-vehicle', remove: true })
+    ]
+  });
+  const extraVehicle = assertKeyBlock(runOperator('asc_reconcile_vehicle_rows', {
+    expectedVehicles: [],
+    partialVehicles: []
+  }, extraVehicleDoc, ascHref), ['result', 'removedVehicles']);
+  assert.strictEqual(extraVehicle.result, 'OK');
+  assert.strictEqual(extraVehicle.removedVehicles, '');
 
   const saveDisabledStatus = assertKeyBlock(runOperator('asc_vehicle_rows_status', baseArgs(), ascDriversVehiclesDoc({
     saveDisabled: true,
@@ -5411,6 +5539,29 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.ok(unresolved.blockers.includes('UNRESOLVED_FOUND_DRIVERS:1'));
   assert.ok(unresolved.blockers.includes('UNRESOLVED_FOUND_VEHICLES:1'));
 
+  const foundRowsNoModal = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-found-rows-no-modal')), requiredKeys);
+  assert.strictEqual(foundRowsNoModal.result, 'OK');
+  assert.strictEqual(foundRowsNoModal.activeModalType, 'NONE');
+  assert.strictEqual(foundRowsNoModal.activePanelType, 'NONE');
+  assert.strictEqual(foundRowsNoModal.addedDriverCount, '1');
+  assert.strictEqual(foundRowsNoModal.unresolvedDriverCount, '2');
+  assert.strictEqual(foundRowsNoModal.unresolvedVehicleCount, '2');
+  assert.strictEqual(foundRowsNoModal.mainSaveEnabled, '0');
+  assert.ok(foundRowsNoModal.driverSummaries.includes('removeButtonId=test-found-driver-one-remove'));
+  assert.ok(foundRowsNoModal.vehicleSummaries.includes('addButtonId=2013-nissan-altima-add'));
+  assert.strictEqual(foundRowsNoModal.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
+
+  const nonDriverVehiclesPending = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-vehicles-pending')), requiredKeys);
+  assert.strictEqual(nonDriverVehiclesPending.result, 'OK');
+  assert.strictEqual(nonDriverVehiclesPending.unresolvedDriverCount, '0');
+  assert.strictEqual(nonDriverVehiclesPending.removedDriverCount, '2');
+  assert.strictEqual(nonDriverVehiclesPending.unresolvedVehicleCount, '2');
+  assert.strictEqual(nonDriverVehiclesPending.mainSaveEnabled, '0');
+  assert.ok(nonDriverVehiclesPending.driverSummaries.includes('nonDriver=1'));
+  assert.strictEqual(nonDriverVehiclesPending.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
+  assert.strictEqual(nonDriverVehiclesPending.nextRecommendedAction, 'add_matched_vehicle_row');
+  assert.strictEqual(nonDriverVehiclesPending.nextRecommendedReadOnlyStatus, 'asc_vehicle_rows_status');
+
   const inline = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
   assert.strictEqual(inline.result, 'OK');
   assert.strictEqual(inline.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
@@ -5517,12 +5668,46 @@ function testHighRiskStrengthenedContracts() {
 
   const vehicleModal = fixtureScenario('vehicle-modal');
   const vehicleOk = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, vehicleModal.doc, vehicleModal.href), [
-    'result', 'method', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked', 'ownershipClicked', 'detectedYear', 'failedFields'
+    'result', 'method', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked',
+    'ownershipClicked', 'ownershipExpected', 'ownershipReadback', 'ownershipTraceCode',
+    'detectedYear', 'failedFields'
   ]);
   assert.strictEqual(vehicleOk.result, 'OK');
+  assert.strictEqual(vehicleOk.ownershipExpected, 'finance');
+  assert.strictEqual(vehicleOk.ownershipReadback, '1');
+  assert.strictEqual(vehicleOk.ownershipTraceCode, 'ASC_VEHICLE_MODAL_OWNERSHIP_FINANCE_SELECTED');
+
+  const vehicleOwnFixture = fixtureScenario('vehicle-modal-2015-own');
+  const vehicleOwn = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015, vehicleYear: '2015' }, vehicleOwnFixture.doc, vehicleOwnFixture.href), [
+    'result', 'ownershipClicked', 'ownershipExpected', 'ownershipReadback', 'ownershipTraceCode', 'detectedYear', 'failedFields'
+  ]);
+  assert.strictEqual(vehicleOwn.result, 'OK');
+  assert.strictEqual(vehicleOwn.ownershipExpected, 'own');
+  assert.strictEqual(vehicleOwn.ownershipReadback, '1');
+  assert.strictEqual(vehicleOwn.ownershipTraceCode, 'ASC_VEHICLE_MODAL_OWNERSHIP_OWN_SELECTED');
+  assert.strictEqual(vehicleOwn.detectedYear, '2015');
+
+  const vehicleOwnershipMissingFixture = fixtureScenario('vehicle-modal-ownership-missing');
+  const vehicleOwnershipMissing = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015, vehicleYear: '2014' }, vehicleOwnershipMissingFixture.doc, vehicleOwnershipMissingFixture.href), [
+    'result', 'method', 'ownershipClicked', 'ownershipExpected', 'ownershipTraceCode', 'failedFields'
+  ]);
+  assert.strictEqual(vehicleOwnershipMissing.result, 'FAILED');
+  assert.strictEqual(vehicleOwnershipMissing.ownershipExpected, 'own');
+  assert.strictEqual(vehicleOwnershipMissing.ownershipTraceCode, 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED');
+  assert.ok(vehicleOwnershipMissing.failedFields.includes('ownership'));
+
+  const vehicleOwnershipAmbiguousFixture = fixtureScenario('vehicle-modal-ownership-ambiguous');
+  const vehicleOwnershipAmbiguous = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015, vehicleYear: '2014' }, vehicleOwnershipAmbiguousFixture.doc, vehicleOwnershipAmbiguousFixture.href), [
+    'result', 'method', 'ownershipClicked', 'ownershipExpected', 'ownershipTraceCode', 'failedFields'
+  ]);
+  assert.strictEqual(vehicleOwnershipAmbiguous.result, 'FAILED');
+  assert.strictEqual(vehicleOwnershipAmbiguous.ownershipExpected, 'own');
+  assert.strictEqual(vehicleOwnershipAmbiguous.ownershipTraceCode, 'ASC_VEHICLE_MODAL_OWNERSHIP_READBACK_FAILED');
+  assert.ok(vehicleOwnershipAmbiguous.failedFields.includes('ownership'));
 
   const vehicleFailed = assertKeyBlock(runOperator('fill_vehicle_modal', { threshold: 2015 }, pageDoc('2022 Tesla Model 3 vehicle details')), [
-    'result', 'method', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked', 'ownershipClicked', 'detectedYear', 'failedFields'
+    'result', 'method', 'garagingAddressSameAsOtherClicked', 'purchaseDateFalseClicked',
+    'ownershipClicked', 'ownershipExpected', 'ownershipTraceCode', 'detectedYear', 'failedFields'
   ]);
   assert.strictEqual(vehicleFailed.result, 'FAILED');
 
@@ -5590,6 +5775,7 @@ function run() {
   testRapportVinBackedPublicRecordVehiclePolicy();
   testRapportAhkStaleRowCancelFailurePolicy();
   testRapportGatePolicyAhkContracts();
+  testAscDriversVehiclesAhkContracts();
   testDuplicateScoringRejectsWeakMatch();
   testWrapperContracts();
   testResidentRunnerContracts();

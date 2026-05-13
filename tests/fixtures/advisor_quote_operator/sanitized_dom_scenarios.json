@@ -882,6 +882,37 @@
       { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" }
     ]
   },
+  "vehicle-modal-2015-own": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "2015 Honda Civic vehicle details",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "garagingAddressSameAsOther-control-item-0", "name": "garaging", "value": "yes" },
+      { "tag": "input", "type": "radio", "id": "purchaseDate_false", "name": "purchaseDate", "value": "false" },
+      { "tag": "input", "type": "radio", "id": "vehicleOwnershipCd_0001", "name": "ownership", "value": "own" },
+      { "tag": "input", "type": "radio", "id": "vehicleOwnershipCd_0007", "name": "ownership", "value": "finance" },
+      { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" }
+    ]
+  },
+  "vehicle-modal-ownership-missing": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "2014 Honda Civic vehicle details",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "garagingAddressSameAsOther-control-item-0", "name": "garaging", "value": "yes" },
+      { "tag": "input", "type": "radio", "id": "purchaseDate_false", "name": "purchaseDate", "value": "false" },
+      { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" }
+    ]
+  },
+  "vehicle-modal-ownership-ambiguous": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/profile",
+    "bodyText": "2014 Honda Civic vehicle details Ownership",
+    "nodes": [
+      { "tag": "input", "type": "radio", "id": "garagingAddressSameAsOther-control-item-0", "name": "garaging", "value": "yes" },
+      { "tag": "input", "type": "radio", "id": "purchaseDate_false", "name": "purchaseDate", "value": "false" },
+      { "tag": "input", "type": "radio", "id": "vehicle-ownership-own-a", "name": "vehicleOwnership", "value": "owned" },
+      { "tag": "input", "type": "radio", "id": "vehicle-ownership-own-b", "name": "vehicleOwnership", "value": "own" },
+      { "tag": "button", "id": "ADD_ASSET_SAVE-btn", "text": "Save" }
+    ]
+  },
   "gather-vehicle-edit-submodel-required": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
     "bodyText": "Gather Data Cars and Trucks Edit Vehicle Sub-Model is required Update",
@@ -1373,6 +1404,52 @@
       ] },
       { "tag": "div", "className": "vehicle-row", "text": "2024 Ford Mustang VIN: FAKEVIN*******01 Add", "children": [
         { "tag": "button", "id": "2024-ford-mustang-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-found-rows-no-modal": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles All drivers need to be added or removed to continue At least one vehicle must be added to continue Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Added to quote", "children": [
+        { "tag": "button", "id": "test-primary-driver-edit", "text": "Edit" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver One Age 66 Remove", "children": [
+        { "tag": "button", "id": "test-found-driver-one-remove", "text": "Remove" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver Two Age 70 Remove", "children": [
+        { "tag": "button", "id": "test-found-driver-two-remove", "text": "Remove" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2013 Nissan Altima VIN: MASKEDVIN*******01 Add", "children": [
+        { "tag": "button", "id": "2013-nissan-altima-add", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2006 Chevrolet Silverado 2500HD VIN: MASKEDVIN*******02 Add", "children": [
+        { "tag": "button", "id": "2006-chevrolet-silverado-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-non-driver-vehicles-pending": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles At least one vehicle must be added to continue Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Added to quote", "children": [
+        { "tag": "button", "id": "test-primary-driver-edit", "text": "Edit" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver One Age 66 Non-driver Add", "children": [
+        { "tag": "button", "id": "test-found-driver-one-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver Two Age 70 Non-driver Add", "children": [
+        { "tag": "button", "id": "test-found-driver-two-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2013 Nissan Altima VIN: MASKEDALT*******01 Add", "children": [
+        { "tag": "button", "id": "2013-nissan-altima-add", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2020 Unrelated Vehicle VIN: MASKEDXXX*******02 Add", "children": [
+        { "tag": "button", "id": "2020-unrelated-add", "text": "Add" }
       ] },
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
