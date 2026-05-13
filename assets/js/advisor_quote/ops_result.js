@@ -5597,6 +5597,96 @@ copy(String((() => {
       nextRecommendedAction: status.nextRecommendedAction || ''
     };
   };
+  const advisorInsuranceGateKindToRoute = (kind) => {
+    if (kind === 'EXTRA_INFO_INSURANCE') return 'ASC_EXTRA_INFO_INSURANCE';
+    if (kind === 'CREDIT_HIT_NOT_RECEIVED') return 'ASC_CREDIT_HIT_NOT_RECEIVED';
+    if (kind === 'PRIOR_INSURANCE_NOT_FOUND') return 'ASC_PRIOR_INSURANCE_NOT_FOUND';
+    return '';
+  };
+  const advisorInsuranceGateContinueButton = () => {
+    const candidates = Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button]'))
+      .filter(visible)
+      .map((node) => ({ node, text: normLower(getText(node) || safe(node.value) || safe(node.getAttribute && node.getAttribute('aria-label'))) }))
+      .filter((entry) => /\b(save and continue|continue|next)\b/i.test(entry.text));
+    return (candidates.find((entry) => !isDisabledLike(entry.node)) || candidates[0] || {}).node || null;
+  };
+  const advisorInsuranceGateControls = () => Array.from(document.querySelectorAll('input,select,textarea'))
+    .filter(visible)
+    .filter((node) => !/^(hidden|button|submit|reset)$/i.test(safe(node.type)));
+  const advisorInsuranceGateControlLabel = (control) => compact(readInputLabel(control) || safe(control.id || control.name), 120);
+  const advisorInsuranceGateControlId = (control) => compact([safe(control.id), safe(control.name)].filter(Boolean).join('|'), 120);
+  const advisorInsuranceGateControlRequired = (control) => {
+    if (!control) return false;
+    if (control.required) return true;
+    if (safe(control.getAttribute && control.getAttribute('required')) !== '') return true;
+    if (safe(control.getAttribute && control.getAttribute('aria-required')).toLowerCase() === 'true') return true;
+    const label = advisorInsuranceGateControlLabel(control);
+    return /\brequired\b|\*/i.test(label);
+  };
+  const advisorInsuranceGateControlValue = (control) => {
+    if (!control) return '';
+    if (/^SELECT$/i.test(safe(control.tagName))) {
+      const selected = readSelectState(control);
+      const value = compact(selected.text || selected.value, 80);
+      return /^(select one|select|choose|please select)$/i.test(value) ? '' : value;
+    }
+    if (/^(radio|checkbox)$/i.test(safe(control.type))) {
+      const name = safe(control.name);
+      const group = name
+        ? Array.from(document.querySelectorAll(`input[name="${cssEscape(name)}"]`)).filter(visible)
+        : [control];
+      const checked = group.find((item) => item.checked || isSelectedNode(item));
+      return checked ? compact(readInputLabel(checked) || safe(checked.value || checked.id), 80) : '';
+    }
+    return compact(safe(control.value), 80);
+  };
+  const advisorInsuranceGateTextKind = () => {
+    const text = bodyText();
+    const headings = advisorStateVisibleHeadingTexts().join(' | ');
+    const evidence = `${text} ${headings}`;
+    const creditHitEvidence = /\b(credit hit not received|did not receive a credit hit|we did not receive a credit hit|credit report was not received|credit information was not received)\b/i.test(evidence);
+    if (creditHitEvidence) return 'CREDIT_HIT_NOT_RECEIVED';
+    const priorNotFoundEvidence = /\b(prior insurance not found|prior policy not found|could not find prior insurance|unable to find prior insurance|we did not find prior insurance|insurance history not found)\b/i.test(evidence);
+    if (priorNotFoundEvidence) return 'PRIOR_INSURANCE_NOT_FOUND';
+    const extraInfoInsuranceEvidence = /\b(auto insurance history|insurance history|current insurance history|prior insurance|current insurance|continuous insurance|currently insured)\b/i.test(evidence);
+    if (extraInfoInsuranceEvidence) return 'EXTRA_INFO_INSURANCE';
+    return '';
+  };
+  const readAdvisorInsuranceGateSnapshotState = () => {
+    const kind = isAscProductRoute() ? advisorInsuranceGateTextKind() : '';
+    const controls = kind ? advisorInsuranceGateControls() : [];
+    const continueButton = kind ? advisorInsuranceGateContinueButton() : null;
+    const labels = advisorStateUnique(controls.map(advisorInsuranceGateControlLabel));
+    const controlNames = advisorStateUnique(controls.map(advisorInsuranceGateControlId));
+    const currentSelectedValues = advisorStateUnique(controls.map(advisorInsuranceGateControlValue));
+    const requiredControls = controls.filter(advisorInsuranceGateControlRequired);
+    const missingRequiredFields = advisorStateUnique(requiredControls
+      .filter((control) => !advisorInsuranceGateControlValue(control))
+      .map(advisorInsuranceGateControlLabel));
+    let answerState = 'UNKNOWN';
+    if (controls.length) {
+      const answerable = requiredControls.length ? requiredControls : controls;
+      const answeredCount = answerable.filter((control) => !!advisorInsuranceGateControlValue(control)).length;
+      answerState = answeredCount === answerable.length ? 'ANSWERED' : 'UNANSWERED';
+    }
+    const present = !!kind;
+    return {
+      present,
+      kind,
+      routeFamily: present ? 'ASCPRODUCT' : '',
+      continueVisible: !!continueButton,
+      continueEnabled: !!(continueButton && !isDisabledLike(continueButton)),
+      fieldsPresent: controls.length > 0,
+      answerState,
+      requiresClientVerification: present,
+      provisionalDefaultsAllowed: kind === 'EXTRA_INFO_INSURANCE' || kind === 'PRIOR_INSURANCE_NOT_FOUND',
+      creditHitNotReceived: kind === 'CREDIT_HIT_NOT_RECEIVED',
+      fieldLabels: labels.slice(0, 12),
+      controlNames: controlNames.slice(0, 12),
+      currentSelectedValues: currentSelectedValues.slice(0, 12),
+      missingRequiredFields: missingRequiredFields.slice(0, 12)
+    };
+  };
   const advisorStateBlockers = (source = {}) => {
     const blockers = [];
     const alerts = collectVisibleAlerts().map((item) => compact(item, 180)).filter(Boolean);
@@ -5724,6 +5814,7 @@ copy(String((() => {
     const rapport = readAdvisorRapportSnapshotState(source);
     const selectProduct = readAdvisorSelectProductSnapshotState(source);
     const ascDriversVehicles = readAdvisorAscDriversVehiclesSnapshotState(source);
+    const insuranceGate = readAdvisorInsuranceGateSnapshotState(source);
     const iframe = readAdvisorIframeSnapshotState();
     const blockers = advisorStateBlockers(source);
     const anchors = [];
@@ -5743,6 +5834,7 @@ copy(String((() => {
     const consumerReportsCandidate = advisorStateConsumerReportsCandidate(source);
     const driversVehiclesRoute = isDriversAndVehiclesPage(source);
     const driversVehiclesCandidate = advisorStateAscDriversVehiclesCandidate(ascDriversVehicles);
+    const insuranceGateRoute = advisorInsuranceGateKindToRoute(insuranceGate.kind);
 
     if (entryStart.present) {
       route = entryStart.duplicateEvidence ? 'DUPLICATE_CURRENT_CUSTOMER' : 'ENTRY_CREATE_FORM';
@@ -5790,6 +5882,11 @@ copy(String((() => {
         ? `ASC Drivers/Vehicles blockers: ${ascDriversVehicles.blockers.join('|')}`
         : null;
       anchors.push('url:/apps/ASCPRODUCT/', 'text:Drivers and vehicles', ascDriversVehicles.inlineParticipantPanelPresent ? 'panel:inline-participant' : '', ascDriversVehicles.blockerCode ? `blocker:${ascDriversVehicles.blockerCode}` : '');
+    } else if (insuranceGateRoute) {
+      route = insuranceGateRoute;
+      confidence = insuranceGate.fieldsPresent || insuranceGate.creditHitNotReceived ? 0.86 : 0.78;
+      unsafeReason = `Known unsupported ASCPRODUCT gate ${insuranceGate.kind}; read-only status only and human review is required.`;
+      anchors.push('url:/apps/ASCPRODUCT/', `gate:${insuranceGate.kind}`, insuranceGate.fieldsPresent ? 'controls:insurance-gate-fields' : '', insuranceGate.creditHitNotReceived ? 'status:credit-hit-not-received' : '');
     } else if (ascKind) {
       route = ascKind;
       confidence = 0.82;
@@ -5831,6 +5928,7 @@ copy(String((() => {
       product,
       selectProduct,
       ascDriversVehicles,
+      insuranceGate,
       prefillGate,
       rapport,
       iframe,

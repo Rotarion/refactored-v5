@@ -128,6 +128,19 @@ Current branch sync note: this file is synchronized for `hermes-state-snapshot-f
   - Add only lead-matching vehicles to the quote and leave non-matching vehicles untouched.
   - Save only after driver and vehicle reconciliation reaches a complete state.
 
+## ASCPRODUCT Unsupported Insurance And Credit Gates
+
+- Route family: `/apps/ASCPRODUCT/{id}/`
+- Read-only snapshot routes:
+  - `ASC_EXTRA_INFO_INSURANCE`
+  - `ASC_CREDIT_HIT_NOT_RECEIVED`
+  - `ASC_PRIOR_INSURANCE_NOT_FOUND`
+- These gates are recognized by route family plus page and field/control evidence. They are not driven by archive sequence numbers or dynamic ASCPRODUCT ids.
+- Current behavior is detection/status only through `advisor_state_snapshot.insuranceGate`.
+- The snapshot may report gate kind, visible field labels, visible control names/ids, safely readable current selected values, missing required fields when detectable, Continue button state, answer state, client-verification requirement, provisional-default eligibility, and `creditHitNotReceived`.
+- No workflow may fill fields, select dropdowns/radios, type dates, or click Continue from these routes until a separate mutation patch is designed and verified.
+- Future provisional defaults are user-specified business policy, not scan-proven values. Any future mutation must mark `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; do not assume client-verified prior-insurance answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+
 ## Participant Detail Modal
 
 - Heading anchor: `Let's get some more details`

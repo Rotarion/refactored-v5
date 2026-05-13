@@ -42,6 +42,16 @@ Mutating ops such as `click_by_id`, `click_by_text`, `fill_gather_defaults`, `co
 
 The sidecar reuses the frozen Advisor operator contract instead of adding a parallel route classifier.
 
+Current read-only Advisor state classification recognizes these unsupported ASCPRODUCT insurance/credit gates:
+
+- `ASC_EXTRA_INFO_INSURANCE`
+- `ASC_CREDIT_HIT_NOT_RECEIVED`
+- `ASC_PRIOR_INSURANCE_NOT_FOUND`
+
+These routes expose `insuranceGate` status only: gate kind, route family, continue button visibility/enabled state, field presence, visible field labels, visible control ids/names, safely readable current selected values, detectable missing fields, answer state, client-verification requirement, provisional-default policy eligibility, and credit-hit-not-received flag. The sidecar does not fill, select, type, click Continue, or treat these gates as ready for mutation.
+
+Future provisional default answers for the two insurance-history gates are user-specified business policy, not scan-proven values. Any future mutation must set `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; it must not assume client-verified answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+
 CDP attach utility:
 
 - No browser launch.

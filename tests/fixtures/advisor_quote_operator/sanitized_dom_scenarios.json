@@ -1493,6 +1493,67 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "live-asc-extra-info-insurance-gate": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/",
+    "bodyText": "Auto insurance history Current insurance history How long has the customer been continuously insured? Unknown detail Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Auto insurance history" },
+      { "tag": "label", "text": "Current insurance history duration", "children": [
+        { "tag": "select", "id": "currentInsuranceHistoryDuration", "name": "currentInsuranceHistoryDuration", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "DURATION_OPTION", "text": "Duration option" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Unknown detail", "children": [
+        { "tag": "select", "id": "insuranceHistoryUnknownDetail", "name": "insuranceHistoryUnknownDetail", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "DETAIL_OPTION", "text": "Detail option" }
+        ] }
+      ] },
+      { "tag": "button", "id": "insurance-gate-continue", "text": "Continue", "disabled": true }
+    ]
+  },
+  "live-asc-credit-hit-not-received-gate": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
+    "bodyText": "We did not receive a credit hit Credit hit not received Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "We did not receive a credit hit" },
+      { "tag": "button", "id": "credit-hit-not-received-continue", "text": "Continue", "disabled": true }
+    ]
+  },
+  "live-asc-prior-insurance-not-found-gate": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
+    "bodyText": "Auto insurance history Prior insurance not found Carrier Duration Expiration Date Unknown detail Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Auto insurance history" },
+      { "tag": "h3", "text": "Prior insurance not found" },
+      { "tag": "label", "text": "Prior carrier", "children": [
+        { "tag": "select", "id": "priorCarrier", "name": "priorCarrier", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "CARRIER_OPTION", "text": "Carrier option" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Prior insurance duration", "children": [
+        { "tag": "select", "id": "priorInsuranceDuration", "name": "priorInsuranceDuration", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "DURATION_OPTION", "text": "Duration option" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Unknown detail", "children": [
+        { "tag": "select", "id": "priorInsuranceUnknownDetail", "name": "priorInsuranceUnknownDetail", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "DETAIL_OPTION", "text": "Detail option" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Expiration date", "children": [
+        { "tag": "input", "type": "text", "id": "priorInsuranceExpirationDate", "name": "priorInsuranceExpirationDate", "attributes": { "aria-required": "true" }, "value": "" }
+      ] },
+      { "tag": "button", "id": "prior-insurance-not-found-continue", "text": "Continue", "disabled": true }
+    ]
+  },
   "snapshot-select-product-live-prefilled": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/selectProduct",
     "bodyText": "Select Product Rating State Florida Product Auto Effective Date 05/11/2026 Current Address 201 N 66TH TER, HOLLYWOOD, FL, 33024 Is the customer currently insured? Yes No Does the customer own or rent? Own Rent Continue",

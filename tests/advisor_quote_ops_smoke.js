@@ -524,7 +524,7 @@ function assertAdvisorStateSnapshot(raw) {
   const parsed = JSON.parse(raw);
   for (const key of [
     'ok', 'op', 'ts', 'url', 'route', 'confidence', 'anchors', 'blockers',
-    'product', 'selectProduct', 'ascDriversVehicles', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
+    'product', 'selectProduct', 'ascDriversVehicles', 'insuranceGate', 'prefillGate', 'rapport', 'iframe', 'allowedNextActions', 'unsafeReason'
   ])
     assert.ok(Object.prototype.hasOwnProperty.call(parsed, key), `snapshot missing ${key}`);
   assert.strictEqual(parsed.ok, true);
@@ -550,6 +550,15 @@ function assertAdvisorStateSnapshot(raw) {
     'blockerCode', 'blockers', 'nextRecommendedAction'
   ]);
   assert.ok(Array.isArray(parsed.ascDriversVehicles.blockers));
+  assert.deepStrictEqual(Object.keys(parsed.insuranceGate), [
+    'present', 'kind', 'routeFamily', 'continueVisible', 'continueEnabled', 'fieldsPresent',
+    'answerState', 'requiresClientVerification', 'provisionalDefaultsAllowed', 'creditHitNotReceived',
+    'fieldLabels', 'controlNames', 'currentSelectedValues', 'missingRequiredFields'
+  ]);
+  assert.ok(Array.isArray(parsed.insuranceGate.fieldLabels));
+  assert.ok(Array.isArray(parsed.insuranceGate.controlNames));
+  assert.ok(Array.isArray(parsed.insuranceGate.currentSelectedValues));
+  assert.ok(Array.isArray(parsed.insuranceGate.missingRequiredFields));
   assert.deepStrictEqual(Object.keys(parsed.prefillGate), ['present', 'startHereVisible']);
   assert.deepStrictEqual(Object.keys(parsed.rapport), ['present', 'vehicleCount', 'driverCount', 'staleAddVehicleRow']);
   assert.deepStrictEqual(Object.keys(parsed.iframe), ['present', 'count', 'hints']);
@@ -5055,6 +5064,70 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   assert.strictEqual(ascVehicleModal.ascDriversVehicles.blockerCode, 'ASC_VEHICLE_MODAL_OPEN');
   assert.ok(ascVehicleModal.blockers.some((blocker) => blocker.startsWith('active:ASC_VEHICLE_MODAL')));
   assert.deepStrictEqual(ascVehicleModal.allowedNextActions, []);
+
+  const extraInfoInsurance = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-extra-info-insurance-gate')
+  ));
+  assert.strictEqual(extraInfoInsurance.route, 'ASC_EXTRA_INFO_INSURANCE');
+  assert.notStrictEqual(extraInfoInsurance.route, 'ADVISOR_OTHER');
+  assert.strictEqual(extraInfoInsurance.insuranceGate.present, true);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.kind, 'EXTRA_INFO_INSURANCE');
+  assert.strictEqual(extraInfoInsurance.insuranceGate.routeFamily, 'ASCPRODUCT');
+  assert.strictEqual(extraInfoInsurance.insuranceGate.continueVisible, true);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.continueEnabled, false);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.fieldsPresent, true);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.answerState, 'UNANSWERED');
+  assert.strictEqual(extraInfoInsurance.insuranceGate.requiresClientVerification, true);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.provisionalDefaultsAllowed, true);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.creditHitNotReceived, false);
+  assert.ok(extraInfoInsurance.insuranceGate.fieldLabels.includes('Current insurance history duration'));
+  assert.ok(extraInfoInsurance.insuranceGate.controlNames.includes('currentInsuranceHistoryDuration|currentInsuranceHistoryDuration'));
+  assert.ok(extraInfoInsurance.insuranceGate.missingRequiredFields.includes('Current insurance history duration'));
+  assert.deepStrictEqual(extraInfoInsurance.allowedNextActions, []);
+  assert.ok(extraInfoInsurance.unsafeReason.includes('EXTRA_INFO_INSURANCE'));
+
+  const creditHitNotReceived = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-credit-hit-not-received-gate')
+  ));
+  assert.strictEqual(creditHitNotReceived.route, 'ASC_CREDIT_HIT_NOT_RECEIVED');
+  assert.notStrictEqual(creditHitNotReceived.route, 'ADVISOR_OTHER');
+  assert.strictEqual(creditHitNotReceived.insuranceGate.present, true);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.kind, 'CREDIT_HIT_NOT_RECEIVED');
+  assert.strictEqual(creditHitNotReceived.insuranceGate.continueVisible, true);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.continueEnabled, false);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.fieldsPresent, false);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.answerState, 'UNKNOWN');
+  assert.strictEqual(creditHitNotReceived.insuranceGate.requiresClientVerification, true);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.provisionalDefaultsAllowed, false);
+  assert.strictEqual(creditHitNotReceived.insuranceGate.creditHitNotReceived, true);
+  assert.deepStrictEqual(creditHitNotReceived.allowedNextActions, []);
+  assert.ok(creditHitNotReceived.unsafeReason.includes('CREDIT_HIT_NOT_RECEIVED'));
+
+  const priorInsuranceNotFound = assertAdvisorStateSnapshot(runReadOnlySnapshot(
+    'advisor_state_snapshot',
+    ascLiveArgs,
+    fixtureScenario('live-asc-prior-insurance-not-found-gate')
+  ));
+  assert.strictEqual(priorInsuranceNotFound.route, 'ASC_PRIOR_INSURANCE_NOT_FOUND');
+  assert.notStrictEqual(priorInsuranceNotFound.route, 'ADVISOR_OTHER');
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.present, true);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.kind, 'PRIOR_INSURANCE_NOT_FOUND');
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.continueVisible, true);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.continueEnabled, false);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.fieldsPresent, true);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.answerState, 'UNANSWERED');
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.requiresClientVerification, true);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.provisionalDefaultsAllowed, true);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.creditHitNotReceived, false);
+  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Prior carrier'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Expiration date'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.missingRequiredFields.includes('Prior insurance duration'));
+  assert.deepStrictEqual(priorInsuranceNotFound.allowedNextActions, []);
+  assert.ok(priorInsuranceNotFound.unsafeReason.includes('PRIOR_INSURANCE_NOT_FOUND'));
 }
 
 function testAdvisorActiveModalSnapshotContracts() {
