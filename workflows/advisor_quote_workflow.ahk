@@ -23,6 +23,10 @@ global advisorQuoteSnapshotObserverHumanReviewRequired := false
 global advisorQuoteSnapshotObserverFailureCode := ""
 global advisorQuoteSnapshotObserverFailureReason := ""
 global advisorQuoteSnapshotObserverLatestSnapshotPath := ""
+global advisorQuoteRequiresClientVerification := false
+global advisorQuoteCreditHitNotReceived := false
+global advisorQuoteProvisionalFields := []
+global advisorQuoteProvisionalSource := ""
 global advisorQuoteProductOverviewAutoPending := false
 global advisorQuoteProductOverviewAutoVerified := false
 global advisorQuoteProductTileAutoSelectedOnOverview := false
@@ -464,6 +468,57 @@ AdvisorQuoteStatusValue(status, key) {
     if !IsObject(status)
         return ""
     return status.Has(key) ? Trim(String(status[key])) : ""
+}
+
+AdvisorQuoteMarkClientVerificationRequired(fieldsText := "", source := "PROVISIONAL_AGENCY_DEFAULT", creditHitNotReceived := false) {
+    global advisorQuoteRequiresClientVerification, advisorQuoteCreditHitNotReceived, advisorQuoteProvisionalFields, advisorQuoteProvisionalSource
+    global advisorQuoteSnapshotObserverHumanReviewRequired
+    advisorQuoteRequiresClientVerification := true
+    advisorQuoteSnapshotObserverHumanReviewRequired := true
+    if (creditHitNotReceived)
+        advisorQuoteCreditHitNotReceived := true
+    if (Trim(String(source ?? "")) != "")
+        advisorQuoteProvisionalSource := source
+    fields := StrSplit(Trim(String(fieldsText ?? "")), ",")
+    if !IsObject(advisorQuoteProvisionalFields)
+        advisorQuoteProvisionalFields := []
+    for _, field in fields {
+        name := Trim(String(field))
+        if (name = "")
+            continue
+        exists := false
+        for _, current in advisorQuoteProvisionalFields {
+            if (current = name) {
+                exists := true
+                break
+            }
+        }
+        if !exists
+            advisorQuoteProvisionalFields.Push(name)
+    }
+    AdvisorQuoteAppendLog(
+        "ASC_CLIENT_VERIFICATION_REQUIRED",
+        AdvisorQuoteGetLastStep(),
+        "requiresClientVerification=1"
+            . ", creditHitNotReceived=" (advisorQuoteCreditHitNotReceived ? "1" : "0")
+            . ", provisionalSource=" advisorQuoteProvisionalSource
+            . ", provisionalFields=" AdvisorQuoteJoinCsv(advisorQuoteProvisionalFields)
+    )
+}
+
+AdvisorQuoteJoinCsv(values) {
+    if !IsObject(values)
+        return ""
+    out := ""
+    for _, value in values {
+        text := Trim(String(value))
+        if (text = "")
+            continue
+        if (out != "")
+            out .= ","
+        out .= text
+    }
+    return out
 }
 
 AdvisorQuoteStatusInteger(status, key) {
@@ -2384,10 +2439,15 @@ AdvisorQuoteWaitForCondition(name, timeoutMs, pollMs := 350, args := Map()) {
 AdvisorQuoteInitTrace(profile) {
     global advisorQuoteProductOverviewAutoPending, advisorQuoteProductOverviewAutoVerified
     global advisorQuoteProductTileAutoSelectedOnOverview, advisorQuoteProductOverviewSaved, advisorQuoteGatherAutoCommitted, advisorQuoteProductTileRecoveryAttempted
+    global advisorQuoteRequiresClientVerification, advisorQuoteCreditHitNotReceived, advisorQuoteProvisionalFields, advisorQuoteProvisionalSource
     AdvisorQuoteResetConsoleBridge()
     AdvisorQuoteInitScanBundle()
     AdvisorQuoteResetSnapshotObserverRun()
     AdvisorQuoteResetJsMetricsCollector()
+    advisorQuoteRequiresClientVerification := false
+    advisorQuoteCreditHitNotReceived := false
+    advisorQuoteProvisionalFields := []
+    advisorQuoteProvisionalSource := ""
     advisorQuoteProductOverviewAutoPending := false
     advisorQuoteProductOverviewAutoVerified := false
     advisorQuoteProductTileAutoSelectedOnOverview := false
@@ -2863,6 +2923,7 @@ AdvisorQuoteBuildStateSnapshotObserverSummaryJson() {
     global advisorQuoteSnapshotObserverTerminalDispositionCode, advisorQuoteSnapshotObserverTerminalDispositionLabel
     global advisorQuoteSnapshotObserverHumanReviewRequired, advisorQuoteSnapshotObserverFailureCode
     global advisorQuoteSnapshotObserverFailureReason, advisorQuoteSnapshotObserverLatestSnapshotPath
+    global advisorQuoteRequiresClientVerification, advisorQuoteCreditHitNotReceived, advisorQuoteProvisionalFields, advisorQuoteProvisionalSource
 
     updatedAt := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
     json := "{`n"
@@ -2883,8 +2944,30 @@ AdvisorQuoteBuildStateSnapshotObserverSummaryJson() {
         . '  "failureCode": ' (advisorQuoteSnapshotObserverFailureCode = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverFailureCode) '"')) ",`n"
         . '  "failureReason": ' (advisorQuoteSnapshotObserverFailureReason = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverFailureReason) '"')) ",`n"
         . '  "humanReviewRequired": ' (advisorQuoteSnapshotObserverHumanReviewRequired ? "true" : "false") ",`n"
+        . '  "requiresClientVerification": ' (advisorQuoteRequiresClientVerification ? "true" : "false") ",`n"
+        . '  "creditHitNotReceived": ' (advisorQuoteCreditHitNotReceived ? "true" : "false") ",`n"
+        . '  "provisionalSource": ' (advisorQuoteProvisionalSource = "" ? "null" : ('"' AdvisorQuoteJsonEscape(advisorQuoteProvisionalSource) '"')) ",`n"
+        . '  "provisionalFields": ' AdvisorQuoteStringArrayJson(advisorQuoteProvisionalFields) ",`n"
         . '  "latestSnapshotPath": "' AdvisorQuoteJsonEscape(advisorQuoteSnapshotObserverLatestSnapshotPath) '"`n'
         . "}`n"
+    return json
+}
+
+AdvisorQuoteStringArrayJson(values) {
+    if !IsObject(values)
+        return "[]"
+    json := "["
+    first := true
+    for _, value in values {
+        text := Trim(String(value))
+        if (text = "")
+            continue
+        if !first
+            json .= ", "
+        first := false
+        json .= '"' AdvisorQuoteJsonEscape(text) '"'
+    }
+    json .= "]"
     return json
 }
 

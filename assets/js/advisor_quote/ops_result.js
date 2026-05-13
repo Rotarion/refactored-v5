@@ -5640,6 +5640,248 @@ copy(String((() => {
     }
     return compact(safe(control.value), 80);
   };
+  const advisorInsuranceGateFindControl = (idOrName) => {
+    const wanted = safe(idOrName).trim();
+    if (!wanted) return { control: null, status: 'MISSING', count: 0, label: '' };
+    const found = [];
+    const byId = document.getElementById(wanted);
+    if (byId && visible(byId)) found.push(byId);
+    try {
+      const selector = `input[name="${cssEscape(wanted)}"],select[name="${cssEscape(wanted)}"],textarea[name="${cssEscape(wanted)}"]`;
+      for (const node of Array.from(document.querySelectorAll(selector)).filter(visible)) {
+        if (!found.includes(node)) found.push(node);
+      }
+    } catch {}
+    const controls = found.filter((node) => !/^(hidden|button|submit|reset)$/i.test(safe(node.type)));
+    if (controls.length !== 1) {
+      return {
+        control: null,
+        status: controls.length > 1 ? 'AMBIGUOUS' : 'MISSING',
+        count: controls.length,
+        label: wanted
+      };
+    }
+    return {
+      control: controls[0],
+      status: 'OK',
+      count: 1,
+      label: advisorInsuranceGateControlLabel(controls[0]) || wanted
+    };
+  };
+  const advisorInsuranceGateSelectText = (control, wantedText) => {
+    if (!control || !/^SELECT$/i.test(safe(control.tagName))) return false;
+    if (isDisabledLike(control)) return false;
+    return setSelectValue(control, wantedText, false);
+  };
+  const advisorInsuranceGateSetDate = (control, wantedDate) => {
+    if (!control || /^SELECT$/i.test(safe(control.tagName))) return false;
+    if (isDisabledLike(control) || control.readOnly) return false;
+    return setInputValue(control, wantedDate, false);
+  };
+  const advisorInsuranceGateContinueCandidates = () => Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button]'))
+    .filter(visible)
+    .map((node) => ({ node, text: normLower(getText(node) || safe(node.value) || safe(node.getAttribute && node.getAttribute('aria-label'))) }))
+    .filter((entry) => /\b(save and continue|continue|next)\b/i.test(entry.text));
+  const advisorInsuranceGateUniqueContinueButton = () => {
+    const candidates = advisorInsuranceGateContinueCandidates();
+    const enabled = candidates.filter((entry) => !isDisabledLike(entry.node));
+    if (enabled.length !== 1) {
+      return {
+        button: null,
+        status: enabled.length > 1 ? 'AMBIGUOUS' : (candidates.length ? 'DISABLED' : 'MISSING'),
+        visibleCount: candidates.length,
+        enabledCount: enabled.length
+      };
+    }
+    return {
+      button: enabled[0].node,
+      status: 'OK',
+      visibleCount: candidates.length,
+      enabledCount: enabled.length
+    };
+  };
+  const advisorInsuranceGateYearEndDate = (date = new Date()) => {
+    const year = date.getFullYear();
+    return `12-31-${year}`;
+  };
+  const advisorInsuranceGateFieldsForKind = (kind) => {
+    if (kind === 'EXTRA_INFO_INSURANCE') {
+      return [
+        { key: 'priorInsuranceCarrier', id: 'priorInsurance_insurerName', wanted: 'Other', kind: 'select' },
+        { key: 'continuousCoverageLength', id: 'priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt', wanted: '3+ years', kind: 'select' }
+      ];
+    }
+    if (kind === 'PRIOR_INSURANCE_NOT_FOUND') {
+      return [
+        { key: 'priorInsuranceCarrier', id: 'priorInsurance_insurerName', wanted: 'Other', kind: 'select' },
+        { key: 'priorInsuranceDuration', id: 'priorInsurance_lenTimePreviousInsurer', wanted: '5+ years', kind: 'select' },
+        { key: 'priorInsuranceBILimits', id: 'priorInsurance_limitAmountText', wanted: 'I do not know', kind: 'select' },
+        { key: 'priorInsuranceExpirationDate', id: 'contractTermExpDt', wanted: advisorInsuranceGateYearEndDate(), kind: 'date' }
+      ];
+    }
+    return [];
+  };
+  const advisorInsuranceGateRequiredEvidenceControls = (kind) => {
+    const fields = advisorInsuranceGateFieldsForKind(kind);
+    if (kind === 'PRIOR_INSURANCE_NOT_FOUND')
+      return fields.concat([{ key: 'newCoverageStartDate', id: 'transactionEffDtTime', wanted: '', kind: 'evidence' }]);
+    if (kind === 'EXTRA_INFO_INSURANCE')
+      return fields;
+    return fields;
+  };
+  const advisorInsuranceGateReadbackMatches = (actual, wanted, kind) => {
+    const have = safe(actual).replace(/\s+/g, ' ').trim();
+    const want = safe(wanted).replace(/\s+/g, ' ').trim();
+    if (!want) return !!have;
+    if (kind === 'date') return have === want;
+    return normUpper(have) === normUpper(want);
+  };
+  const advisorInsuranceGateReadbackObject = (fields) => {
+    const out = {};
+    for (const field of fields)
+      out[field.key] = advisorInsuranceGateControlValue(field.control);
+    return out;
+  };
+  const advisorInsuranceGateExactStatus = (expectedRoute, expectedKind) => {
+    const snapshot = advisorStateSnapshot({ source: 'asc-insurance-gate-provisional' });
+    const gate = snapshot.insuranceGate || {};
+    return {
+      snapshot,
+      gate,
+      ok: snapshot.route === expectedRoute
+        && gate.present === true
+        && gate.kind === expectedKind
+        && gate.routeFamily === 'ASCPRODUCT'
+    };
+  };
+  const advisorInsuranceGateUnsafeResult = (result, expectedRoute, expectedKind, status, extra = {}) => lineResult({
+    result,
+    expectedRoute,
+    expectedKind,
+    actualRoute: status && status.snapshot ? status.snapshot.route : '',
+    actualKind: status && status.gate ? safe(status.gate.kind) : '',
+    source: 'SYSTEM_DETECTED_GATE',
+    requiresClientVerification: '1',
+    provisionalSource: extra.provisionalSource || '',
+    failedFields: extra.failedFields || '',
+    missing: extra.missing || '',
+    ambiguous: extra.ambiguous || '',
+    evidence: extra.evidence || ''
+  });
+  const applyAdvisorInsuranceGateProvisionalDefaults = (expectedRoute, expectedKind, successResult, readbackFailureResult) => {
+    const status = advisorInsuranceGateExactStatus(expectedRoute, expectedKind);
+    if (!status.ok)
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNKNOWN', expectedRoute, expectedKind, status);
+
+    const disallowed = expectedKind === 'EXTRA_INFO_INSURANCE'
+      ? ['priorInsurance_limitAmountText', 'contractTermExpDt']
+      : [];
+    for (const id of disallowed) {
+      const found = advisorInsuranceGateFindControl(id);
+      if (found.status === 'OK')
+        return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS', expectedRoute, expectedKind, status, { failedFields: id, evidence: 'disallowed-control-present' });
+    }
+
+    const fields = advisorInsuranceGateRequiredEvidenceControls(expectedKind).map((field) => {
+      const found = advisorInsuranceGateFindControl(field.id);
+      return { ...field, control: found.control, controlStatus: found.status, controlCount: found.count, label: found.label };
+    });
+    const badControls = fields.filter((field) => field.controlStatus !== 'OK' || !field.control || isDisabledLike(field.control) || field.control.readOnly);
+    if (badControls.length) {
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS', expectedRoute, expectedKind, status, {
+        failedFields: badControls.map((field) => field.key).join(','),
+        missing: badControls.filter((field) => field.controlStatus === 'MISSING').map((field) => field.id).join(','),
+        ambiguous: badControls.filter((field) => field.controlStatus === 'AMBIGUOUS').map((field) => field.id).join(',')
+      });
+    }
+
+    const targetFields = fields.filter((field) => field.kind !== 'evidence');
+    const applied = [];
+    for (const field of targetFields) {
+      const ok = field.kind === 'date'
+        ? advisorInsuranceGateSetDate(field.control, field.wanted)
+        : advisorInsuranceGateSelectText(field.control, field.wanted);
+      applied.push({ field, ok });
+    }
+    const failedApply = applied.filter((entry) => !entry.ok).map((entry) => entry.field.key);
+    if (failedApply.length) {
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS', expectedRoute, expectedKind, status, {
+        failedFields: failedApply.join(','),
+        evidence: 'apply-failed'
+      });
+    }
+
+    const readback = advisorInsuranceGateReadbackObject(targetFields);
+    const mismatches = targetFields.filter((field) => !advisorInsuranceGateReadbackMatches(readback[field.key], field.wanted, field.kind));
+    if (mismatches.length) {
+      return lineResult({
+        result: readbackFailureResult,
+        expectedRoute,
+        expectedKind,
+        actualRoute: status.snapshot.route,
+        actualKind: status.gate.kind,
+        source: 'PROVISIONAL_AGENCY_DEFAULT',
+        requiresClientVerification: '1',
+        provisionalSource: 'PROVISIONAL_AGENCY_DEFAULT',
+        provisionalFields: targetFields.map((field) => field.key).join(','),
+        readback: Object.entries(readback).map(([key, value]) => `${key}:${value}`).join('|'),
+        failedFields: mismatches.map((field) => field.key).join(',')
+      });
+    }
+
+    const continueState = advisorInsuranceGateUniqueContinueButton();
+    if (continueState.status === 'DISABLED')
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_CONTINUE_DISABLED', expectedRoute, expectedKind, status, { provisionalSource: 'PROVISIONAL_AGENCY_DEFAULT' });
+    if (continueState.status !== 'OK')
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS', expectedRoute, expectedKind, status, {
+        provisionalSource: 'PROVISIONAL_AGENCY_DEFAULT',
+        evidence: `continue:${continueState.status}`
+      });
+
+    const clicked = clickCenterEl(continueState.button);
+    return lineResult({
+      result: clicked ? successResult : 'CLICK_FAILED',
+      expectedRoute,
+      expectedKind,
+      actualRoute: status.snapshot.route,
+      actualKind: status.gate.kind,
+      clicked: clicked ? '1' : '0',
+      source: 'PROVISIONAL_AGENCY_DEFAULT',
+      requiresClientVerification: '1',
+      provisionalSource: 'PROVISIONAL_AGENCY_DEFAULT',
+      provisionalFields: targetFields.map((field) => field.key).join(','),
+      readback: Object.entries(readback).map(([key, value]) => `${key}:${value}`).join('|'),
+      continueVisible: String(continueState.visibleCount),
+      continueEnabled: String(continueState.enabledCount),
+      failedFields: clicked ? '' : 'continue'
+    });
+  };
+  const continueAdvisorCreditHitNotReceivedGate = () => {
+    const status = advisorInsuranceGateExactStatus('ASC_CREDIT_HIT_NOT_RECEIVED', 'CREDIT_HIT_NOT_RECEIVED');
+    if (!status.ok)
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNKNOWN', 'ASC_CREDIT_HIT_NOT_RECEIVED', 'CREDIT_HIT_NOT_RECEIVED', status);
+    const continueState = advisorInsuranceGateUniqueContinueButton();
+    if (continueState.status === 'DISABLED')
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_CONTINUE_DISABLED', 'ASC_CREDIT_HIT_NOT_RECEIVED', 'CREDIT_HIT_NOT_RECEIVED', status, { evidence: 'credit-hit-continue-disabled' });
+    if (continueState.status !== 'OK')
+      return advisorInsuranceGateUnsafeResult('ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS', 'ASC_CREDIT_HIT_NOT_RECEIVED', 'CREDIT_HIT_NOT_RECEIVED', status, { evidence: `continue:${continueState.status}` });
+    const clicked = clickCenterEl(continueState.button);
+    return lineResult({
+      result: clicked ? 'ASC_CREDIT_HIT_NOT_RECEIVED_DETECTED' : 'CLICK_FAILED',
+      expectedRoute: 'ASC_CREDIT_HIT_NOT_RECEIVED',
+      expectedKind: 'CREDIT_HIT_NOT_RECEIVED',
+      actualRoute: status.snapshot.route,
+      actualKind: status.gate.kind,
+      clicked: clicked ? '1' : '0',
+      source: 'SYSTEM_DETECTED_GATE',
+      creditHitNotReceived: '1',
+      requiresClientVerification: '1',
+      filledFieldCount: '0',
+      continueVisible: String(continueState.visibleCount),
+      continueEnabled: String(continueState.enabledCount),
+      failedFields: clicked ? '' : 'continue'
+    });
+  };
   const advisorInsuranceGateTextKind = () => {
     const text = bodyText();
     const headings = advisorStateVisibleHeadingTexts().join(' | ');
@@ -5785,7 +6027,7 @@ copy(String((() => {
     ]);
     return (selectProduct.missingRequired || []).every((item) => safeDefaultMissing.has(item));
   };
-  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles) => {
+  const advisorStateAllowedNextActions = (route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles, insuranceGate) => {
     if (blockers.length) return [];
     switch (route) {
       case 'CUSTOMER_SUMMARY_PREFILL_GATE':
@@ -5806,6 +6048,12 @@ copy(String((() => {
         if (ascDriversVehicles && (ascDriversVehicles.unresolvedDriverCount > 0 || ascDriversVehicles.unresolvedVehicleCount > 0))
           return ['human_review_required'];
         return [];
+      case 'ASC_CREDIT_HIT_NOT_RECEIVED':
+        return insuranceGate && insuranceGate.continueVisible && insuranceGate.continueEnabled && insuranceGate.creditHitNotReceived ? ['continue_credit_hit_not_received_gate'] : [];
+      case 'ASC_EXTRA_INFO_INSURANCE':
+        return insuranceGate && insuranceGate.continueVisible && insuranceGate.continueEnabled && insuranceGate.provisionalDefaultsAllowed ? ['apply_provisional_insurance_defaults'] : [];
+      case 'ASC_PRIOR_INSURANCE_NOT_FOUND':
+        return insuranceGate && insuranceGate.continueVisible && insuranceGate.continueEnabled && insuranceGate.provisionalDefaultsAllowed ? ['apply_provisional_insurance_defaults'] : [];
       case 'COVERAGES':
         return ['review_coverages'];
       case 'PURCHASE':
@@ -5898,7 +6146,7 @@ copy(String((() => {
     } else if (insuranceGateRoute) {
       route = insuranceGateRoute;
       confidence = insuranceGate.fieldsPresent || insuranceGate.creditHitNotReceived ? 0.86 : 0.78;
-      unsafeReason = `Known unsupported ASCPRODUCT gate ${insuranceGate.kind}; read-only status only and human review is required.`;
+      unsafeReason = `Known ASCPRODUCT gate ${insuranceGate.kind}; provisional workflow handling requires client verification before bind or purchase.`;
       anchors.push('url:/apps/ASCPRODUCT/', `gate:${insuranceGate.kind}`, insuranceGate.fieldsPresent ? 'controls:insurance-gate-fields' : '', insuranceGate.creditHitNotReceived ? 'status:credit-hit-not-received' : '');
     } else if (ascKind) {
       route = ascKind;
@@ -5923,8 +6171,10 @@ copy(String((() => {
       unsafeReason = unsafeReason ? `${unsafeReason} ${blockerReason}` : blockerReason;
     }
 
-    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles);
+    const allowedNextActions = advisorStateAllowedNextActions(route, product, prefillGate, rapport, blockers, selectProduct, ascDriversVehicles, insuranceGate);
     if (route === 'SELECT_PRODUCT' && allowedNextActions.includes('answer_select_product'))
+      unsafeReason = null;
+    if ((route === 'ASC_CREDIT_HIT_NOT_RECEIVED' || route === 'ASC_EXTRA_INFO_INSURANCE' || route === 'ASC_PRIOR_INSURANCE_NOT_FOUND') && allowedNextActions.length)
       unsafeReason = null;
     if (!allowedNextActions.length && route !== 'UNKNOWN_UNSAFE' && !unsafeReason)
       unsafeReason = `Recognized ${route}, but no safe next action is clear from read-only evidence.`;
@@ -8127,6 +8377,28 @@ copy(String((() => {
 
     case 'advisor_state_snapshot': {
       return JSON.stringify(advisorStateSnapshot(args));
+    }
+
+    case 'asc_credit_hit_not_received_continue': {
+      return continueAdvisorCreditHitNotReceivedGate();
+    }
+
+    case 'asc_extra_info_insurance_apply_provisional': {
+      return applyAdvisorInsuranceGateProvisionalDefaults(
+        'ASC_EXTRA_INFO_INSURANCE',
+        'EXTRA_INFO_INSURANCE',
+        'ASC_EXTRA_INFO_INSURANCE_PROVISIONAL_APPLIED',
+        'ASC_EXTRA_INFO_INSURANCE_PROVISIONAL_READBACK_FAILED'
+      );
+    }
+
+    case 'asc_prior_insurance_not_found_apply_provisional': {
+      return applyAdvisorInsuranceGateProvisionalDefaults(
+        'ASC_PRIOR_INSURANCE_NOT_FOUND',
+        'PRIOR_INSURANCE_NOT_FOUND',
+        'ASC_PRIOR_INSURANCE_NOT_FOUND_PROVISIONAL_APPLIED',
+        'ASC_PRIOR_INSURANCE_NOT_FOUND_PROVISIONAL_READBACK_FAILED'
+      );
     }
 
     case 'gather_rapport_snapshot': {

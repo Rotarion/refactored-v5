@@ -40,7 +40,7 @@ Mutating ops such as `click_by_id`, `click_by_text`, `fill_gather_defaults`, `co
 - No hand edits to `assets/js/advisor_quote/ops_result.js`.
 - Raw scan output stays under ignored `logs/` paths by default.
 
-The sidecar reuses the frozen Advisor operator contract instead of adding a parallel route classifier.
+The sidecar reuses the Advisor operator contract instead of adding a parallel route classifier. It remains scan-only even though the main Advisor workflow now has narrow mutating ops for recognized insurance gates.
 
 Current read-only Advisor state classification recognizes these unsupported ASCPRODUCT insurance/credit gates:
 
@@ -48,14 +48,14 @@ Current read-only Advisor state classification recognizes these unsupported ASCP
 - `ASC_CREDIT_HIT_NOT_RECEIVED`
 - `ASC_PRIOR_INSURANCE_NOT_FOUND`
 
-These routes expose `insuranceGate` status only: gate kind, route family, continue button visibility/enabled state, field presence, visible field labels, visible control ids/names, safely readable current selected values, detectable missing fields, answer state, client-verification requirement, provisional-default policy eligibility, and credit-hit-not-received flag. The sidecar does not fill, select, type, click Continue, or treat these gates as ready for mutation.
+These routes expose `insuranceGate` status only to the sidecar: gate kind, route family, continue button visibility/enabled state, field presence, visible field labels, visible control ids/names, safely readable current selected values, detectable missing fields, answer state, client-verification requirement, provisional-default policy eligibility, and credit-hit-not-received flag. The sidecar does not fill, select, type, click Continue, or invoke any provisional-default op.
 
-Future provisional default answers for the two insurance-history gates are user-specified business policy, not scan-proven values:
+Main-workflow provisional default answers for the two insurance-history gates are user-specified business policy, not scan-proven values:
 
 - `ASC_EXTRA_INFO_INSURANCE`: carrier `Other`, duration `3+ years`, `requiresClientVerification=true`.
 - `ASC_PRIOR_INSURANCE_NOT_FOUND`: carrier `Other`, duration `5+ years`, BI limits `I do not know`, expiration date last day of current year, `requiresClientVerification=true`.
 
-Any future mutation must set `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; it must not assume client-verified answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+The mutating ops are not in either sidecar allowlist. Main workflow mutation must set `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; it must not assume client-verified answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
 
 CDP attach utility:
 

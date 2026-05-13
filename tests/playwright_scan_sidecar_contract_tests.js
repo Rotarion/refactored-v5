@@ -17,7 +17,7 @@ function testReadOnlyAllowlist() {
   for (const op of sidecar.DEFAULT_BUNDLE_OPS) {
     assert.ok(sidecar.READ_ONLY_OPS.includes(op), `default op must be read-only: ${op}`);
   }
-  for (const mutatingOp of ['click_by_id', 'click_by_text', 'fill_gather_defaults', 'confirm_potential_vehicle']) {
+  for (const mutatingOp of ['click_by_id', 'click_by_text', 'fill_gather_defaults', 'confirm_potential_vehicle', 'asc_extra_info_insurance_apply_provisional', 'asc_prior_insurance_not_found_apply_provisional', 'asc_credit_hit_not_received_continue']) {
     assert.throws(() => sidecar.assertReadOnlyOps([mutatingOp]), /Refusing non-read-only Advisor op/);
   }
 }

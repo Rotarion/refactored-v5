@@ -1526,6 +1526,66 @@
       { "tag": "button", "id": "credit-hit-not-received-continue", "text": "Continue", "disabled": true }
     ]
   },
+  "asc-credit-hit-not-received-continue-enabled": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
+    "bodyText": "We did not receive a credit hit Credit hit not received Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "We did not receive a credit hit" },
+      { "tag": "button", "id": "credit-hit-not-received-continue", "text": "Continue", "disabled": false }
+    ]
+  },
+  "asc-extra-info-insurance-unanswered-gate": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/",
+    "bodyText": "Auto insurance history Who was your previous insurance provider? Length of continuous coverage New policy start date Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Auto insurance history" },
+      { "tag": "label", "text": "Who was your previous insurance provider?", "children": [
+        { "tag": "select", "id": "priorInsurance_insurerName", "name": "priorInsurance_insurerName", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "OTHER", "text": "Other" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Length of continuous coverage", "children": [
+        { "tag": "select", "id": "priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt", "name": "priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "THREE_PLUS_YEARS", "text": "3+ years" }
+        ] }
+      ] },
+      { "tag": "label", "text": "New policy start date", "children": [
+        { "tag": "input", "type": "text", "id": "transactionEffDtTime", "name": "transactionEffDtTime", "attributes": { "aria-required": "true" }, "value": "SANITIZED_POLICY_START_DATE" }
+      ] },
+      { "tag": "button", "id": "insurance-gate-continue", "text": "Continue", "disabled": false }
+    ]
+  },
+  "asc-extra-info-insurance-ambiguous-provider": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/110/",
+    "bodyText": "Auto insurance history Who was your previous insurance provider? Length of continuous coverage New policy start date Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Auto insurance history" },
+      { "tag": "label", "text": "Who was your previous insurance provider?", "children": [
+        { "tag": "select", "id": "priorInsurance_insurerName", "name": "priorInsurance_insurerName", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "OTHER", "text": "Other" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Duplicate previous insurance provider", "children": [
+        { "tag": "select", "name": "priorInsurance_insurerName", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "OTHER", "text": "Other" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Length of continuous coverage", "children": [
+        { "tag": "select", "id": "priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt", "name": "priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "THREE_PLUS_YEARS", "text": "3+ years" }
+        ] }
+      ] },
+      { "tag": "button", "id": "insurance-gate-continue", "text": "Continue", "disabled": false }
+    ]
+  },
   "live-asc-prior-insurance-not-found-021-gate": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
     "bodyText": "Auto insurance history Current insurance provider For how long? Bodily injury liability limits Policy expiration date When would you like your new coverage to start? Continue",
@@ -1552,6 +1612,39 @@
       ] },
       { "tag": "label", "text": "Policy expiration date", "children": [
         { "tag": "input", "type": "text", "id": "contractTermExpDt", "name": "contractTermExpDt", "attributes": { "aria-required": "true" }, "value": "SANITIZED_YEAR_END_DATE" }
+      ] },
+      { "tag": "label", "text": "When would you like your new coverage to start?", "children": [
+        { "tag": "input", "type": "text", "id": "transactionEffDtTime", "name": "transactionEffDtTime", "attributes": { "aria-required": "true" }, "value": "SANITIZED_POLICY_START_DATE" }
+      ] },
+      { "tag": "button", "id": "prior-insurance-not-found-continue", "text": "Continue", "disabled": false }
+    ]
+  },
+  "asc-prior-insurance-not-found-unanswered-gate": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/111/",
+    "bodyText": "Auto insurance history Current insurance provider For how long? Bodily injury liability limits Policy expiration date When would you like your new coverage to start? Continue",
+    "nodes": [
+      { "tag": "h1", "text": "Sanitized Customer (View Customer)" },
+      { "tag": "h2", "text": "Auto insurance history" },
+      { "tag": "label", "text": "Current insurance provider", "children": [
+        { "tag": "select", "id": "priorInsurance_insurerName", "name": "priorInsurance_insurerName", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "OTHER", "text": "Other" }
+        ] }
+      ] },
+      { "tag": "label", "text": "For how long?", "children": [
+        { "tag": "select", "id": "priorInsurance_lenTimePreviousInsurer", "name": "priorInsurance_lenTimePreviousInsurer", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "FIVE_PLUS_YEARS", "text": "5+ years" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Bodily injury liability limits", "children": [
+        { "tag": "select", "id": "priorInsurance_limitAmountText", "name": "priorInsurance_limitAmountText", "attributes": { "aria-required": "true" }, "options": [
+          { "value": "", "text": "Select One", "selected": true },
+          { "value": "UNKNOWN", "text": "I do not know" }
+        ] }
+      ] },
+      { "tag": "label", "text": "Policy expiration date", "children": [
+        { "tag": "input", "type": "text", "id": "contractTermExpDt", "name": "contractTermExpDt", "attributes": { "aria-required": "true" }, "value": "" }
       ] },
       { "tag": "label", "text": "When would you like your new coverage to start?", "children": [
         { "tag": "input", "type": "text", "id": "transactionEffDtTime", "name": "transactionEffDtTime", "attributes": { "aria-required": "true" }, "value": "SANITIZED_POLICY_START_DATE" }

@@ -128,21 +128,22 @@ Current branch sync note: this file is synchronized for `hermes-state-snapshot-f
   - Add only lead-matching vehicles to the quote and leave non-matching vehicles untouched.
   - Save only after driver and vehicle reconciliation reaches a complete state.
 
-## ASCPRODUCT Unsupported Insurance And Credit Gates
+## ASCPRODUCT Insurance And Credit Gates
 
 - Route family: `/apps/ASCPRODUCT/{id}/`
-- Read-only snapshot routes:
+- Snapshot routes:
   - `ASC_EXTRA_INFO_INSURANCE`
   - `ASC_CREDIT_HIT_NOT_RECEIVED`
   - `ASC_PRIOR_INSURANCE_NOT_FOUND`
 - These gates are recognized by route family plus page and field/control evidence. They are not driven by archive sequence numbers or dynamic ASCPRODUCT ids.
-- Current behavior is detection/status only through `advisor_state_snapshot.insuranceGate`.
+- Current workflow behavior is controlled provisional handling for these exact recognized gates only. Unknown or ambiguous ASCPRODUCT pages still fail safe.
 - The snapshot may report gate kind, visible field labels, visible control names/ids, safely readable current selected values, missing required fields when detectable, Continue button state, answer state, client-verification requirement, provisional-default eligibility, and `creditHitNotReceived`.
-- No workflow may fill fields, select dropdowns/radios, type dates, or click Continue from these routes until a separate mutation patch is designed and verified.
-- Future provisional defaults are user-specified business policy, not scan-proven values:
-  - `ASC_EXTRA_INFO_INSURANCE`: carrier `Other`, duration `3+ years`, `requiresClientVerification=true`.
-  - `ASC_PRIOR_INSURANCE_NOT_FOUND`: carrier `Other`, duration `5+ years`, BI limits `I do not know`, expiration date last day of current year, `requiresClientVerification=true`.
-- Any future mutation must mark `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; do not assume client-verified prior-insurance answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+- `ASC_CREDIT_HIT_NOT_RECEIVED` sets `creditHitNotReceived=true`, records `source=SYSTEM_DETECTED_GATE`, and may click only the known safe Continue/Next action when the exact gate is confirmed and the action is enabled. It does not fill any field.
+- `ASC_EXTRA_INFO_INSURANCE` may set only `priorInsurance_insurerName=Other` and `priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt=3+ years` after exact route/kind evidence confirms this gate and BI-limit / expiration-date controls are absent.
+- `ASC_PRIOR_INSURANCE_NOT_FOUND` may set only `priorInsurance_insurerName=Other`, `priorInsurance_lenTimePreviousInsurer=5+ years`, `priorInsurance_limitAmountText=I do not know`, and `contractTermExpDt` to the last day of the current local year.
+- Insurance provisional ops must read back all applied values and click Continue only if readback matches and a single enabled Continue/Next action is present.
+- Any provisional mutation must mark `source=PROVISIONAL_AGENCY_DEFAULT`, `requiresClientVerification=true`, and the relevant `provisionalFields`. These are agency defaults to reach coverages/pricing only; they are not client-verified answers.
+- Purchase, bind, payment, checkout, or final-sale paths must not proceed while `requiresClientVerification=true`.
 
 ## Participant Detail Modal
 

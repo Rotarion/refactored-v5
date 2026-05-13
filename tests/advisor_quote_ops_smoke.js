@@ -1022,9 +1022,12 @@ const AHK_CALLED_ADVISOR_OPS = [
   'advisor_active_modal_status',
   'advisor_state_snapshot',
   'any_vehicle_already_added',
+  'asc_credit_hit_not_received_continue',
   'asc_driver_rows_status',
   'asc_drivers_vehicles_snapshot',
+  'asc_extra_info_insurance_apply_provisional',
   'asc_participant_detail_status',
+  'asc_prior_insurance_not_found_apply_provisional',
   'asc_reconcile_driver_rows',
   'asc_reconcile_vehicle_rows',
   'asc_resolve_participant_marital_and_spouse',
@@ -1090,7 +1093,7 @@ function testAhkCalledAdvisorOperatorInventoryExistsInRuntime() {
   const runtimePath = path.join(__dirname, '..', 'assets', 'js', 'advisor_quote', 'ops_result.js');
   const runtime = fs.readFileSync(runtimePath, 'utf8');
   assert.strictEqual(new Set(AHK_CALLED_ADVISOR_OPS).size, AHK_CALLED_ADVISOR_OPS.length, 'AHK op inventory contains duplicates');
-  assert.strictEqual(AHK_CALLED_ADVISOR_OPS.length, 62);
+  assert.strictEqual(AHK_CALLED_ADVISOR_OPS.length, 65);
   for (const op of AHK_CALLED_ADVISOR_OPS) {
     const pattern = new RegExp(`case ['"]${escapeRegex(op)}['"]\\s*:`);
     assert.ok(pattern.test(runtime), `generated Advisor JS runtime missing AHK-called op ${op}`);
@@ -5088,8 +5091,8 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   assert.ok(extraInfoInsurance.insuranceGate.currentSelectedValues.includes('Other'));
   assert.ok(extraInfoInsurance.insuranceGate.currentSelectedValues.includes('3+ years'));
   assert.deepStrictEqual(extraInfoInsurance.insuranceGate.missingRequiredFields, []);
-  assert.deepStrictEqual(extraInfoInsurance.allowedNextActions, []);
-  assert.ok(extraInfoInsurance.unsafeReason.includes('EXTRA_INFO_INSURANCE'));
+  assert.deepStrictEqual(extraInfoInsurance.allowedNextActions, ['apply_provisional_insurance_defaults']);
+  assert.strictEqual(extraInfoInsurance.unsafeReason, null);
 
   const creditHitNotReceived = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',
@@ -5135,8 +5138,130 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   assert.ok(priorInsuranceNotFound.insuranceGate.currentSelectedValues.includes('5+ years'));
   assert.ok(priorInsuranceNotFound.insuranceGate.currentSelectedValues.includes('I do not know'));
   assert.deepStrictEqual(priorInsuranceNotFound.insuranceGate.missingRequiredFields, []);
-  assert.deepStrictEqual(priorInsuranceNotFound.allowedNextActions, []);
-  assert.ok(priorInsuranceNotFound.unsafeReason.includes('PRIOR_INSURANCE_NOT_FOUND'));
+  assert.deepStrictEqual(priorInsuranceNotFound.allowedNextActions, ['apply_provisional_insurance_defaults']);
+  assert.strictEqual(priorInsuranceNotFound.unsafeReason, null);
+}
+
+function currentYearEndDateText() {
+  return `12-31-${new Date().getFullYear()}`;
+}
+
+function testAscInsuranceGateProvisionalOps() {
+  const credit = fixtureScenario('asc-credit-hit-not-received-continue-enabled');
+  const creditBeforeClicks = totalClickCalls(credit.doc);
+  const creditStatus = assertKeyBlock(runOperator(
+    'asc_credit_hit_not_received_continue',
+    {},
+    credit.doc,
+    credit.href
+  ), [
+    'result', 'expectedRoute', 'expectedKind', 'actualRoute', 'actualKind', 'clicked',
+    'source', 'creditHitNotReceived', 'requiresClientVerification', 'filledFieldCount'
+  ]);
+  assert.strictEqual(creditStatus.result, 'ASC_CREDIT_HIT_NOT_RECEIVED_DETECTED');
+  assert.strictEqual(creditStatus.source, 'SYSTEM_DETECTED_GATE');
+  assert.strictEqual(creditStatus.creditHitNotReceived, '1');
+  assert.strictEqual(creditStatus.filledFieldCount, '0');
+  assert.strictEqual(totalClickCalls(credit.doc), creditBeforeClicks + 1);
+
+  const creditDisabled = fixtureScenario('live-asc-credit-hit-not-received-gate');
+  const creditDisabledBeforeClicks = totalClickCalls(creditDisabled.doc);
+  const creditDisabledStatus = parseLines(runOperator(
+    'asc_credit_hit_not_received_continue',
+    {},
+    creditDisabled.doc,
+    creditDisabled.href
+  ));
+  assert.strictEqual(creditDisabledStatus.result, 'ASC_INSURANCE_GATE_CONTINUE_DISABLED');
+  assert.strictEqual(totalClickCalls(creditDisabled.doc), creditDisabledBeforeClicks);
+
+  const extra = fixtureScenario('asc-extra-info-insurance-unanswered-gate');
+  const extraStatus = assertKeyBlock(runOperator(
+    'asc_extra_info_insurance_apply_provisional',
+    {},
+    extra.doc,
+    extra.href
+  ), [
+    'result', 'expectedRoute', 'expectedKind', 'actualRoute', 'actualKind', 'clicked',
+    'source', 'requiresClientVerification', 'provisionalSource', 'provisionalFields', 'readback'
+  ]);
+  assert.strictEqual(extraStatus.result, 'ASC_EXTRA_INFO_INSURANCE_PROVISIONAL_APPLIED');
+  assert.strictEqual(extraStatus.source, 'PROVISIONAL_AGENCY_DEFAULT');
+  assert.strictEqual(extraStatus.requiresClientVerification, '1');
+  assert.strictEqual(extraStatus.provisionalSource, 'PROVISIONAL_AGENCY_DEFAULT');
+  assert.ok(extraStatus.provisionalFields.includes('priorInsuranceCarrier'));
+  assert.ok(extraStatus.provisionalFields.includes('continuousCoverageLength'));
+  assert.strictEqual(extra.doc.getElementById('priorInsurance_insurerName').value, 'OTHER');
+  assert.strictEqual(extra.doc.getElementById('priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt').value, 'THREE_PLUS_YEARS');
+  assert.strictEqual(totalClickCalls(extra.doc), 1);
+
+  const prior = fixtureScenario('asc-prior-insurance-not-found-unanswered-gate');
+  const priorStatus = assertKeyBlock(runOperator(
+    'asc_prior_insurance_not_found_apply_provisional',
+    {},
+    prior.doc,
+    prior.href
+  ), [
+    'result', 'expectedRoute', 'expectedKind', 'actualRoute', 'actualKind', 'clicked',
+    'source', 'requiresClientVerification', 'provisionalSource', 'provisionalFields', 'readback'
+  ]);
+  assert.strictEqual(priorStatus.result, 'ASC_PRIOR_INSURANCE_NOT_FOUND_PROVISIONAL_APPLIED');
+  assert.strictEqual(prior.doc.getElementById('priorInsurance_insurerName').value, 'OTHER');
+  assert.strictEqual(prior.doc.getElementById('priorInsurance_lenTimePreviousInsurer').value, 'FIVE_PLUS_YEARS');
+  assert.strictEqual(prior.doc.getElementById('priorInsurance_limitAmountText').value, 'UNKNOWN');
+  assert.strictEqual(prior.doc.getElementById('contractTermExpDt').value, currentYearEndDateText());
+  assert.ok(priorStatus.provisionalFields.includes('priorInsuranceCarrier'));
+  assert.ok(priorStatus.provisionalFields.includes('priorInsuranceDuration'));
+  assert.ok(priorStatus.provisionalFields.includes('priorInsuranceBILimits'));
+  assert.ok(priorStatus.provisionalFields.includes('priorInsuranceExpirationDate'));
+  assert.strictEqual(totalClickCalls(prior.doc), 1);
+
+  const mismatch = fixtureScenario('asc-prior-insurance-not-found-unanswered-gate');
+  const expiration = mismatch.doc.getElementById('contractTermExpDt');
+  expiration.onDispatch = (element) => {
+    element.value = '01-01-1900';
+  };
+  const mismatchStatus = parseLines(runOperator(
+    'asc_prior_insurance_not_found_apply_provisional',
+    {},
+    mismatch.doc,
+    mismatch.href
+  ));
+  assert.strictEqual(mismatchStatus.result, 'ASC_PRIOR_INSURANCE_NOT_FOUND_PROVISIONAL_READBACK_FAILED');
+  assert.strictEqual(mismatchStatus.failedFields, 'priorInsuranceExpirationDate');
+  assert.strictEqual(totalClickCalls(mismatch.doc), 0);
+
+  const ambiguous = fixtureScenario('asc-extra-info-insurance-ambiguous-provider');
+  const ambiguousStatus = parseLines(runOperator(
+    'asc_extra_info_insurance_apply_provisional',
+    {},
+    ambiguous.doc,
+    ambiguous.href
+  ));
+  assert.strictEqual(ambiguousStatus.result, 'ASC_INSURANCE_GATE_UNSAFE_OR_AMBIGUOUS');
+  assert.ok(ambiguousStatus.ambiguous.includes('priorInsurance_insurerName'));
+  assert.strictEqual(totalClickCalls(ambiguous.doc), 0);
+
+  const unknown = fixtureScenario('live-asc-consumer-reports-route-gap');
+  const unknownBeforeClicks = totalClickCalls(unknown.doc);
+  const unknownStatus = parseLines(runOperator(
+    'asc_extra_info_insurance_apply_provisional',
+    {},
+    unknown.doc,
+    unknown.href
+  ));
+  assert.strictEqual(unknownStatus.result, 'ASC_INSURANCE_GATE_UNKNOWN');
+  assert.strictEqual(totalClickCalls(unknown.doc), unknownBeforeClicks);
+
+  const purchase = pageDoc('Purchase Bind Policy Payment');
+  const purchaseStatus = parseLines(runOperator(
+    'asc_prior_insurance_not_found_apply_provisional',
+    {},
+    purchase,
+    'https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/purchase'
+  ));
+  assert.strictEqual(purchaseStatus.result, 'ASC_INSURANCE_GATE_UNKNOWN');
+  assert.strictEqual(totalClickCalls(purchase), 0);
 }
 
 function testAdvisorActiveModalSnapshotContracts() {
@@ -5472,6 +5597,7 @@ function run() {
   testDriverAndModalContracts();
   testAdvisorStateSnapshotContracts();
   testAdvisorStateSnapshotSanitizedLiveRouteFixtures();
+  testAscInsuranceGateProvisionalOps();
   testAdvisorActiveModalSnapshotContracts();
   testGatherRapportSnapshotContracts();
   testAscDriversVehiclesSnapshotContracts();

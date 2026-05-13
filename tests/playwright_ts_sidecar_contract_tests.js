@@ -80,7 +80,7 @@ function testReadOnlyAllowlist() {
     'asc_drivers_vehicles_snapshot',
     'scan_current_page'
   ]);
-  for (const mutatingOp of ['click_by_id', 'fill_gather_defaults', 'confirm_potential_vehicle', 'fill_participant_modal']) {
+  for (const mutatingOp of ['click_by_id', 'fill_gather_defaults', 'confirm_potential_vehicle', 'fill_participant_modal', 'asc_extra_info_insurance_apply_provisional', 'asc_prior_insurance_not_found_apply_provisional', 'asc_credit_hit_not_received_continue']) {
     assert.ok(!ops.includes(mutatingOp), `mutating op leaked into read-only allowlist: ${mutatingOp}`);
   }
   assert.ok(source.includes('Refusing non-read-only Advisor op'), 'must refuse non-read-only ops');
