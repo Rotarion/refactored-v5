@@ -159,6 +159,8 @@ class FakeElement {
       throw new Error('click failed');
     if (this.type === 'radio') this.checked = true;
     if (this.type === 'checkbox') this.checked = !this.checked;
+    if (this.role === 'radio') this.setAttribute('aria-checked', 'true');
+    if (this.role === 'button' && this.getAttribute('aria-pressed') != null) this.setAttribute('aria-pressed', 'true');
     if (this.onClick) this.onClick(this);
     return true;
   }
@@ -2410,6 +2412,60 @@ function testReturnShapeContracts() {
   assert.strictEqual(inlineReadyPageDisabledStatus.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
   assert.notStrictEqual(inlineReadyPageDisabledStatus.result, 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED');
   assert.strictEqual(inlineReadyPageDisabledStatus.nextAction, 'save_inline_participant_panel');
+
+  const movingRequiredScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-required-mesh');
+  const movingRequiredStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), movingRequiredScenario.doc, movingRequiredScenario.href), [
+    'result', 'panelPresent', 'saveEnabled', 'blockerCode', 'nextAction',
+    'movingViolationsQuestionPresent', 'movingViolationsControlPresent', 'movingViolationsSelectedValue',
+    'movingViolationsRequiredMissing', 'requiredMissingWarningPresent', 'panelReadyToSave', 'missingRequiredControls'
+  ]);
+  assert.strictEqual(movingRequiredStatus.panelPresent, '1');
+  assert.strictEqual(movingRequiredStatus.saveEnabled, '1');
+  assert.strictEqual(movingRequiredStatus.blockerCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+  assert.strictEqual(movingRequiredStatus.nextAction, 'save_inline_participant_panel');
+  assert.strictEqual(movingRequiredStatus.movingViolationsQuestionPresent, '1');
+  assert.strictEqual(movingRequiredStatus.movingViolationsControlPresent, '1');
+  assert.strictEqual(movingRequiredStatus.movingViolationsSelectedValue, '');
+  assert.strictEqual(movingRequiredStatus.movingViolationsRequiredMissing, '1');
+  assert.strictEqual(movingRequiredStatus.requiredMissingWarningPresent, '1');
+  assert.strictEqual(movingRequiredStatus.panelReadyToSave, '0');
+  assert.ok(movingRequiredStatus.missingRequiredControls.includes('movingViolations'));
+
+  const readyResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, movingRequiredScenario.doc, movingRequiredScenario.href), [
+    'result', 'method', 'traceCode', 'initialTraceCode', 'activeParticipantRequiredMissing',
+    'activeParticipantPanelReadyToSave', 'movingViolationsQuestionPresent', 'movingViolationsControlPresent',
+    'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'requiresClientVerification', 'source', 'failedFields'
+  ]);
+  assert.strictEqual(readyResult.result, 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.strictEqual(readyResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED');
+  assert.strictEqual(readyResult.initialTraceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+  assert.strictEqual(readyResult.activeParticipantRequiredMissing, '0');
+  assert.strictEqual(readyResult.activeParticipantPanelReadyToSave, '1');
+  assert.strictEqual(readyResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(readyResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(readyResult.requiresClientVerification, '1');
+  assert.strictEqual(readyResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
+  assert.strictEqual(readyResult.failedFields, '');
+
+  const afterReadyStatus = assertKeyBlock(runOperator('asc_participant_detail_status', baseArgs(), movingRequiredScenario.doc, movingRequiredScenario.href), [
+    'blockerCode', 'movingViolationsSelectedValue', 'movingViolationsRequiredMissing', 'panelReadyToSave'
+  ]);
+  assert.strictEqual(afterReadyStatus.blockerCode, 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE');
+  assert.strictEqual(afterReadyStatus.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(afterReadyStatus.movingViolationsRequiredMissing, '0');
+  assert.strictEqual(afterReadyStatus.panelReadyToSave, '1');
+
+  const ambiguousScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh');
+  const ambiguousResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, ambiguousScenario.doc, ambiguousScenario.href), [
+    'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'failedFields'
+  ]);
+  assert.strictEqual(ambiguousResult.result, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED');
+  assert.strictEqual(ambiguousResult.method, 'ambiguous-semantic-target');
+  assert.strictEqual(ambiguousResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED');
+  assert.strictEqual(ambiguousResult.movingViolationsSelectedValue, '');
+  assert.strictEqual(ambiguousResult.movingViolationsDefaultApplied, '0');
+  assert.strictEqual(ambiguousResult.failedFields, 'movingViolations');
+
   const optionalMissingFill = assertKeyBlock(runOperator('fill_participant_modal', baseArgs({
     ageFirstLicensed: '16',
     email: 'driver@example.test',
@@ -2457,6 +2513,12 @@ function testReturnShapeContracts() {
   assert.strictEqual(scan.scanReason, 'contract');
   assert.ok(Array.isArray(scan.fields));
   assert.ok(Array.isArray(scan.buttons));
+  assert.ok(Array.isArray(scan.radioLikeControls));
+
+  const meshScanScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-required-mesh');
+  const meshScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'mesh-radio-contract' }, meshScanScenario.doc, meshScanScenario.href));
+  assert.strictEqual(meshScan.radios.length, 0);
+  assert.ok(meshScan.radioLikeControls.some((entry) => entry.role === 'radio' && entry.text === 'No'));
 }
 
 function testGenericOpsContract() {
@@ -5523,7 +5585,10 @@ function testAscDriversVehiclesSnapshotContracts() {
     'removeDriverReasonCode', 'driversAndVehiclesHeadingPresent', 'inlineParticipantSavePresent',
     'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'activeParticipantPanelPresent',
     'activeParticipantRowKey', 'activeParticipantNameMasked', 'activeParticipantRowStatus',
-    'activeParticipantSavePresent', 'activeParticipantSaveEnabled', 'activeParticipantPanelAction', 'pageSaveContinuePresent',
+    'activeParticipantSavePresent', 'activeParticipantSaveEnabled', 'activeParticipantRequiredMissing',
+    'activeParticipantMovingViolationsQuestionPresent', 'activeParticipantMovingViolationsSelectedValue',
+    'activeParticipantMovingViolationsDefaultApplied', 'activeParticipantPanelReadyToSave',
+    'activeParticipantPanelAction', 'pageSaveContinuePresent',
     'pageSaveContinueEnabled', 'pageSaveContinueButtonId', 'mainSavePresent', 'mainSaveEnabled',
     'blockerCode', 'blockers', 'nextRecommendedAction', 'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
   ];
@@ -5572,11 +5637,24 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(nonDriverPanelOpen.activeParticipantRowStatus, 'NON_DRIVER');
   assert.strictEqual(nonDriverPanelOpen.activeParticipantSaveEnabled, '1');
   assert.strictEqual(nonDriverPanelOpen.activeParticipantPanelAction, 'SAVE_NON_DRIVER_PANEL');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantRequiredMissing, '0');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantPanelReadyToSave, '1');
   assert.strictEqual(nonDriverPanelOpen.unresolvedDriverCount, '1');
   assert.strictEqual(nonDriverPanelOpen.unresolvedVehicleCount, '2');
   assert.strictEqual(nonDriverPanelOpen.nextRecommendedAction, 'save_inline_participant_panel');
   assert.strictEqual(nonDriverPanelOpen.nextRecommendedReadOnlyStatus, 'asc_participant_detail_status');
   assert.ok(nonDriverPanelOpen.blockers.includes('ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN'));
+
+  const nonDriverMovingRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-required-mesh')), requiredKeys);
+  assert.strictEqual(nonDriverMovingRequired.result, 'OK');
+  assert.strictEqual(nonDriverMovingRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantRowStatus, 'NON_DRIVER');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantRequiredMissing, '1');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantMovingViolationsSelectedValue, '');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantPanelReadyToSave, '0');
+  assert.strictEqual(nonDriverMovingRequired.activeParticipantPanelAction, 'COMPLETE_NON_DRIVER_PANEL');
+  assert.ok(nonDriverMovingRequired.blockers.includes('ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'));
 
   const inline = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
   assert.strictEqual(inline.result, 'OK');

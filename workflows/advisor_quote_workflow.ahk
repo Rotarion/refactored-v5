@@ -597,6 +597,11 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
         . ", activeParticipantRowStatus=" AdvisorQuoteStatusValue(status, "activeParticipantRowStatus")
         . ", activeParticipantSavePresent=" AdvisorQuoteStatusValue(status, "activeParticipantSavePresent")
         . ", activeParticipantSaveEnabled=" AdvisorQuoteStatusValue(status, "activeParticipantSaveEnabled")
+        . ", activeParticipantRequiredMissing=" AdvisorQuoteStatusValue(status, "activeParticipantRequiredMissing")
+        . ", activeParticipantMovingViolationsQuestionPresent=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsQuestionPresent")
+        . ", activeParticipantMovingViolationsSelectedValue=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsSelectedValue")
+        . ", activeParticipantMovingViolationsDefaultApplied=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsDefaultApplied")
+        . ", activeParticipantPanelReadyToSave=" AdvisorQuoteStatusValue(status, "activeParticipantPanelReadyToSave")
         . ", activeParticipantPanelAction=" AdvisorQuoteStatusValue(status, "activeParticipantPanelAction")
         . ", pageSaveContinuePresent=" AdvisorQuoteStatusValue(status, "pageSaveContinuePresent")
         . ", pageSaveContinueEnabled=" AdvisorQuoteStatusValue(status, "pageSaveContinueEnabled")
@@ -816,6 +821,11 @@ AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
         . ", ageFirstLicensedPresent=" AdvisorQuoteStatusValue(status, "ageFirstLicensedPresent")
         . ", ageFirstLicensedFilled=" AdvisorQuoteStatusValue(status, "ageFirstLicensedFilled")
         . ", movingViolationsControlPresent=" AdvisorQuoteStatusValue(status, "movingViolationsControlPresent")
+        . ", movingViolationsQuestionPresent=" AdvisorQuoteStatusValue(status, "movingViolationsQuestionPresent")
+        . ", movingViolationsSelectedValue=" AdvisorQuoteStatusValue(status, "movingViolationsSelectedValue")
+        . ", movingViolationsRequiredMissing=" AdvisorQuoteStatusValue(status, "movingViolationsRequiredMissing")
+        . ", movingViolationsDefaultApplied=" AdvisorQuoteStatusValue(status, "movingViolationsDefaultApplied")
+        . ", panelReadyToSave=" AdvisorQuoteStatusValue(status, "panelReadyToSave")
         . ", defensiveDrivingControlPresent=" AdvisorQuoteStatusValue(status, "defensiveDrivingControlPresent")
         . ", emailPresent=" AdvisorQuoteStatusValue(status, "emailPresent")
         . ", phonePresent=" AdvisorQuoteStatusValue(status, "phonePresent")
@@ -823,6 +833,27 @@ AdvisorQuoteBuildAscParticipantDetailStatusDetail(status) {
         . ", optionalMissingControls=" AdvisorQuoteStatusValue(status, "optionalMissingControls")
         . ", evidence=" AdvisorQuoteStatusValue(status, "evidence")
         . ", missing=" AdvisorQuoteStatusValue(status, "missing")
+}
+
+AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(status) {
+    return "result=" AdvisorQuoteStatusValue(status, "result")
+        . ", method=" AdvisorQuoteStatusValue(status, "method")
+        . ", traceCode=" AdvisorQuoteStatusValue(status, "traceCode")
+        . ", initialTraceCode=" AdvisorQuoteStatusValue(status, "initialTraceCode")
+        . ", panelPresent=" AdvisorQuoteStatusValue(status, "panelPresent")
+        . ", savePresent=" AdvisorQuoteStatusValue(status, "savePresent")
+        . ", saveEnabled=" AdvisorQuoteStatusValue(status, "saveEnabled")
+        . ", activeParticipantRequiredMissing=" AdvisorQuoteStatusValue(status, "activeParticipantRequiredMissing")
+        . ", activeParticipantPanelReadyToSave=" AdvisorQuoteStatusValue(status, "activeParticipantPanelReadyToSave")
+        . ", movingViolationsQuestionPresent=" AdvisorQuoteStatusValue(status, "movingViolationsQuestionPresent")
+        . ", movingViolationsControlPresent=" AdvisorQuoteStatusValue(status, "movingViolationsControlPresent")
+        . ", movingViolationsWarningPresent=" AdvisorQuoteStatusValue(status, "movingViolationsWarningPresent")
+        . ", movingViolationsSelectedValue=" AdvisorQuoteStatusValue(status, "movingViolationsSelectedValue")
+        . ", movingViolationsSelectionSource=" AdvisorQuoteStatusValue(status, "movingViolationsSelectionSource")
+        . ", movingViolationsDefaultApplied=" AdvisorQuoteStatusValue(status, "movingViolationsDefaultApplied")
+        . ", requiresClientVerification=" AdvisorQuoteStatusValue(status, "requiresClientVerification")
+        . ", source=" AdvisorQuoteStatusValue(status, "source")
+        . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
 }
 
 AdvisorQuoteResolveAscParticipantMaritalAndSpouse(profile, db, ledger := "") {
@@ -1708,6 +1739,11 @@ AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, resul
     failureReason := (kind = "driver") ? "ASC_DRIVER_ROW_VERIFY_FAILED" : "ASC_VEHICLE_ROW_VERIFY_FAILED"
     failureReason .= ": action=" action ", before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
     if (AdvisorQuoteStatusValue(afterSnapshot, "activePanelType") = "ASC_INLINE_PARTICIPANT_PANEL" || AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") = "ASC_INLINE_PARTICIPANT_PANEL") {
+        if (AdvisorQuoteStatusValue(afterSnapshot, "activeParticipantRequiredMissing") = "1") {
+            failureReason := "ASC_LEDGER_ROW_ACTION_NO_PROGRESS_ACTIVE_PANEL_REQUIRED_FIELD: " failureReason
+            failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress-active-panel-required-field")
+            return false
+        }
         failureReason := "ASC_LEDGER_ROW_ACTION_NO_PROGRESS_ACTIVE_PANEL: " failureReason
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress-active-panel")
         return false
@@ -1758,7 +1794,15 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
     failureScan := ""
     activeRowStatus := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantRowStatus")
     activePanelAction := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantPanelAction")
-    if (activeRowStatus = "NON_DRIVER" || activePanelAction = "SAVE_NON_DRIVER_PANEL") {
+    if (activeRowStatus = "NON_DRIVER" || activePanelAction = "SAVE_NON_DRIVER_PANEL" || activePanelAction = "COMPLETE_NON_DRIVER_PANEL") {
+        readyStatus := AdvisorQuoteEnsureNonDriverParticipantPanelReady(db)
+        readyResult := AdvisorQuoteStatusValue(readyStatus, "result")
+        if (readyResult != "ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE") {
+            failureReason := readyResult ": " AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(readyStatus) ", snapshot=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
+            failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-non-driver-inline-required-selection-failed")
+            return false
+        }
+        AdvisorQuoteAppendLog("ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(readyStatus))
         participantStatus := AdvisorQuoteGetAscParticipantDetailStatus()
         if (AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantSaveEnabled") != "1"
             && AdvisorQuoteStatusValue(participantStatus, "saveEnabled") != "1"
@@ -1772,6 +1816,7 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-non-driver-inline-save-click-failed")
             return false
         }
+        AdvisorQuoteAppendLog("ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(readyStatus))
         if !SafeSleep(db["timeouts"]["pollMs"]) {
             failureReason := "ASC_NON_DRIVER_PARTICIPANT_PANEL_READBACK_FAILED: wait interrupted."
             return false
@@ -1780,11 +1825,11 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
         afterActivePanel := AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
         afterActiveModal := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
         if (afterActivePanel != "ASC_INLINE_PARTICIPANT_PANEL" && afterActiveModal != "ASC_INLINE_PARTICIPANT_PANEL") {
-            AdvisorQuoteAppendLog("ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVED", AdvisorQuoteGetLastStep(), "before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot))
+            AdvisorQuoteAppendLog("ASC_NON_DRIVER_PARTICIPANT_PANEL_CLOSED", AdvisorQuoteGetLastStep(), "before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot))
             return true
         }
-        failureReason := "ASC_NON_DRIVER_PARTICIPANT_PANEL_READBACK_FAILED: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
-        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-non-driver-inline-readback-failed")
+        failureReason := "ASC_NON_DRIVER_PARTICIPANT_PANEL_STILL_OPEN_AFTER_SAVE: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-non-driver-inline-still-open-after-save")
         return false
     }
     if (activePanelAction = "FAIL_SAFE" || activeRowStatus = "UNKNOWN") {
@@ -1833,6 +1878,8 @@ AdvisorQuoteAscParticipantRequiredSatisfied(participantStatus) {
     if (result != "FOUND" && result != "READY")
         return false
     if (AdvisorQuoteStatusValue(participantStatus, "missingRequiredControls") != "")
+        return false
+    if (AdvisorQuoteStatusValue(participantStatus, "movingViolationsRequiredMissing") = "1")
         return false
     if (AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedPresent") = "1" && AdvisorQuoteStatusValue(participantStatus, "ageFirstLicensedFilled") != "1")
         return false
@@ -2291,6 +2338,16 @@ AdvisorQuoteHandleOpenModals(profile, db, timeoutMs := 15000) {
 
 AdvisorQuoteModalExists(saveButtonId) {
     return AdvisorQuoteRunOp("modal_exists", Map("saveButtonId", saveButtonId)) = "1"
+}
+
+AdvisorQuoteEnsureNonDriverParticipantPanelReady(db) {
+    args := Map(
+        "source", "PROVISIONAL_WORKFLOW_DEFAULT"
+    )
+    raw := AdvisorQuoteRunOp("asc_ensure_non_driver_participant_panel_ready", args, 1, 120)
+    status := AdvisorQuoteParseKeyValueLines(raw)
+    AdvisorQuoteAppendLog("ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_CHECK", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(status))
+    return status
 }
 
 AdvisorQuoteFillParticipantModal(profile, db) {

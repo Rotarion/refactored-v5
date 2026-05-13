@@ -1037,10 +1037,14 @@ copy(String((() => {
       method: target === match ? 'radio-input' : 'radio-associated-control'
     };
   };
-  const findQuestionContainers = (questionText) => {
+  const findQuestionContainers = (questionText, root = document) => {
     const wanted = normLower(questionText);
     if (!wanted) return [];
-    const seeds = Array.from(document.querySelectorAll('legend,label,.c-label,p,span,div,h1,h2,h3,h4,h5,h6'))
+    const scope = root && root.querySelectorAll ? root : document;
+    const seedNodes = Array.from(scope.querySelectorAll('legend,label,.c-label,p,span,div,h1,h2,h3,h4,h5,h6'));
+    if (scope !== document && visible(scope) && normLower(getText(scope)).includes(wanted))
+      seedNodes.unshift(scope);
+    const seeds = seedNodes
       .filter(visible)
       .filter((node) => {
         const text = normLower(getText(node));
@@ -1079,49 +1083,122 @@ copy(String((() => {
     const normalized = normLower(text);
     return normalized.includes('yes') && normalized.includes('no');
   };
-  const findSemanticAnswerTarget = (questionText, answerText) => {
-    const containers = findQuestionContainers(questionText);
+  const semanticAnswerCandidates = (questionText, answerText, root = document) => {
+    const containers = findQuestionContainers(questionText, root);
+    const wantedAnswer = normUpper(answerText);
+    const out = [];
+    const seenTargets = new Set();
     for (const container of containers) {
       const radios = Array.from(container.querySelectorAll('input[type=radio]'));
       for (const radio of radios) {
         const labelText = readInputLabel(radio) || safe(radio.value);
         if (!answerTextMatches(labelText, answerText)) continue;
         const target = getInputClickTarget(radio);
-        if (target) return target;
+        if (!target) continue;
+        if (seenTargets.has(target)) continue;
+        seenTargets.add(target);
+        out.push({ node: radio, target, value: wantedAnswer, source: 'radio' });
       }
       const nodes = Array.from(container.querySelectorAll('button,a,[role=button],[role=radio],label,span,div'))
         .filter((node) => visible(node) && node !== container)
-        .map((node) => ({ node, text: getText(node) }))
+        .map((node) => ({ node, text: getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value) }))
         .filter(({ text }) => text && !isCompoundYesNoText(text) && text.length <= Math.max(20, safe(answerText).length + 8) && answerTextMatches(text, answerText))
         .sort((a, b) => a.text.length - b.text.length);
       for (const candidate of nodes) {
         const target = findClickableTarget(candidate.node);
-        if (target) return target;
+        if (!target) continue;
+        if (seenTargets.has(target)) continue;
+        seenTargets.add(target);
+        out.push({ node: candidate.node, target, value: wantedAnswer, source: safe(candidate.node.getAttribute && candidate.node.getAttribute('role')) || 'semantic' });
       }
     }
-    return null;
+    return out;
   };
-  const readSemanticAnswerState = (questionText) => {
+  const findSemanticAnswerTarget = (questionText, answerText, root = document) => {
+    const candidates = semanticAnswerCandidates(questionText, answerText, root);
+    return candidates.length ? candidates[0].target : null;
+  };
+  const findUniqueSemanticAnswerTarget = (questionText, answerText, root = document) => {
+    const candidates = semanticAnswerCandidates(questionText, answerText, root);
+    if (candidates.length !== 1)
+      return { ok: false, method: candidates.length ? 'ambiguous-semantic-target' : 'semantic-target-missing', count: String(candidates.length), target: null };
+    return { ok: true, method: candidates[0].source || 'semantic-target', count: '1', target: candidates[0].target };
+  };
+  const readSemanticAnswerState = (questionText, root = document) => {
     const values = ['YES', 'NO'];
-    const containers = findQuestionContainers(questionText);
+    const containers = findQuestionContainers(questionText, root);
+    const selected = [];
+    let controlCount = 0;
     for (const container of containers) {
       const radios = Array.from(container.querySelectorAll('input[type=radio]'));
       for (const radio of radios) {
         const labelText = normUpper(readInputLabel(radio) || radio.value);
         const value = values.find((wanted) => answerTextMatches(labelText, wanted));
-        if (value && radio.checked) return { value, selected: true, source: 'radio' };
+        if (!value) continue;
+        controlCount += 1;
+        if (radio.checked) selected.push({ value, source: 'radio' });
       }
       const nodes = Array.from(container.querySelectorAll('button,a,[role=button],[role=radio],label,span,div'))
         .filter((node) => visible(node) && node !== container);
       for (const node of nodes) {
-        const text = getText(node);
+        const text = getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value);
         if (isCompoundYesNoText(text)) continue;
         const value = values.find((wanted) => answerTextMatches(text, wanted));
         if (!value) continue;
-        if (isSelectedNode(node)) return { value, selected: true, source: 'semantic' };
+        controlCount += 1;
+        if (isSelectedNode(node)) selected.push({ value, source: safe(node.getAttribute && node.getAttribute('role')) || 'semantic' });
       }
     }
-    return { value: '', selected: false, source: containers.length ? 'question-found' : '' };
+    const uniqueSelected = Array.from(new Set(selected.map((item) => item.value)));
+    if (uniqueSelected.length === 1) {
+      const hit = selected.find((item) => item.value === uniqueSelected[0]) || {};
+      return { value: uniqueSelected[0], selected: true, source: hit.source || 'semantic', controlCount: String(controlCount), ambiguous: false };
+    }
+    if (uniqueSelected.length > 1)
+      return { value: uniqueSelected.join('|'), selected: true, source: 'ambiguous', controlCount: String(controlCount), ambiguous: true };
+    return { value: '', selected: false, source: containers.length ? 'question-found' : '', controlCount: String(controlCount), ambiguous: false };
+  };
+  const normalizeYesNoValue = (value) => {
+    const text = normUpper(value);
+    if (/\b(NO|N|FALSE|0)\b/.test(text) || /_FALSE\b|\bFALSE_/.test(text)) return 'NO';
+    if (/\b(YES|Y|TRUE|1)\b/.test(text) || /_TRUE\b|\bTRUE_/.test(text)) return 'YES';
+    return '';
+  };
+  const scopedRadioGroupControls = (root, nameRe) => {
+    const scope = root && root.querySelectorAll ? root : document;
+    return Array.from(scope.querySelectorAll('input[type=radio],input[type=checkbox]'))
+      .filter(visible)
+      .filter((el) => nameRe.test(`${safe(el.name)} ${safe(el.id)}`));
+  };
+  const readScopedYesNoGroupState = (root, nameRe) => {
+    const controls = scopedRadioGroupControls(root, nameRe);
+    const selected = controls.find((el) => el.checked || isSelectedNode(el));
+    if (!selected)
+      return { value: '', selected: false, source: controls.length ? 'radio-name' : '', controlCount: String(controls.length), label: '' };
+    const value = normalizeYesNoValue(`${safe(selected.value)} ${readInputLabel(selected)} ${safe(selected.id)} ${safe(selected.name)}`);
+    return {
+      value,
+      selected: !!value,
+      source: 'radio-name',
+      controlCount: String(controls.length),
+      label: readInputLabel(selected)
+    };
+  };
+  const selectScopedYesNoByName = (root, nameRe, wantedValue) => {
+    const wanted = normUpper(wantedValue);
+    const controls = scopedRadioGroupControls(root, nameRe);
+    const candidates = controls.filter((el) => normalizeYesNoValue(`${safe(el.value)} ${readInputLabel(el)} ${safe(el.id)} ${safe(el.name)}`) === wanted);
+    if (candidates.length !== 1)
+      return { ok: false, method: candidates.length ? 'ambiguous-radio-target' : (controls.length ? 'radio-answer-missing' : 'radio-group-missing'), count: String(candidates.length) };
+    const target = getInputClickTarget(candidates[0]) || candidates[0];
+    const clicked = clickCenterEl(target);
+    const state = readScopedYesNoGroupState(root, nameRe);
+    return {
+      ok: clicked && state.value === wanted,
+      method: clicked ? 'radio-click' : 'radio-click-failed',
+      count: '1',
+      state
+    };
   };
   const answerValueMatches = (actual, wanted) => {
     const actualNorm = normUpper(actual);
@@ -1622,6 +1699,9 @@ copy(String((() => {
     const text = bodyText();
     const panelPresent = /let'?s get some more details|participant|driver details|more details/i.test(text) || !!document.getElementById('PARTICIPANT_SAVE-btn');
     const saveButton = findAscInlineParticipantSaveButton();
+    const panelRoot = findAscInlineParticipantPanelRoot() || (panelPresent ? document : null);
+    const panelReadiness = readAscNonDriverParticipantPanelReadiness(panelRoot);
+    const movingViolationsState = panelReadiness.moving;
     const pageSaveButton = findAscPageSaveContinueButton();
     if (saveButton) evidence.push(`inline-button:${safe(saveButton.id || 'save')}`);
     else if (panelPresent) missing.push('button:inline-save');
@@ -1647,9 +1727,10 @@ copy(String((() => {
     if (panelPresent && ownershipEl && !safe(ownership.value || ownership.text).trim()) missingRequired.push('propertyOwnership');
     if (panelPresent && genderControls.length && !radioGroupAlreadySelected(genderControls)) missingRequired.push('gender');
     if (panelPresent && (maritalControls.radios.length || maritalControls.selects.length) && !safe(marital.value || marital.text).trim()) missingRequired.push('marital');
+    if (panelPresent && movingViolationsState.requiredMissing === '1') missingRequired.push('movingViolations');
     if (panelPresent && saveButton && isDisabledLike(saveButton) && !missingRequired.length) missingRequired.push('saveDisabledUnknownRequired');
     const optionalMissing = [];
-    if (!violationControls.length) optionalMissing.push('movingViolations');
+    if (movingViolationsState.questionPresent !== '1' && !violationControls.length) optionalMissing.push('movingViolations');
     if (!defensiveControls.length) optionalMissing.push('defensiveDriving');
     const driverRows = collectAscDriverRows();
     const primary = driverRows[0] || {};
@@ -1657,9 +1738,11 @@ copy(String((() => {
     if (isAscProductRoute() && (panelPresent || evidence.length >= 2 || saveButton || driverRows.length)) result = 'FOUND';
     const saveEnabled = !!(saveButton && !isDisabledLike(saveButton));
     const pageSaveEnabled = !!(pageSaveButton && !isDisabledLike(pageSaveButton));
-    const blockerCode = panelPresent && saveEnabled
+    const blockerCode = panelPresent && saveEnabled && movingViolationsState.requiredMissing === '1'
+      ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'
+      : (panelPresent && saveEnabled
       ? 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE'
-      : (panelPresent && saveButton && isDisabledLike(saveButton) ? 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED' : '');
+      : (panelPresent && saveButton && isDisabledLike(saveButton) ? 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED' : ''));
     if (result === 'FOUND' && blockerCode === 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED' && missingRequired.length) result = 'ASC_INLINE_PARTICIPANT_SAVE_DISABLED';
     return {
       result,
@@ -1679,7 +1762,7 @@ copy(String((() => {
       pageSaveContinueEnabled: pageSaveEnabled ? '1' : '0',
       pageSaveContinueButtonId: safe(pageSaveButton && pageSaveButton.id),
       blockerCode,
-      nextAction: blockerCode === 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE' ? 'save_inline_participant_panel' : '',
+      nextAction: (blockerCode === 'ASC_INLINE_PARTICIPANT_READY_TO_SAVE' || blockerCode === 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED') ? 'save_inline_participant_panel' : '',
       genderQuestionPresent: genderControls.length ? '1' : '0',
       genderControlPresent: genderControls.length ? '1' : '0',
       genderAlreadySelected: radioGroupAlreadySelected(genderControls) ? '1' : '0',
@@ -1702,9 +1785,17 @@ copy(String((() => {
       ageFirstLicensedPresent: ageFirstLicensed ? '1' : '0',
       ageFirstLicensedFilled: ageFirstLicensed && safe(ageFirstLicensed.value).trim() ? '1' : '0',
       ageFirstLicensedValue: compact(ageFirstLicensed ? ageFirstLicensed.value : '', 80),
-      movingViolationsQuestionPresent: violationControls.length ? '1' : '0',
-      movingViolationsControlPresent: violationControls.length ? '1' : '0',
-      movingViolationsAlreadySelected: radioGroupAlreadySelected(violationControls) ? '1' : '0',
+      movingViolationsQuestionPresent: movingViolationsState.questionPresent,
+      movingViolationsControlPresent: (violationControls.length || movingViolationsState.controlPresent === '1') ? '1' : '0',
+      movingViolationsAlreadySelected: movingViolationsState.selected === '1' || radioGroupAlreadySelected(violationControls) ? '1' : '0',
+      movingViolationsSelectedValue: movingViolationsState.selectedValue,
+      movingViolationsSelectionSource: movingViolationsState.selectedSource,
+      movingViolationsRequiredMissing: movingViolationsState.requiredMissing,
+      movingViolationsDefaultApplied: '0',
+      movingViolationsWarningPresent: movingViolationsState.warningPresent,
+      movingViolationsAmbiguous: movingViolationsState.ambiguous,
+      requiredMissingWarningPresent: panelReadiness.requiredWarningPresent,
+      panelReadyToSave: panelReadiness.readyToSave,
       defensiveDrivingQuestionPresent: defensiveControls.length ? '1' : '0',
       defensiveDrivingControlPresent: defensiveControls.length ? '1' : '0',
       defensiveDrivingAlreadySelected: radioGroupAlreadySelected(defensiveControls) ? '1' : '0',
@@ -4978,6 +5069,7 @@ copy(String((() => {
       document.getElementById('ageFirstLicensed_ageFirstLicensed')
       || document.getElementById('emailAddress.emailAddress')
       || document.querySelector('input[id*="militaryInd"],input[name*="militaryInd"],input[id*="violationInd"],input[name*="violationInd"]')
+      || /moving violations/i.test(text)
     );
     return !!(saveButton && visible(saveButton) && hasParticipantFields
       && (text.includes("let's get some more details") || text.includes('lets get some more details') || text.includes('participant')));
@@ -5366,6 +5458,109 @@ copy(String((() => {
     }
     return saveButton.closest('form,section,[role="dialog"],[aria-modal="true"],.modal,.panel,.drawer,div') || saveButton.parentElement || null;
   };
+  const ASC_MOVING_VIOLATIONS_QUESTION = 'Have you had any moving violations in the past five years?';
+  const ascParticipantPanelRequiredWarningPresent = (root) => {
+    const scope = root && root.querySelectorAll ? root : null;
+    if (!scope) return false;
+    const text = normLower(getText(scope));
+    if (/please make a selection|make a selection|required/.test(text)) return true;
+    return Array.from(scope.querySelectorAll('[role=alert],.error,.validation,.c-alert,.c-alert__content,[aria-invalid="true"]'))
+      .filter(visible)
+      .some((node) => /please make a selection|make a selection|required/.test(normLower(getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')))));
+  };
+  const readAscParticipantMovingViolationsState = (root = findAscInlineParticipantPanelRoot()) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    const warningPresent = panelRoot ? ascParticipantPanelRequiredWarningPresent(panelRoot) : false;
+    const namedState = panelRoot ? readScopedYesNoGroupState(panelRoot, /violation/i) : { value: '', selected: false, source: '', controlCount: '0' };
+    const semanticState = panelRoot ? readSemanticAnswerState(ASC_MOVING_VIOLATIONS_QUESTION, panelRoot) : { value: '', selected: false, source: '', controlCount: '0', ambiguous: false };
+    const rootText = panelRoot ? normLower(getText(panelRoot)) : '';
+    const questionPresent = !!(panelRoot && (
+      rootText.includes(normLower(ASC_MOVING_VIOLATIONS_QUESTION))
+      || namedState.source
+      || semanticState.source
+    ));
+    const selectedValue = namedState.value || semanticState.value || '';
+    const selectedSource = namedState.value ? namedState.source : (semanticState.value ? semanticState.source : (semanticState.source || namedState.source || ''));
+    const controlCount = Number(namedState.controlCount || 0) + Number(semanticState.controlCount || 0);
+    const requiredMissing = !!(questionPresent && !selectedValue);
+    return {
+      questionPresent: questionPresent ? '1' : '0',
+      controlPresent: controlCount > 0 ? '1' : '0',
+      controlCount: String(controlCount),
+      selected: selectedValue ? '1' : '0',
+      selectedValue,
+      selectedSource,
+      requiredMissing: requiredMissing ? '1' : '0',
+      warningPresent: warningPresent ? '1' : '0',
+      ambiguous: semanticState.ambiguous ? '1' : '0',
+      source: namedState.value ? 'radio-name' : (semanticState.source || namedState.source || '')
+    };
+  };
+  const selectAscParticipantMovingViolationsNo = (root = findAscInlineParticipantPanelRoot()) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    if (!panelRoot)
+      return { ok: false, method: 'participant-panel-root-missing', traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED', before: readAscParticipantMovingViolationsState(panelRoot), after: readAscParticipantMovingViolationsState(panelRoot) };
+    const before = readAscParticipantMovingViolationsState(panelRoot);
+    if (before.selectedValue === 'NO')
+      return { ok: true, method: 'already-selected', traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED', before, after: before };
+    if (before.selectedValue)
+      return { ok: true, method: 'preserved-existing-selection', traceCode: 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE', before, after: before };
+    const radioResult = selectScopedYesNoByName(panelRoot, /violation/i, 'NO');
+    if (radioResult.ok) {
+      const after = readAscParticipantMovingViolationsState(panelRoot);
+      return {
+        ok: after.selectedValue === 'NO',
+        method: radioResult.method,
+        traceCode: after.selectedValue === 'NO' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED' : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+        before,
+        after
+      };
+    }
+    if (radioResult.method === 'ambiguous-radio-target') {
+      return {
+        ok: false,
+        method: radioResult.method,
+        traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+        before,
+        after: readAscParticipantMovingViolationsState(panelRoot)
+      };
+    }
+    const semanticTarget = findUniqueSemanticAnswerTarget(ASC_MOVING_VIOLATIONS_QUESTION, 'No', panelRoot);
+    if (!semanticTarget.ok) {
+      return {
+        ok: false,
+        method: semanticTarget.method,
+        traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+        before,
+        after: readAscParticipantMovingViolationsState(panelRoot)
+      };
+    }
+    const clicked = clickCenterEl(semanticTarget.target);
+    const after = readAscParticipantMovingViolationsState(panelRoot);
+    return {
+      ok: clicked && after.selectedValue === 'NO',
+      method: clicked ? semanticTarget.method : 'semantic-click-failed',
+      traceCode: clicked && after.selectedValue === 'NO' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED' : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+      before,
+      after
+    };
+  };
+  const readAscNonDriverParticipantPanelReadiness = (root = findAscInlineParticipantPanelRoot()) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    const moving = readAscParticipantMovingViolationsState(panelRoot);
+    const requiredWarning = panelRoot ? ascParticipantPanelRequiredWarningPresent(panelRoot) : false;
+    const requiredMissing = moving.requiredMissing === '1' || (!!requiredWarning && moving.questionPresent !== '0' && !moving.selectedValue);
+    const saveButton = findAscInlineParticipantSaveButton();
+    const saveEnabled = !!(saveButton && visible(saveButton) && !isDisabledLike(saveButton));
+    return {
+      moving,
+      requiredWarningPresent: requiredWarning ? '1' : '0',
+      requiredMissing: requiredMissing ? '1' : '0',
+      savePresent: saveButton ? '1' : '0',
+      saveEnabled: saveEnabled ? '1' : '0',
+      readyToSave: saveEnabled && !requiredMissing ? '1' : '0'
+    };
+  };
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
     const saveButton = findAscInlineParticipantSaveButton();
     const panelPresent = advisorInlineParticipantPanelPresent();
@@ -5379,11 +5574,18 @@ copy(String((() => {
         activeParticipantRowStatus: '',
         activeParticipantSavePresent: savePresent ? '1' : '0',
         activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
+        activeParticipantRequiredMissing: '0',
+        activeParticipantMovingViolationsQuestionPresent: '0',
+        activeParticipantMovingViolationsSelectedValue: '',
+        activeParticipantMovingViolationsDefaultApplied: '0',
+        activeParticipantPanelReadyToSave: '0',
         activeParticipantPanelAction: ''
       };
     }
     const root = findAscInlineParticipantPanelRoot() || document;
     const panelText = getText(root) || bodyText();
+    const readiness = readAscNonDriverParticipantPanelReadiness(root);
+    const moving = readiness.moving;
     const matches = driverRows
       .map((row, index) => ({ row, index }))
       .filter((item) => safe(item.row.name).trim() && personNameMatches(panelText, item.row.name));
@@ -5400,7 +5602,8 @@ copy(String((() => {
       rowKey = 'ambiguous';
     }
     let action = 'FAIL_SAFE';
-    if (rowStatus === 'NON_DRIVER' && saveEnabled) action = 'SAVE_NON_DRIVER_PANEL';
+    if (rowStatus === 'NON_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_NON_DRIVER_PANEL';
+    else if (rowStatus === 'NON_DRIVER' && saveEnabled) action = 'COMPLETE_NON_DRIVER_PANEL';
     else if (rowStatus === 'NON_DRIVER') action = 'FAIL_SAFE';
     else if (rowStatus === 'ADDED' || rowStatus === 'FOUND_UNRESOLVED') action = 'FILL_ADDED_DRIVER_PANEL';
     return {
@@ -5410,6 +5613,11 @@ copy(String((() => {
       activeParticipantRowStatus: rowStatus,
       activeParticipantSavePresent: savePresent ? '1' : '0',
       activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
+      activeParticipantRequiredMissing: readiness.requiredMissing,
+      activeParticipantMovingViolationsQuestionPresent: moving.questionPresent,
+      activeParticipantMovingViolationsSelectedValue: moving.selectedValue,
+      activeParticipantMovingViolationsDefaultApplied: '0',
+      activeParticipantPanelReadyToSave: readiness.readyToSave,
       activeParticipantPanelAction: action
     };
   };
@@ -5451,6 +5659,11 @@ copy(String((() => {
           activeParticipantRowStatus: '',
           activeParticipantSavePresent: '0',
           activeParticipantSaveEnabled: '0',
+          activeParticipantRequiredMissing: '0',
+          activeParticipantMovingViolationsQuestionPresent: '0',
+          activeParticipantMovingViolationsSelectedValue: '',
+          activeParticipantMovingViolationsDefaultApplied: '0',
+          activeParticipantPanelReadyToSave: '0',
           activeParticipantPanelAction: '',
           pageSaveContinuePresent: '0',
           pageSaveContinueEnabled: '0',
@@ -5476,7 +5689,8 @@ copy(String((() => {
       const unresolvedDriverCount = Number(driverStatus.unresolvedDriverCount || 0);
       const unresolvedVehicleCount = Number(vehicleStatus.unresolvedVehicleCount || 0);
       const blockers = [];
-      if (inlinePresent && inlineSaveButton && !isDisabledLike(inlineSaveButton)) blockers.push('INLINE_PANEL_READY_TO_SAVE');
+      if (inlinePresent && activeParticipant.activeParticipantRequiredMissing === '1') blockers.push('ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+      if (inlinePresent && inlineSaveButton && !isDisabledLike(inlineSaveButton) && activeParticipant.activeParticipantPanelReadyToSave === '1') blockers.push('INLINE_PANEL_READY_TO_SAVE');
       if (inlinePresent && activeParticipant.activeParticipantRowStatus === 'NON_DRIVER') blockers.push('ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN');
       if (unresolvedDriverCount > 0) blockers.push(`UNRESOLVED_FOUND_DRIVERS:${unresolvedDriverCount}`);
       if (unresolvedVehicleCount > 0) blockers.push(`UNRESOLVED_FOUND_VEHICLES:${unresolvedVehicleCount}`);
@@ -5551,6 +5765,11 @@ copy(String((() => {
         activeParticipantRowStatus: activeParticipant.activeParticipantRowStatus,
         activeParticipantSavePresent: activeParticipant.activeParticipantSavePresent,
         activeParticipantSaveEnabled: activeParticipant.activeParticipantSaveEnabled,
+        activeParticipantRequiredMissing: activeParticipant.activeParticipantRequiredMissing,
+        activeParticipantMovingViolationsQuestionPresent: activeParticipant.activeParticipantMovingViolationsQuestionPresent,
+        activeParticipantMovingViolationsSelectedValue: activeParticipant.activeParticipantMovingViolationsSelectedValue,
+        activeParticipantMovingViolationsDefaultApplied: activeParticipant.activeParticipantMovingViolationsDefaultApplied,
+        activeParticipantPanelReadyToSave: activeParticipant.activeParticipantPanelReadyToSave,
         activeParticipantPanelAction: activeParticipant.activeParticipantPanelAction,
         pageSaveContinuePresent: snapshotBool(saveButton),
         pageSaveContinueEnabled: snapshotBool(saveButton && !isDisabledLike(saveButton)),
@@ -5598,6 +5817,11 @@ copy(String((() => {
         activeParticipantRowStatus: '',
         activeParticipantSavePresent: '0',
         activeParticipantSaveEnabled: '0',
+        activeParticipantRequiredMissing: '0',
+        activeParticipantMovingViolationsQuestionPresent: '0',
+        activeParticipantMovingViolationsSelectedValue: '',
+        activeParticipantMovingViolationsDefaultApplied: '0',
+        activeParticipantPanelReadyToSave: '0',
         activeParticipantPanelAction: '',
         pageSaveContinuePresent: '0',
         pageSaveContinueEnabled: '0',
@@ -6734,6 +6958,7 @@ copy(String((() => {
     'set_select_product_defaults',
     'select_vehicle_dropdown_option',
     'select_vehicle_dropdown_first_valid_nonplaceholder',
+    'asc_ensure_non_driver_participant_panel_ready',
     'fill_participant_modal',
     'select_remove_reason',
     'fill_vehicle_modal',
@@ -8860,6 +9085,61 @@ copy(String((() => {
       return document.getElementById(saveButtonId) ? '1' : '0';
     }
 
+    case 'asc_ensure_non_driver_participant_panel_ready': {
+      const root = findAscInlineParticipantPanelRoot();
+      const before = readAscNonDriverParticipantPanelReadiness(root);
+      if (!root) {
+        return lineResult({
+          result: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+          method: 'participant-panel-root-missing',
+          traceCode: 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED',
+          panelPresent: '0',
+          savePresent: before.savePresent,
+          saveEnabled: before.saveEnabled,
+          activeParticipantRequiredMissing: '1',
+          movingViolationsQuestionPresent: before.moving.questionPresent,
+          movingViolationsSelectedValue: before.moving.selectedValue,
+          movingViolationsDefaultApplied: '0',
+          requiresClientVerification: '1',
+          source: safe(args.source || 'PROVISIONAL_WORKFLOW_DEFAULT'),
+          failedFields: 'participantPanel'
+        });
+      }
+      let selection = { ok: true, method: 'not-needed', traceCode: 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE', before: before.moving, after: before.moving };
+      let defaultApplied = '0';
+      if (before.moving.requiredMissing === '1') {
+        selection = selectAscParticipantMovingViolationsNo(root);
+        defaultApplied = selection.ok && selection.after && selection.after.selectedValue === 'NO' && selection.before && !selection.before.selectedValue ? '1' : '0';
+      }
+      const after = readAscNonDriverParticipantPanelReadiness(root);
+      const ready = after.readyToSave === '1';
+      const result = ready
+        ? 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE'
+        : (selection.traceCode === 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED'
+          ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_FAILED'
+          : 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+      return lineResult({
+        result,
+        method: selection.method,
+        traceCode: ready ? (defaultApplied === '1' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED' : 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE') : selection.traceCode,
+        initialTraceCode: before.moving.requiredMissing === '1' ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED' : '',
+        panelPresent: '1',
+        savePresent: after.savePresent,
+        saveEnabled: after.saveEnabled,
+        activeParticipantRequiredMissing: after.requiredMissing,
+        activeParticipantPanelReadyToSave: after.readyToSave,
+        movingViolationsQuestionPresent: after.moving.questionPresent,
+        movingViolationsControlPresent: after.moving.controlPresent,
+        movingViolationsWarningPresent: after.moving.warningPresent,
+        movingViolationsSelectedValue: after.moving.selectedValue,
+        movingViolationsSelectionSource: after.moving.selectedSource,
+        movingViolationsDefaultApplied: defaultApplied,
+        requiresClientVerification: defaultApplied === '1' ? '1' : '0',
+        source: safe(args.source || 'PROVISIONAL_WORKFLOW_DEFAULT'),
+        failedFields: ready ? '' : 'movingViolations'
+      });
+    }
+
     case 'fill_participant_modal': {
       const setSelect = (id, value) => {
         const el = document.getElementById(safe(id));
@@ -8905,9 +9185,16 @@ copy(String((() => {
       const violations = safe(args.violations)
         ? (() => {
             const result = setRadioByName('agreement.agreementParticipant.party.violationInd', args.violations);
-            return (result.method === 'no-radio-match')
-              ? { applied: 'SKIP', method: 'question-not-shown' }
-              : { applied: result.ok ? '1' : '0', method: result.method };
+            if (result.method !== 'no-radio-match')
+              return { applied: result.ok ? '1' : '0', method: result.method };
+            if (normalizeYesNoValue(args.violations) !== 'NO')
+              return { applied: 'SKIP', method: 'question-not-shown' };
+            const root = findAscInlineParticipantPanelRoot();
+            const state = readAscParticipantMovingViolationsState(root);
+            if (state.questionPresent !== '1')
+              return { applied: 'SKIP', method: 'question-not-shown' };
+            const scoped = selectAscParticipantMovingViolationsNo(root);
+            return { applied: scoped.ok ? '1' : '0', method: scoped.method };
           })()
         : { applied: 'SKIP', method: 'not-requested' };
       let defensiveDriving = { applied: 'SKIP', method: 'not-requested' };
@@ -9254,6 +9541,26 @@ copy(String((() => {
       const radios = fields.filter((f) => lower(f.type) === 'radio').map((f) => ({
         id: f.id, name: f.name, value: f.value, checked: !!f.checked, label: f.label
       }));
+      const radioLikeControls = Array.from(document.querySelectorAll('[role=radio],[aria-checked],button,[role=button],label'))
+        .filter(visible)
+        .map((el) => {
+          const text = normalize(el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '');
+          const context = normalize((el.closest && el.closest('fieldset,section,div,label')) ? (el.closest('fieldset,section,div,label').innerText || el.closest('fieldset,section,div,label').textContent || '') : text);
+          return {
+            tag: el.tagName,
+            id: safe(el.id),
+            name: safe(el.name),
+            role: safe(el.getAttribute && el.getAttribute('role')),
+            text,
+            value: safe(el.value),
+            ariaChecked: safe(el.getAttribute && el.getAttribute('aria-checked')),
+            ariaPressed: safe(el.getAttribute && el.getAttribute('aria-pressed')),
+            selected: isSelectedNode(el),
+            class: safe(el.className),
+            context: context.slice(0, 220)
+          };
+        })
+        .filter((entry) => /\b(yes|no)\b/i.test(entry.text) || /moving violations|violation/i.test(entry.context) || entry.role === 'radio');
       const alerts = Array.from(document.querySelectorAll('[id^="message_"], .c-alert, .c-alert a, .c-alert__content, [role=alert], .error, .validation'))
         .filter(visible)
         .map((el) => normalize(el.innerText || el.textContent || ''))
@@ -9274,6 +9581,7 @@ copy(String((() => {
         fields,
         buttons,
         radios,
+        radioLikeControls,
         alerts,
         modalText: dialogs.join(' || ')
       };
