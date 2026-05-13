@@ -5068,7 +5068,7 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   const extraInfoInsurance = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',
     ascLiveArgs,
-    fixtureScenario('live-asc-extra-info-insurance-gate')
+    fixtureScenario('live-asc-extra-info-insurance-022-gate')
   ));
   assert.strictEqual(extraInfoInsurance.route, 'ASC_EXTRA_INFO_INSURANCE');
   assert.notStrictEqual(extraInfoInsurance.route, 'ADVISOR_OTHER');
@@ -5076,15 +5076,18 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   assert.strictEqual(extraInfoInsurance.insuranceGate.kind, 'EXTRA_INFO_INSURANCE');
   assert.strictEqual(extraInfoInsurance.insuranceGate.routeFamily, 'ASCPRODUCT');
   assert.strictEqual(extraInfoInsurance.insuranceGate.continueVisible, true);
-  assert.strictEqual(extraInfoInsurance.insuranceGate.continueEnabled, false);
+  assert.strictEqual(extraInfoInsurance.insuranceGate.continueEnabled, true);
   assert.strictEqual(extraInfoInsurance.insuranceGate.fieldsPresent, true);
-  assert.strictEqual(extraInfoInsurance.insuranceGate.answerState, 'UNANSWERED');
+  assert.strictEqual(extraInfoInsurance.insuranceGate.answerState, 'ANSWERED');
   assert.strictEqual(extraInfoInsurance.insuranceGate.requiresClientVerification, true);
   assert.strictEqual(extraInfoInsurance.insuranceGate.provisionalDefaultsAllowed, true);
   assert.strictEqual(extraInfoInsurance.insuranceGate.creditHitNotReceived, false);
-  assert.ok(extraInfoInsurance.insuranceGate.fieldLabels.includes('Current insurance history duration'));
-  assert.ok(extraInfoInsurance.insuranceGate.controlNames.includes('currentInsuranceHistoryDuration|currentInsuranceHistoryDuration'));
-  assert.ok(extraInfoInsurance.insuranceGate.missingRequiredFields.includes('Current insurance history duration'));
+  assert.ok(extraInfoInsurance.insuranceGate.fieldLabels.includes('Length of continuous coverage'));
+  assert.ok(extraInfoInsurance.insuranceGate.controlNames.includes('priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt|priorInsurance_lenTimeContinuousPriorInsuranceMonthCnt'));
+  assert.ok(!extraInfoInsurance.insuranceGate.controlNames.some((name) => /priorInsurance_limitAmountText|contractTermExpDt/.test(name)));
+  assert.ok(extraInfoInsurance.insuranceGate.currentSelectedValues.includes('Other'));
+  assert.ok(extraInfoInsurance.insuranceGate.currentSelectedValues.includes('3+ years'));
+  assert.deepStrictEqual(extraInfoInsurance.insuranceGate.missingRequiredFields, []);
   assert.deepStrictEqual(extraInfoInsurance.allowedNextActions, []);
   assert.ok(extraInfoInsurance.unsafeReason.includes('EXTRA_INFO_INSURANCE'));
 
@@ -5110,22 +5113,28 @@ function testAdvisorStateSnapshotSanitizedLiveRouteFixtures() {
   const priorInsuranceNotFound = assertAdvisorStateSnapshot(runReadOnlySnapshot(
     'advisor_state_snapshot',
     ascLiveArgs,
-    fixtureScenario('live-asc-prior-insurance-not-found-gate')
+    fixtureScenario('live-asc-prior-insurance-not-found-021-gate')
   ));
   assert.strictEqual(priorInsuranceNotFound.route, 'ASC_PRIOR_INSURANCE_NOT_FOUND');
   assert.notStrictEqual(priorInsuranceNotFound.route, 'ADVISOR_OTHER');
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.present, true);
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.kind, 'PRIOR_INSURANCE_NOT_FOUND');
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.continueVisible, true);
-  assert.strictEqual(priorInsuranceNotFound.insuranceGate.continueEnabled, false);
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.continueEnabled, true);
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.fieldsPresent, true);
-  assert.strictEqual(priorInsuranceNotFound.insuranceGate.answerState, 'UNANSWERED');
+  assert.strictEqual(priorInsuranceNotFound.insuranceGate.answerState, 'ANSWERED');
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.requiresClientVerification, true);
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.provisionalDefaultsAllowed, true);
   assert.strictEqual(priorInsuranceNotFound.insuranceGate.creditHitNotReceived, false);
-  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Prior carrier'));
-  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Expiration date'));
-  assert.ok(priorInsuranceNotFound.insuranceGate.missingRequiredFields.includes('Prior insurance duration'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Current insurance provider'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Bodily injury liability limits'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.fieldLabels.includes('Policy expiration date'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.controlNames.includes('priorInsurance_limitAmountText|priorInsurance_limitAmountText'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.controlNames.includes('contractTermExpDt|contractTermExpDt'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.currentSelectedValues.includes('Other'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.currentSelectedValues.includes('5+ years'));
+  assert.ok(priorInsuranceNotFound.insuranceGate.currentSelectedValues.includes('I do not know'));
+  assert.deepStrictEqual(priorInsuranceNotFound.insuranceGate.missingRequiredFields, []);
   assert.deepStrictEqual(priorInsuranceNotFound.allowedNextActions, []);
   assert.ok(priorInsuranceNotFound.unsafeReason.includes('PRIOR_INSURANCE_NOT_FOUND'));
 }

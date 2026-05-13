@@ -139,7 +139,10 @@ Current branch sync note: this file is synchronized for `hermes-state-snapshot-f
 - Current behavior is detection/status only through `advisor_state_snapshot.insuranceGate`.
 - The snapshot may report gate kind, visible field labels, visible control names/ids, safely readable current selected values, missing required fields when detectable, Continue button state, answer state, client-verification requirement, provisional-default eligibility, and `creditHitNotReceived`.
 - No workflow may fill fields, select dropdowns/radios, type dates, or click Continue from these routes until a separate mutation patch is designed and verified.
-- Future provisional defaults are user-specified business policy, not scan-proven values. Any future mutation must mark `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; do not assume client-verified prior-insurance answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+- Future provisional defaults are user-specified business policy, not scan-proven values:
+  - `ASC_EXTRA_INFO_INSURANCE`: carrier `Other`, duration `3+ years`, `requiresClientVerification=true`.
+  - `ASC_PRIOR_INSURANCE_NOT_FOUND`: carrier `Other`, duration `5+ years`, BI limits `I do not know`, expiration date last day of current year, `requiresClientVerification=true`.
+- Any future mutation must mark `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; do not assume client-verified prior-insurance answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
 
 ## Participant Detail Modal
 

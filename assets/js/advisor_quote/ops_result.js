@@ -5652,12 +5652,25 @@ copy(String((() => {
     if (extraInfoInsuranceEvidence) return 'EXTRA_INFO_INSURANCE';
     return '';
   };
+  const advisorInsuranceGateEvidenceKind = (labels, controlNames) => {
+    const evidence = `${(labels || []).join(' | ')} ${(controlNames || []).join(' | ')}`;
+    const hasPriorNotFoundFields = /\b(bodily injury liability limits|policy expiration date)\b/i.test(evidence)
+      || /\b(priorInsurance_limitAmountText|contractTermExpDt)\b/i.test(evidence);
+    if (hasPriorNotFoundFields) return 'PRIOR_INSURANCE_NOT_FOUND';
+    const hasContinuousCoverageFields = /\blength of continuous coverage\b/i.test(evidence)
+      || /\bpriorInsurance_lenTimeContinuousPriorInsuranceMonthCnt\b/i.test(evidence);
+    if (hasContinuousCoverageFields) return 'EXTRA_INFO_INSURANCE';
+    return '';
+  };
   const readAdvisorInsuranceGateSnapshotState = () => {
-    const kind = isAscProductRoute() ? advisorInsuranceGateTextKind() : '';
-    const controls = kind ? advisorInsuranceGateControls() : [];
-    const continueButton = kind ? advisorInsuranceGateContinueButton() : null;
+    const ascRoute = isAscProductRoute();
+    const controls = ascRoute ? advisorInsuranceGateControls() : [];
     const labels = advisorStateUnique(controls.map(advisorInsuranceGateControlLabel));
     const controlNames = advisorStateUnique(controls.map(advisorInsuranceGateControlId));
+    const textKind = ascRoute ? advisorInsuranceGateTextKind() : '';
+    const evidenceKind = ascRoute ? advisorInsuranceGateEvidenceKind(labels, controlNames) : '';
+    const kind = textKind === 'CREDIT_HIT_NOT_RECEIVED' ? textKind : (evidenceKind || textKind);
+    const continueButton = kind ? advisorInsuranceGateContinueButton() : null;
     const currentSelectedValues = advisorStateUnique(controls.map(advisorInsuranceGateControlValue));
     const requiredControls = controls.filter(advisorInsuranceGateControlRequired);
     const missingRequiredFields = advisorStateUnique(requiredControls

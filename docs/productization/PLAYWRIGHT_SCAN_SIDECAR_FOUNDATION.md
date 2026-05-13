@@ -50,7 +50,12 @@ Current read-only Advisor state classification recognizes these unsupported ASCP
 
 These routes expose `insuranceGate` status only: gate kind, route family, continue button visibility/enabled state, field presence, visible field labels, visible control ids/names, safely readable current selected values, detectable missing fields, answer state, client-verification requirement, provisional-default policy eligibility, and credit-hit-not-received flag. The sidecar does not fill, select, type, click Continue, or treat these gates as ready for mutation.
 
-Future provisional default answers for the two insurance-history gates are user-specified business policy, not scan-proven values. Any future mutation must set `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; it must not assume client-verified answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
+Future provisional default answers for the two insurance-history gates are user-specified business policy, not scan-proven values:
+
+- `ASC_EXTRA_INFO_INSURANCE`: carrier `Other`, duration `3+ years`, `requiresClientVerification=true`.
+- `ASC_PRIOR_INSURANCE_NOT_FOUND`: carrier `Other`, duration `5+ years`, BI limits `I do not know`, expiration date last day of current year, `requiresClientVerification=true`.
+
+Any future mutation must set `source=PROVISIONAL_AGENCY_DEFAULT` and `requiresClientVerification=true`; it must not assume client-verified answers or treat duration defaults such as `3+ years` / `5+ years` as verified.
 
 CDP attach utility:
 
