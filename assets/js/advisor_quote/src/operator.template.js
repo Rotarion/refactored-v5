@@ -1196,12 +1196,17 @@ copy(String((() => {
     for (const node of nodes) {
       const text = getText(node);
       const lowerText = normLower(text);
+      const classText = normLower(safe(node.className));
       if (!lowerText.includes('confirmed')) continue;
       if (!/\b(?:19|20)\d{2}\b/.test(text)) continue;
       const titleCount = vehicleTitleCount(text);
       const hasAction = Array.from(node.querySelectorAll('button,a,[role=button]'))
         .some((action) => visible(action) && (answerTextMatches(getText(action), 'Edit') || answerTextMatches(getText(action), 'Remove')));
-      if (lowerText.includes('potential vehicles') || titleCount > 1 || (!hasAction && !lowerText.includes('confirmed vehicles')))
+      const hasCardClass = /\b(?:vehicle-card|confirmed-vehicle)\b/.test(classText);
+      const hasActionText = /\bedit\b/.test(lowerText) && /\bremove\b/.test(lowerText);
+      if (lowerText.includes('confirmed vehicles') && !hasCardClass)
+        continue;
+      if (lowerText.includes('potential vehicles') || titleCount > 1 || (!hasCardClass && !hasAction && !hasActionText))
         continue;
       const key = lower(text);
       if (!key || seen.has(key)) continue;

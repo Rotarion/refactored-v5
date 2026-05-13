@@ -1222,7 +1222,7 @@ function testRapportAhkStaleRowCancelFailurePolicy() {
   assert.match(vehicleAhk, /RAPPORT_NO_RATEABLE_VEHICLE_CONFIRMED/);
   assert.match(vehicleAhk, /confirmedOrAddedVehicleCount[\s\S]*>[\s\S]*0[\s\S]*return true/);
   assert.match(vehicleAhk, /potentialVehicleCount[\s\S]*>[\s\S]*0[\s\S]*return true/);
-  assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed[\s\S]*staleAddRowPresent[\s\S]*confirmedOrAdded > 0[\s\S]*vehicleWarningPresent[\s\S]*confirmedOrAdded > 0/);
+  assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed[\s\S]*vehicleWarningBlocks[\s\S]*staleAddRowPresent[\s\S]*!vehicleWarningBlocks/);
 }
 
 function testRapportGatePolicyAhkContracts() {
@@ -1245,8 +1245,11 @@ function testRapportGatePolicyAhkContracts() {
   assert.match(rapportAhk, /RAPPORT_GATE_VEHICLE_FAILED/);
   assert.match(rapportAhk, /RAPPORT_GATE_MODEL_AMBIGUOUS/);
   assert.match(rapportAhk, /UNSUPPORTED_AFTER_BUCKET_PROBING/);
-  assert.match(rapportAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed\([\s\S]*gatePolicyEnabled && gateSatisfied/);
-  assert.match(vehicleAhk, /if gateSatisfied \{[\s\S]*confirmedOrAdded > 0[\s\S]*staleAddRowPresent/);
+  assert.match(rapportAhk, /AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed\([\s\S]*gatePolicyEnabled && gateSatisfied && gateStopAllowed/);
+  assert.match(rapportAhk, /RAPPORT_GATE_DEFERRED_VEHICLE_WARNING_CREATE_QUOTES_DISABLED/);
+  assert.match(rapportAhk, /RAPPORT_VEHICLE_WARNING_CREATE_QUOTES_DISABLED/);
+  assert.match(rapportAhk, /START_QUOTING_VEHICLE_WARNING_BLOCKER[\s\S]*START_QUOTING_RATING_STATE_INVALID/);
+  assert.match(vehicleAhk, /if gateSatisfied \{[\s\S]*confirmedOrAdded > 0[\s\S]*staleAddRowPresent[\s\S]*!vehicleWarningBlocks/);
   assert.match(vehicleAhk, /AdvisorQuoteRapportVehicleLedgerMarkSkippedAfterGate[\s\S]*SKIPPED_AFTER_GATE_SATISFIED/);
   assert.doesNotMatch(rapportAhk, /db-add-deferred/);
 }
@@ -5324,6 +5327,15 @@ function testGatherRapportSnapshotContracts() {
   assert.ok(warning.vehicleWarningText.includes('Please Confirm'));
   assert.strictEqual(warning.potentialVehicleCount, '1');
   assert.strictEqual(warning.createQuotesEnabled, '0');
+
+  const warningUnderConfirmedHeading = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-warning-potential-under-confirmed-heading')), requiredKeys);
+  assert.strictEqual(warningUnderConfirmedHeading.result, 'OK');
+  assert.strictEqual(warningUnderConfirmedHeading.vehicleWarningPresent, '1');
+  assert.strictEqual(warningUnderConfirmedHeading.confirmedVehicleCount, '0');
+  assert.strictEqual(warningUnderConfirmedHeading.potentialVehicleCount, '1');
+  assert.strictEqual(warningUnderConfirmedHeading.createQuotesEnabled, '0');
+  assert.strictEqual(warningUnderConfirmedHeading.blockerCode, 'GATHER_VEHICLE_WARNING_PRESENT');
+  assert.match(warningUnderConfirmedHeading.missing, /ratingState/);
 
   const edit = assertKeyBlock(runReadOnlySnapshot('gather_rapport_snapshot', args, fixtureScenario('snapshot-gather-edit-complete')), requiredKeys);
   assert.strictEqual(edit.result, 'OK');

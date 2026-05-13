@@ -415,15 +415,16 @@ AdvisorQuoteRapportVehicleLedgerSatisfiedCount(ledger) {
 
 AdvisorQuoteRapportVehicleLedgerStartQuotingAllowed(ledger, confirmedOrAddedVehicleCount, staleAddRowPresent, vehicleWarningPresent, createQuotesEnabled, gateSatisfied := false) {
     confirmedOrAdded := Integer(confirmedOrAddedVehicleCount)
+    vehicleWarningBlocks := Trim(String(vehicleWarningPresent)) = "1" && Trim(String(createQuotesEnabled)) != "1"
     if gateSatisfied {
         return (confirmedOrAdded > 0 || Trim(String(createQuotesEnabled)) = "1")
             && Trim(String(staleAddRowPresent)) != "1"
-            && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1" || confirmedOrAdded > 0)
+            && !vehicleWarningBlocks
     }
     return AdvisorQuoteRapportVehicleLedgerAllRateableTerminal(ledger)
         && (confirmedOrAdded > 0 || Trim(String(createQuotesEnabled)) = "1")
         && (Trim(String(staleAddRowPresent)) != "1" || confirmedOrAdded > 0)
-        && (Trim(String(vehicleWarningPresent)) != "1" || Trim(String(createQuotesEnabled)) = "1" || confirmedOrAdded > 0)
+        && !vehicleWarningBlocks
 }
 
 AdvisorQuoteRapportSnapshotHasPotentialVinBackedVehicle(snapshot) {

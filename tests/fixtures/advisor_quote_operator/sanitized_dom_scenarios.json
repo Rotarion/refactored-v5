@@ -1189,6 +1189,23 @@
       { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports" }
     ]
   },
+  "snapshot-gather-warning-potential-under-confirmed-heading": {
+    "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
+    "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Auto originally asked for. Please Confirm or Add at least 1 car or truck. Start Quoting Auto Create Quotes & Order Reports",
+    "nodes": [
+      { "tag": "div", "className": "alert alert-warning", "text": "Auto originally asked for. Please Confirm or Add at least 1 car or truck." },
+      { "tag": "section", "text": "Cars and Trucks CONFIRMED VEHICLES", "children": [
+        { "tag": "div", "className": "vehicle-card potential-vehicle", "text": "2004 Toyota HIGHLANDER masked evidence Confirm Remove", "children": [
+          { "tag": "button", "id": "potential-highlander-confirm", "text": "Confirm" },
+          { "tag": "button", "id": "potential-highlander-remove", "text": "Remove" }
+        ] }
+      ] },
+      { "tag": "section", "text": "Start Quoting", "children": [
+        { "tag": "input", "type": "checkbox", "id": "ConsumerReports.Auto.Product-intel#102", "checked": true },
+        { "tag": "button", "id": "consentModalTrigger", "text": "Create Quotes & Order Reports", "disabled": true }
+      ] }
+    ]
+  },
   "snapshot-gather-stale-row-safe-cancel-empty": {
     "href": "https://advisorpro.allstate.com/#/apps/intel/102/rapport",
     "bodyText": "Gather Data Cars and Trucks CONFIRMED VEHICLES Add Car or Truck Start Quoting",
