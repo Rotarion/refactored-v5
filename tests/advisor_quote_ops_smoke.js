@@ -5521,7 +5521,9 @@ function testAscDriversVehiclesSnapshotContracts() {
     'removedVehicleCount', 'vehicleSummaries', 'inlineParticipantPanelPresent',
     'removeDriverModalPresent', 'removeDriverTargetName', 'removeDriverReasonSelected',
     'removeDriverReasonCode', 'driversAndVehiclesHeadingPresent', 'inlineParticipantSavePresent',
-    'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'pageSaveContinuePresent',
+    'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'activeParticipantPanelPresent',
+    'activeParticipantRowKey', 'activeParticipantNameMasked', 'activeParticipantRowStatus',
+    'activeParticipantSavePresent', 'activeParticipantSaveEnabled', 'activeParticipantPanelAction', 'pageSaveContinuePresent',
     'pageSaveContinueEnabled', 'pageSaveContinueButtonId', 'mainSavePresent', 'mainSaveEnabled',
     'blockerCode', 'blockers', 'nextRecommendedAction', 'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
   ];
@@ -5561,6 +5563,20 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(nonDriverVehiclesPending.blockerCode, 'ASC_DRIVERS_VEHICLES_ROWS_UNRESOLVED');
   assert.strictEqual(nonDriverVehiclesPending.nextRecommendedAction, 'add_matched_vehicle_row');
   assert.strictEqual(nonDriverVehiclesPending.nextRecommendedReadOnlyStatus, 'asc_vehicle_rows_status');
+
+  const nonDriverPanelOpen = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-inline-panel-open')), requiredKeys);
+  assert.strictEqual(nonDriverPanelOpen.result, 'OK');
+  assert.strictEqual(nonDriverPanelOpen.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(nonDriverPanelOpen.blockerCode, 'ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantPanelPresent, '1');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantRowStatus, 'NON_DRIVER');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantSaveEnabled, '1');
+  assert.strictEqual(nonDriverPanelOpen.activeParticipantPanelAction, 'SAVE_NON_DRIVER_PANEL');
+  assert.strictEqual(nonDriverPanelOpen.unresolvedDriverCount, '1');
+  assert.strictEqual(nonDriverPanelOpen.unresolvedVehicleCount, '2');
+  assert.strictEqual(nonDriverPanelOpen.nextRecommendedAction, 'save_inline_participant_panel');
+  assert.strictEqual(nonDriverPanelOpen.nextRecommendedReadOnlyStatus, 'asc_participant_detail_status');
+  assert.ok(nonDriverPanelOpen.blockers.includes('ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN'));
 
   const inline = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-inline-participant')), requiredKeys);
   assert.strictEqual(inline.result, 'OK');

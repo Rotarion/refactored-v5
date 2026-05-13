@@ -520,6 +520,16 @@ ascInlinePanelLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
 )
 AssertEqual(AdvisorQuoteStatusValue(ascInlinePanelLedger, "nextAction"), "handle_inline_participant_panel", "Inline participant panel should route before row reconciliation")
 
+ascNonDriverInlinePanelLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
+    ascSingleLedgerProfile,
+    TestAscSnapshot("1", "0", "ASC_INLINE_PARTICIPANT_PANEL", "ASC_INLINE_PARTICIPANT_PANEL", "ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN", "1", "2", "0", "NON_DRIVER", "SAVE_NON_DRIVER_PANEL", "1"),
+    TestAscDriverStatus("Test Primary Driver|age=40|added=1|nonDriver=0|add=0|remove=0||Test Other Driver|age=66|added=0|nonDriver=1|unresolved=0|add=1|remove=0||Test Remaining Driver|age=37|added=0|nonDriver=0|unresolved=1|add=1|remove=0", "1", "1", "1"),
+    TestAscVehicleStatus("2019 Honda CRV|added=0|vin=1", "1", "0"),
+    TestAscParticipantStatus("Single")
+)
+AssertEqual(AdvisorQuoteStatusValue(ascNonDriverInlinePanelLedger, "nextAction"), "handle_inline_participant_panel", "Non-driver inline participant panel should block row actions")
+AssertEqual(AdvisorQuoteStatusValue(ascNonDriverInlinePanelLedger, "reason"), "ASC_NON_DRIVER_PARTICIPANT_PANEL_OPEN", "Non-driver panel should get a panel-specific ledger reason")
+
 ascVehicleNeedsAddLedger := AdvisorQuoteBuildAscDriversVehiclesLedger(
     ascSingleLedgerProfile,
     TestAscSnapshot("1", "0"),
@@ -878,7 +888,7 @@ TestAscDbWithSpousePolicy(overrideEnabled := "true", ageWindow := 14, preferClos
     return db
 }
 
-TestAscSnapshot(mainSavePresent := "1", mainSaveEnabled := "0", activeModalType := "NONE", activePanelType := "NONE", blockerCode := "", unresolvedDriverCount := "0", unresolvedVehicleCount := "0", addedVehicleCount := "0") {
+TestAscSnapshot(mainSavePresent := "1", mainSaveEnabled := "0", activeModalType := "NONE", activePanelType := "NONE", blockerCode := "", unresolvedDriverCount := "0", unresolvedVehicleCount := "0", addedVehicleCount := "0", activeParticipantRowStatus := "", activeParticipantPanelAction := "", activeParticipantSaveEnabled := "0") {
     return Map(
         "result", "OK",
         "routeFamily", "ASCPRODUCT",
@@ -889,6 +899,10 @@ TestAscSnapshot(mainSavePresent := "1", mainSaveEnabled := "0", activeModalType 
         "unresolvedDriverCount", unresolvedDriverCount,
         "unresolvedVehicleCount", unresolvedVehicleCount,
         "addedVehicleCount", addedVehicleCount,
+        "activeParticipantPanelPresent", (activeParticipantRowStatus != "" || activeParticipantPanelAction != "") ? "1" : "0",
+        "activeParticipantRowStatus", activeParticipantRowStatus,
+        "activeParticipantPanelAction", activeParticipantPanelAction,
+        "activeParticipantSaveEnabled", activeParticipantSaveEnabled,
         "mainSavePresent", mainSavePresent,
         "mainSaveEnabled", mainSaveEnabled
     )
