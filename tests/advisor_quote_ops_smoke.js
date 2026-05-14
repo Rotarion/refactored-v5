@@ -2522,6 +2522,56 @@ function testReturnShapeContracts() {
   assert.strictEqual(scopedKnownScenario.doc.getElementById('profile-summary-submitBtn').clickCalls, 0);
   assert.strictEqual(scopedKnownScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
 
+  const texasRentersScenario = fixtureScenario('snapshot-asc-primary-inline-panel-texas-renters-upsell-moving-context');
+  const texasRentersScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'texas-renters-moving-context' }, texasRentersScenario.doc, texasRentersScenario.href));
+  assert.ok(texasRentersScan.activeParticipantPanel.radioLikeControls.some((entry) => entry.optionalKind === 'rentersUpsell' && entry.optionalIgnored === '1'));
+  assert.ok(texasRentersScan.activeParticipantPanel.radioLikeControls.some((entry) => entry.questionContext === 'movingViolations' && entry.text === 'No' && entry.selected === false));
+  const texasRentersResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, texasRentersScenario.doc, texasRentersScenario.href), [
+    'result', 'method', 'traceCode', 'traceCodes', 'activeParticipantPanelKind',
+    'activeParticipantRowStatus', 'activeParticipantPanelAction', 'activeParticipantPanelReadyToSave',
+    'movingViolationsQuestionPresent', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'activeParticipantOptionalUpsellIgnoredCount', 'activeParticipantOptionalUpsellIgnoredTraceCode',
+    'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(texasRentersResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.strictEqual(texasRentersResult.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(texasRentersResult.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
+  assert.strictEqual(texasRentersResult.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
+  assert.strictEqual(texasRentersResult.activeParticipantPanelReadyToSave, '1');
+  assert.strictEqual(texasRentersResult.movingViolationsQuestionPresent, '1');
+  assert.strictEqual(texasRentersResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(texasRentersResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(texasRentersResult.activeParticipantOptionalUpsellIgnoredCount, '1');
+  assert.strictEqual(texasRentersResult.activeParticipantOptionalUpsellIgnoredTraceCode, 'ASC_PARTICIPANT_OPTIONAL_RENTERS_UPSELL_IGNORED');
+  assert.ok(texasRentersResult.traceCodes.includes('ASC_PARTICIPANT_OPTIONAL_RENTERS_UPSELL_IGNORED'));
+  assert.strictEqual(texasRentersResult.knownDefaultsApplied, 'movingViolations');
+  assert.strictEqual(texasRentersResult.failedFields, '');
+  assert.strictEqual(texasRentersScenario.doc.getElementById('primary-driver-addToQuote').clickCalls, 0);
+  assert.strictEqual(texasRentersScenario.doc.getElementById('2013-nissan-altima-add').clickCalls, 0);
+  assert.strictEqual(texasRentersScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
+  const rentersUnknownScenario = fixtureScenario('snapshot-asc-primary-inline-panel-renters-upsell-unknown-required');
+  const rentersUnknownBeforeClicks = totalClickCalls(rentersUnknownScenario.doc);
+  const rentersUnknownResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, rentersUnknownScenario.doc, rentersUnknownScenario.href), [
+    'result', 'traceCodes', 'activeParticipantOptionalUpsellIgnoredCount',
+    'activeParticipantUnknownRequiredYesNoCount', 'activeParticipantUnknownRequiredYesNoQuestions',
+    'movingViolationsQuestionPresent', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(rentersUnknownResult.result, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN');
+  assert.strictEqual(rentersUnknownResult.activeParticipantOptionalUpsellIgnoredCount, '1');
+  assert.strictEqual(rentersUnknownResult.activeParticipantUnknownRequiredYesNoCount, '1');
+  assert.ok(rentersUnknownResult.activeParticipantUnknownRequiredYesNoQuestions.includes('license suspension'));
+  assert.strictEqual(rentersUnknownResult.movingViolationsQuestionPresent, '0');
+  assert.ok(rentersUnknownResult.traceCodes.includes('ASC_PARTICIPANT_OPTIONAL_RENTERS_UPSELL_IGNORED'));
+  assert.strictEqual(rentersUnknownResult.knownDefaultsApplied, '');
+  assert.strictEqual(rentersUnknownResult.failedFields, 'unknownRequiredYesNo');
+  assert.strictEqual(totalClickCalls(rentersUnknownScenario.doc), rentersUnknownBeforeClicks);
+  assert.strictEqual(rentersUnknownScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
   const ambiguousScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh');
   const ambiguousResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, ambiguousScenario.doc, ambiguousScenario.href), [
     'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'failedFields'
@@ -5714,6 +5764,7 @@ function testAscDriversVehiclesSnapshotContracts() {
     'activeParticipantMovingViolationsDefaultApplied', 'activeParticipantDefensiveDrivingQuestionPresent',
     'activeParticipantDefensiveDrivingSelectedValue', 'activeParticipantDefensiveDrivingDefaultApplied',
     'activeParticipantUnknownRequiredYesNoCount', 'activeParticipantUnknownRequiredYesNoQuestions',
+    'activeParticipantOptionalUpsellIgnoredCount', 'activeParticipantOptionalUpsellIgnoredTraceCode',
     'activeParticipantPanelRootStatus', 'activeParticipantPanelRootMethod',
     'activeParticipantPanelRadioLikeControlCount', 'activeParticipantPanelReadyToSave',
     'activeParticipantPanelSavePostcondition', 'activeParticipantPanelAction', 'pageSaveContinuePresent',
@@ -5813,6 +5864,18 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(scopedKnownRequired.activeParticipantDefensiveDrivingQuestionPresent, '1');
   assert.strictEqual(scopedKnownRequired.activeParticipantPanelRadioLikeControlCount, '4');
   assert.strictEqual(scopedKnownRequired.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+
+  const texasRentersRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-texas-renters-upsell-moving-context')), requiredKeys);
+  assert.strictEqual(texasRentersRequired.result, 'OK');
+  assert.strictEqual(texasRentersRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(texasRentersRequired.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(texasRentersRequired.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
+  assert.strictEqual(texasRentersRequired.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(texasRentersRequired.activeParticipantMovingViolationsSelectedValue, '');
+  assert.strictEqual(texasRentersRequired.activeParticipantPanelReadyToSave, '0');
+  assert.strictEqual(texasRentersRequired.activeParticipantOptionalUpsellIgnoredCount, '1');
+  assert.strictEqual(texasRentersRequired.activeParticipantOptionalUpsellIgnoredTraceCode, 'ASC_PARTICIPANT_OPTIONAL_RENTERS_UPSELL_IGNORED');
+  assert.strictEqual(texasRentersRequired.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
 
   const unknownRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-unknown-required-yes-no')), requiredKeys);
   assert.strictEqual(unknownRequired.result, 'OK');

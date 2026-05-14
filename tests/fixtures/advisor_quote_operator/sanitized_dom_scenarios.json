@@ -1567,6 +1567,48 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-primary-inline-panel-texas-renters-upsell-moving-context": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Primary driver Let's get some more details Yes, add renters insurance to my quote Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Primary driver Age 40 Add", "children": [
+        { "tag": "button", "id": "primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Primary driver Let's get some more details Additional participant detail copy repeats here so the question label is only available through panel-local radioLike questionContext evidence. This sanitized panel includes the same active-panel context repeated in a long Mesh container that should not be treated as a broad page root, should not include vehicle row buttons, and should not let the renters option become part of the required moving-violations answer group. Have you had any moving violations in the past five years?", "children": [
+        { "tag": "div", "role": "radio", "text": "Yes, add renters insurance to my quote", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "attributes": { "role": "alert" }, "text": "Please make a selection." },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2013 Nissan Altima VIN: MASKEDALT*******01 Add", "children": [
+        { "tag": "button", "id": "2013-nissan-altima-add", "text": "Add" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-renters-upsell-unknown-required": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Primary driver Let's get some more details Yes, add renters insurance to my quote Have you had a license suspension in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Primary driver Age 40 Add", "children": [
+        { "tag": "button", "id": "primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Primary driver Let's get some more details", "children": [
+        { "tag": "div", "role": "radio", "text": "Yes, add renters insurance to my quote", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "className": "mesh-question", "text": "Have you had a license suspension in the past five years? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-primary-inline-panel-unknown-required-yes-no": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Test Primary Driver Let's get some more details Have you had a license suspension in the past five years? Yes No Please make a selection. Save and Continue",

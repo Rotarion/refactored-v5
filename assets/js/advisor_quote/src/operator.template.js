@@ -1338,12 +1338,18 @@ copy(String((() => {
     return match ? safe(match[1]) : '';
   };
   const isAscProductRoute = () => ascProductRouteId() !== '';
+  const advisorMoreDetailsTextPresent = (text) => {
+    const normalized = normLower(text);
+    return normalized.includes('let s get some more details')
+      || normalized.includes('lets get some more details')
+      || normalized.includes('let us get some more details');
+  };
   const ascDriversVehiclesTextEvidence = () => {
     const text = bodyText();
     const normalized = normLower(text);
     const evidence = [];
     if (normalized.includes('drivers and vehicles')) evidence.push('text:Drivers and vehicles');
-    if (normalized.includes("let's get some more details") || normalized.includes('lets get some more details')) evidence.push('text:more-details');
+    if (advisorMoreDetailsTextPresent(text)) evidence.push('text:more-details');
     if (normalized.includes('add drivers')) evidence.push('text:Add drivers');
     if (normalized.includes('add vehicles')) evidence.push('text:Add vehicles');
     if (normalized.includes('save and continue')) evidence.push('text:Save and Continue');
@@ -1364,7 +1370,7 @@ copy(String((() => {
         const text = normLower(getText(node) || node.value || node.getAttribute('aria-label') || '');
         if (text !== 'save') return false;
         const context = normLower(getText(node.closest('section,div,form,[role="dialog"]') || node.parentElement) || bodyText());
-        return context.includes("let's get some more details") || context.includes('lets get some more details') || context.includes('participant');
+        return advisorMoreDetailsTextPresent(context) || context.includes('participant');
       }) || null;
   };
   const findAscSaveButton = findAscPageSaveContinueButton;
@@ -1441,7 +1447,7 @@ copy(String((() => {
     if (isAscProductRoute()) evidence.push('url:/apps/ASCPRODUCT/');
     else missing.push('url:/apps/ASCPRODUCT/');
     const text = bodyText();
-    const panelPresent = /let'?s get some more details|participant|driver details|more details/i.test(text) || !!document.getElementById('PARTICIPANT_SAVE-btn');
+    const panelPresent = advisorMoreDetailsTextPresent(text) || /participant|driver details|more details/i.test(text) || !!document.getElementById('PARTICIPANT_SAVE-btn');
     const saveButton = findAscInlineParticipantSaveButton();
     const panelRoot = findAscInlineParticipantPanelRoot() || (panelPresent ? document : null);
     const panelReadiness = readAscNonDriverParticipantPanelReadiness(panelRoot);
@@ -4833,7 +4839,7 @@ copy(String((() => {
       || /moving violations/i.test(text)
     );
     return !!(saveButton && visible(saveButton) && hasParticipantFields
-      && (text.includes("let's get some more details") || text.includes('lets get some more details') || text.includes('participant')));
+      && (advisorMoreDetailsTextPresent(text) || normLower(text).includes('participant')));
   };
   const advisorRemoveDriverModalRoot = () => {
     const saveButton = document.getElementById('REMOVE_PARTICIPANT_SAVE-btn');
@@ -5207,6 +5213,7 @@ copy(String((() => {
   const ASC_MOVING_VIOLATIONS_QUESTION = 'Have you had any moving violations in the past five years?';
   const ASC_DEFENSIVE_DRIVING_QUESTION = 'Have you completed a defensive driving course in the last 3 years?';
   const ASC_PARTICIPANT_DEFAULT_SOURCE = 'PROVISIONAL_WORKFLOW_DEFAULT';
+  const ASC_OPTIONAL_RENTERS_UPSELL_TRACE = 'ASC_PARTICIPANT_OPTIONAL_RENTERS_UPSELL_IGNORED';
   const ASC_KNOWN_PARTICIPANT_DEFAULTS = [
     {
       key: 'movingViolations',
@@ -5225,6 +5232,13 @@ copy(String((() => {
       match: (text) => /defensive driving/i.test(text) || /completed a defensive driving course/i.test(text)
     }
   ];
+  const ascKnownQuestionKeysInText = (text) => {
+    const value = safe(text);
+    if (!value) return [];
+    return ASC_KNOWN_PARTICIPANT_DEFAULTS.filter((item) => item.match(value)).map((item) => item.key);
+  };
+  const ascOptionalRentersUpsellText = (text) => /renters insurance|renters policy|add renters/i.test(safe(text));
+  const ascOptionalParticipantControlKind = (text) => ascOptionalRentersUpsellText(text) ? 'rentersUpsell' : '';
   const ascPanelActionIdLooksGlobal = (id) => {
     const value = safe(id);
     if (!value) return false;
@@ -5245,8 +5259,7 @@ copy(String((() => {
   const ascParticipantPanelEvidencePresent = (node) => {
     const text = ascParticipantPanelEvidenceText(node);
     return !!text && (
-      text.includes("let's get some more details")
-      || text.includes('lets get some more details')
+      advisorMoreDetailsTextPresent(text)
       || text.includes('driver details')
       || text.includes('moving violations')
       || text.includes('defensive driving')
@@ -5291,7 +5304,7 @@ copy(String((() => {
     const text = getText(node);
     if (!text || text.length > 360) return false;
     if (/drivers and vehicles|add drivers|add vehicles|found driver|found vehicle|save and continue/i.test(text)) return false;
-    return /let'?s get some more details|driver details|moving violations|defensive driving|first driver'?s license/i.test(text);
+    return advisorMoreDetailsTextPresent(text) || /driver details|moving violations|defensive driving|first driver'?s license/i.test(text);
   };
   const findBoundedAscParticipantPanelRoot = (saveButton) => {
     if (!saveButton) return { root: null, status: 'missing-save', method: 'bounded-save-missing' };
@@ -5303,7 +5316,7 @@ copy(String((() => {
     for (let index = saveIndex - 1; index >= 0; index -= 1) {
       if (ascNodeLooksLikeParticipantStart(ordered[index])) {
         startIndex = index;
-        if (/let'?s get some more details|driver details/i.test(getText(ordered[index]))) break;
+        if (advisorMoreDetailsTextPresent(getText(ordered[index])) || /driver details/i.test(getText(ordered[index]))) break;
       }
     }
     if (startIndex < 0) return { root: null, status: 'root-too-broad', method: 'bounded-start-missing' };
@@ -5344,18 +5357,44 @@ copy(String((() => {
   };
   const ascKnownQuestionForText = (text) => ASC_KNOWN_PARTICIPANT_DEFAULTS.find((item) => item.match(text)) || null;
   const ascQuestionTextMatches = (text, item) => !!(item && item.match(text));
+  const ascParticipantSaveCancelControl = (node) => {
+    if (!node) return false;
+    const id = safe(node.id);
+    const tag = safe(node.tagName).toUpperCase();
+    const text = getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value);
+    return /^(PARTICIPANT_SAVE-btn|PARTICIPANT_CANCEL-btn)$/i.test(id)
+      || (/^(BUTTON|A)$/i.test(tag) && (answerTextMatches(text, 'Save') || answerTextMatches(text, 'Cancel')));
+  };
+  const ascQuestionContextForNode = (root, node) => {
+    const panelRoot = root && root.contains ? root : null;
+    if (!panelRoot || !node || !panelRoot.contains(node)) return { questionContext: '', optionalKind: '', method: 'outside-panel' };
+    if (ascParticipantSaveCancelControl(node)) return { questionContext: '', optionalKind: '', method: 'panel-boundary-control' };
+    let current = node;
+    for (let depth = 0; depth < 8 && current && current !== document && current !== document.body && panelRoot.contains(current); depth += 1) {
+      const text = getText(current) || safe(current.getAttribute && current.getAttribute('aria-label')) || safe(current.value);
+      const knownKeys = ascKnownQuestionKeysInText(text);
+      if (knownKeys.length === 1 && safe(text).length <= 1200)
+        return { questionContext: knownKeys[0], optionalKind: '', method: 'ancestor-question-context' };
+      if (knownKeys.length > 1)
+        return { questionContext: '', optionalKind: '', method: 'ambiguous-ancestor-question-context' };
+      const optionalKind = ascOptionalParticipantControlKind(text);
+      if (optionalKind && safe(text).length <= 220 && !safe(text).includes('?'))
+        return { questionContext: '', optionalKind, method: 'known-optional-upsell' };
+      current = current.parentElement;
+    }
+    return { questionContext: '', optionalKind: '', method: 'question-context-missing' };
+  };
   const ascQuestionBoundary = (node, currentItem) => {
     if (!node || !visible(node)) return false;
     const id = safe(node.id);
     const tag = safe(node.tagName).toUpperCase();
     const text = getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value);
     const normalized = normLower(text);
-    if (/^(PARTICIPANT_SAVE-btn|PARTICIPANT_CANCEL-btn)$/i.test(id)) return true;
-    if (/^(BUTTON|A)$/i.test(tag) && answerTextMatches(text, 'Save')) return true;
-    if (/^(BUTTON|A)$/i.test(tag) && answerTextMatches(text, 'Cancel')) return true;
+    if (ascParticipantSaveCancelControl(node)) return true;
     if (/^H[1-6]$/i.test(tag)) return true;
     if (/^(INPUT|SELECT|TEXTAREA)$/i.test(tag) && !/^(radio|checkbox)$/i.test(safe(node.type))) return true;
     if (answerTextMatches(text, 'Yes') || answerTextMatches(text, 'No')) return false;
+    if (ascOptionalRentersUpsellText(text)) return true;
     const known = ascKnownQuestionForText(text);
     if (known && (!currentItem || known.key !== currentItem.key)) return true;
     if (normalized.includes('?') && (!currentItem || !ascQuestionTextMatches(text, currentItem))) return true;
@@ -5437,10 +5476,101 @@ copy(String((() => {
     }
     return candidates;
   };
+  const ascQuestionContextControlEntries = (root, key) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    if (!panelRoot) return [];
+    const out = [];
+    const seen = new Set();
+    const nodes = Array.from(panelRoot.querySelectorAll('[role=radio],[aria-checked],button,[role=button],label,input[type=radio],input[type=checkbox]'))
+      .filter(visible);
+    for (const node of nodes) {
+      if (ascParticipantSaveCancelControl(node)) continue;
+      const context = ascQuestionContextForNode(panelRoot, node);
+      if (context.questionContext !== key) continue;
+      const tag = safe(node.tagName).toUpperCase();
+      const role = safe(node.getAttribute && node.getAttribute('role'));
+      let control = node;
+      let target = node;
+      let text = getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value);
+      if (tag === 'LABEL') {
+        const associated = ascAssociatedControlForLabel(node, { present: true, nodes: [node], questionText: '', method: 'question-context' }, panelRoot);
+        if (associated) {
+          control = associated;
+          target = getInputClickTarget(associated) || node;
+          text = text || readInputLabel(associated) || safe(associated.value);
+        }
+      } else if (tag === 'INPUT') {
+        target = getInputClickTarget(node) || node;
+        text = `${safe(node.value)} ${safe(node.id)} ${safe(node.name)} ${readInputLabel(node)}`;
+      } else {
+        target = findClickableTarget(node) || node;
+      }
+      const value = normalizeYesNoValue(text);
+      if (value !== 'YES' && value !== 'NO') continue;
+      if (!panelRoot.contains(target)) target = node;
+      if (!panelRoot.contains(target)) continue;
+      const entryKey = safe(target.id) || `${safe(target.tagName)}:${safe(role)}:${value}:${compact(text, 80)}:${out.length}`;
+      if (seen.has(entryKey)) continue;
+      seen.add(entryKey);
+      out.push({
+        node,
+        control,
+        target,
+        value,
+        text: compact(text, 120),
+        selected: !!(control && (control.checked || isSelectedNode(control))) || isSelectedNode(node) || isSelectedNode(target),
+        contextMethod: context.method
+      });
+    }
+    return out;
+  };
+  const readAscKnownQuestionContextState = (root, key) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    const item = ASC_KNOWN_PARTICIPANT_DEFAULTS.find((entry) => entry.key === key);
+    const entries = ascQuestionContextControlEntries(panelRoot, key);
+    if (!item || !entries.length) {
+      return {
+        questionPresent: '0',
+        controlPresent: '0',
+        controlCount: '0',
+        selected: '0',
+        selectedValue: '',
+        selectedSource: '',
+        requiredMissing: '0',
+        warningPresent: '0',
+        ambiguous: false,
+        blockMethod: 'question-context-not-present'
+      };
+    }
+    const yes = entries.filter((entry) => entry.value === 'YES');
+    const no = entries.filter((entry) => entry.value === 'NO');
+    const selected = entries.filter((entry) => entry.selected);
+    const values = Array.from(new Set(selected.map((entry) => entry.value).filter(Boolean)));
+    const selectedValue = values.length === 1 ? values[0] : (values.length > 1 ? values.join('|') : '');
+    const text = normLower(getText(panelRoot));
+    const warningPresent = /please make a selection|make a selection|required/.test(text);
+    return {
+      questionPresent: '1',
+      controlPresent: entries.length ? '1' : '0',
+      controlCount: String(entries.length),
+      yesCandidateCount: String(yes.length),
+      noCandidateCount: String(no.length),
+      selected: selectedValue ? '1' : '0',
+      selectedValue,
+      selectedSource: selectedValue ? 'question-context' : '',
+      requiredMissing: selectedValue && values.length === 1 ? '0' : '1',
+      warningPresent: warningPresent ? '1' : '0',
+      ambiguous: values.length > 1,
+      blockMethod: 'question-context-controls',
+      questionText: item.question
+    };
+  };
   const readAscKnownQuestionState = (root, key) => {
     const item = ASC_KNOWN_PARTICIPANT_DEFAULTS.find((entry) => entry.key === key);
     const block = readAscKnownQuestionBlock(root, item);
     if (!item || !block.present) {
+      const contextState = readAscKnownQuestionContextState(root, key);
+      if (contextState.questionPresent === '1') return contextState;
       return {
         questionPresent: '0',
         controlPresent: '0',
@@ -5457,6 +5587,10 @@ copy(String((() => {
     const yes = ascQuestionBlockAnswerCandidates(block, 'YES', root);
     const no = ascQuestionBlockAnswerCandidates(block, 'NO', root);
     const all = yes.concat(no);
+    if (!all.length) {
+      const contextState = readAscKnownQuestionContextState(root, key);
+      if (contextState.questionPresent === '1') return contextState;
+    }
     const selected = all.filter((candidate) => {
       return !!(candidate.control && (candidate.control.checked || isSelectedNode(candidate.control)))
         || isSelectedNode(candidate.node)
@@ -5492,6 +5626,7 @@ copy(String((() => {
       const seed = ordered[index];
       const text = getText(seed);
       if (!text || text.length > 360 || !text.includes('?')) continue;
+      if (ascOptionalRentersUpsellText(text) && !text.includes('?')) continue;
       if (ascKnownQuestionForText(text)) continue;
       if (answerTextMatches(text, 'Yes') || answerTextMatches(text, 'No')) continue;
       let endIndex = ordered.length;
@@ -5514,11 +5649,30 @@ copy(String((() => {
     }
     return out;
   };
+  const ascOptionalParticipantUpsellEntries = (root) => {
+    const panelRoot = root && root.querySelectorAll ? root : null;
+    if (!panelRoot) return [];
+    const seen = new Set();
+    const out = [];
+    for (const el of Array.from(panelRoot.querySelectorAll('[role=radio],[aria-checked],button,[role=button],label,input[type=radio],input[type=checkbox]')).filter(visible)) {
+      if (ascParticipantSaveCancelControl(el)) continue;
+      const text = compact(getText(el) || safe(el.value) || safe(el.getAttribute && el.getAttribute('aria-label')), 160);
+      const context = ascQuestionContextForNode(panelRoot, el);
+      const optionalKind = context.optionalKind || ascOptionalParticipantControlKind(text);
+      if (!optionalKind) continue;
+      const key = safe(el.id) || `${optionalKind}:${safe(el.tagName)}:${text}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ optionalKind, text, traceCode: ASC_OPTIONAL_RENTERS_UPSELL_TRACE });
+    }
+    return out;
+  };
   const ascPanelRadioLikeControls = (root) => {
     const panelRoot = root && root.querySelectorAll ? root : null;
     if (!panelRoot) return [];
     return Array.from(panelRoot.querySelectorAll('[role=radio],[aria-checked],button,[role=button],label'))
       .filter(visible)
+      .filter((el) => !ascParticipantSaveCancelControl(el))
       .map((el) => {
         const text = compact(getText(el) || safe(el.value) || safe(el.getAttribute && el.getAttribute('aria-label')), 120);
         let questionContext = '';
@@ -5529,6 +5683,9 @@ copy(String((() => {
             break;
           }
         }
+        const fallbackContext = questionContext ? { optionalKind: '', method: 'question-window' } : ascQuestionContextForNode(panelRoot, el);
+        if (!questionContext) questionContext = fallbackContext.questionContext;
+        const optionalKind = fallbackContext.optionalKind || ascOptionalParticipantControlKind(text);
         return {
           tag: safe(el.tagName),
           id: safe(el.id),
@@ -5540,10 +5697,13 @@ copy(String((() => {
           ariaPressed: safe(el.getAttribute && el.getAttribute('aria-pressed')),
           selected: isSelectedNode(el),
           class: safe(el.className),
-          questionContext
+          questionContext,
+          optionalKind,
+          optionalIgnored: optionalKind ? '1' : '0',
+          traceCode: optionalKind ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : ''
         };
       })
-      .filter((entry) => /\b(yes|no)\b/i.test(entry.text) || entry.questionContext || entry.role === 'radio');
+      .filter((entry) => /\b(yes|no)\b/i.test(entry.text) || entry.questionContext || entry.optionalKind || entry.role === 'radio');
   };
   const ascParticipantPanelRequiredWarningPresent = (root) => {
     const scope = root && root.querySelectorAll ? root : null;
@@ -5589,11 +5749,16 @@ copy(String((() => {
     if (before.selectedValue)
       return { ok: true, method: 'preserved-existing-selection', traceCode: item.selectedTraceCode, before, after: before };
     const block = readAscKnownQuestionBlock(panelRoot, item);
-    const noCandidates = ascQuestionBlockAnswerCandidates(block, 'NO', panelRoot);
+    let noCandidates = ascQuestionBlockAnswerCandidates(block, 'NO', panelRoot);
+    let methodPrefix = 'question-block';
+    if (!noCandidates.length && before.blockMethod === 'question-context-controls') {
+      noCandidates = ascQuestionContextControlEntries(panelRoot, key).filter((entry) => entry.value === 'NO');
+      methodPrefix = 'question-context';
+    }
     if (noCandidates.length !== 1) {
       return {
         ok: false,
-        method: noCandidates.length ? 'ambiguous-question-block-no-target' : 'question-block-no-target-missing',
+        method: noCandidates.length ? `ambiguous-${methodPrefix}-no-target` : `${methodPrefix}-no-target-missing`,
         traceCode: 'ASC_PARTICIPANT_QUESTION_BLOCK_AMBIGUOUS',
         before,
         after: readAscKnownQuestionState(panelRoot, key)
@@ -5603,7 +5768,7 @@ copy(String((() => {
     const after = readAscKnownQuestionState(panelRoot, key);
     return {
       ok: clicked && after.selectedValue === 'NO',
-      method: clicked ? 'question-block-no-click' : 'question-block-no-click-failed',
+      method: clicked ? `${methodPrefix}-no-click` : `${methodPrefix}-no-click-failed`,
       traceCode: clicked && after.selectedValue === 'NO' ? item.selectedTraceCode : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED',
       before,
       after
@@ -5614,6 +5779,7 @@ copy(String((() => {
     const panelRoot = root && root.querySelectorAll ? root : null;
     if (!panelRoot)
       return { ok: false, result: 'ASC_ACTIVE_PANEL_ROOT_TOO_BROAD', method: 'participant-panel-root-missing', applied: [], traceCodes: [], failedFields: 'participantPanel' };
+    const optionalUpsells = ascOptionalParticipantUpsellEntries(panelRoot);
     const unknownRequired = ascUnknownRequiredYesNoQuestions(panelRoot);
     if (unknownRequired.length) {
       return {
@@ -5621,13 +5787,15 @@ copy(String((() => {
         result: 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN',
         method: 'unknown-required-yes-no',
         applied: [],
-        traceCodes: ['ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN'],
+        traceCodes: optionalUpsells.length ? [ASC_OPTIONAL_RENTERS_UPSELL_TRACE, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN'] : ['ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN'],
         unknownRequiredQuestions: unknownRequired.join('||'),
+        optionalUpsellIgnoredCount: String(optionalUpsells.length),
+        optionalUpsellIgnoredTraceCode: optionalUpsells.length ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : '',
         failedFields: 'unknownRequiredYesNo'
       };
     }
     const applied = [];
-    const traceCodes = [];
+    const traceCodes = optionalUpsells.length ? [ASC_OPTIONAL_RENTERS_UPSELL_TRACE] : [];
     let method = [];
     for (const item of ASC_KNOWN_PARTICIPANT_DEFAULTS) {
       const before = readAscKnownQuestionState(panelRoot, item.key);
@@ -5667,6 +5835,8 @@ copy(String((() => {
       applied,
       traceCodes,
       unknownRequiredQuestions: '',
+      optionalUpsellIgnoredCount: String(optionalUpsells.length),
+      optionalUpsellIgnoredTraceCode: optionalUpsells.length ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : '',
       failedFields: ''
     };
   };
@@ -5675,6 +5845,7 @@ copy(String((() => {
     const moving = readAscParticipantMovingViolationsState(panelRoot);
     const defensive = readAscKnownQuestionState(panelRoot, 'defensiveDriving');
     const unknownRequired = panelRoot ? ascUnknownRequiredYesNoQuestions(panelRoot) : [];
+    const optionalUpsells = panelRoot ? ascOptionalParticipantUpsellEntries(panelRoot) : [];
     const requiredWarning = panelRoot ? ascParticipantPanelRequiredWarningPresent(panelRoot) : false;
     const movingAmbiguous = moving.ambiguous === true || moving.ambiguous === '1';
     const defensiveAmbiguous = defensive.ambiguous === true || defensive.ambiguous === '1';
@@ -5688,15 +5859,29 @@ copy(String((() => {
       requiredMissing: requiredMissing ? '1' : '0',
       unknownRequiredYesNoCount: String(unknownRequired.length),
       unknownRequiredYesNoQuestions: unknownRequired.join('||'),
+      optionalUpsellIgnoredCount: String(optionalUpsells.length),
+      optionalUpsellIgnoredTraceCode: optionalUpsells.length ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : '',
       savePresent: saveButton ? '1' : '0',
       saveEnabled: saveEnabled ? '1' : '0',
       readyToSave: saveEnabled && !requiredMissing ? '1' : '0'
     };
   };
   const readAscNonDriverParticipantPanelReadiness = readAscParticipantPanelReadiness;
+  const ascPrimaryAddPanelFallbackMatch = (driverRows, panelText) => {
+    const text = normLower(panelText);
+    if (!advisorMoreDetailsTextPresent(text) || !/primary driver|primary applicant/.test(text))
+      return { row: null, status: 'not-primary-panel-evidence' };
+    const plausible = (driverRows || []).filter((row) => {
+      const evidence = normLower(`${safe(row.name)} ${safe(row.slug)} ${safe(row.rowKey)} ${safe(row.text)} ${safe(row.addButton && row.addButton.id)}`);
+      return !!row.addButton && !row.added && !row.nonDriverResolved && /primary/.test(evidence);
+    });
+    if (plausible.length === 1)
+      return { row: plausible[0], status: 'primary-add-button-fallback' };
+    return { row: null, status: plausible.length > 1 ? 'ambiguous-primary-add-button-fallback' : 'primary-add-button-missing' };
+  };
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
     const saveButton = findAscInlineParticipantSaveButton();
-    const panelPresent = advisorInlineParticipantPanelPresent();
+    const panelPresent = advisorInlineParticipantPanelPresent() || !!saveButton;
     const savePresent = !!(saveButton && visible(saveButton));
     const saveEnabled = !!(saveButton && visible(saveButton) && !isDisabledLike(saveButton));
     if (!panelPresent) {
@@ -5718,6 +5903,8 @@ copy(String((() => {
         activeParticipantDefensiveDrivingDefaultApplied: '0',
         activeParticipantUnknownRequiredYesNoCount: '0',
         activeParticipantUnknownRequiredYesNoQuestions: '',
+        activeParticipantOptionalUpsellIgnoredCount: '0',
+        activeParticipantOptionalUpsellIgnoredTraceCode: '',
         activeParticipantPanelRootStatus: '',
         activeParticipantPanelRootMethod: '',
         activeParticipantPanelRadioLikeControlCount: '0',
@@ -5747,6 +5934,8 @@ copy(String((() => {
         activeParticipantDefensiveDrivingDefaultApplied: '0',
         activeParticipantUnknownRequiredYesNoCount: '0',
         activeParticipantUnknownRequiredYesNoQuestions: '',
+        activeParticipantOptionalUpsellIgnoredCount: '0',
+        activeParticipantOptionalUpsellIgnoredTraceCode: '',
         activeParticipantPanelRootStatus: rootInfo.status,
         activeParticipantPanelRootMethod: rootInfo.method,
         activeParticipantPanelRadioLikeControlCount: '0',
@@ -5773,6 +5962,15 @@ copy(String((() => {
     } else if (matches.length > 1) {
       rowStatus = 'UNKNOWN';
       rowKey = 'ambiguous';
+    }
+    if (rowStatus === 'UNKNOWN' && rowKey !== 'ambiguous') {
+      const fallback = ascPrimaryAddPanelFallbackMatch(driverRows, panelText);
+      if (fallback.row) {
+        rowKey = safe(fallback.row.rowKey || fallback.row.slug);
+        rowStatus = 'FOUND_UNRESOLVED';
+      } else if (fallback.status === 'ambiguous-primary-add-button-fallback') {
+        rowKey = 'ambiguous';
+      }
     }
     const panelKind = rowStatus === 'NON_DRIVER'
       ? 'NON_DRIVER'
@@ -5802,6 +6000,8 @@ copy(String((() => {
       activeParticipantDefensiveDrivingDefaultApplied: '0',
       activeParticipantUnknownRequiredYesNoCount: readiness.unknownRequiredYesNoCount,
       activeParticipantUnknownRequiredYesNoQuestions: readiness.unknownRequiredYesNoQuestions,
+      activeParticipantOptionalUpsellIgnoredCount: readiness.optionalUpsellIgnoredCount,
+      activeParticipantOptionalUpsellIgnoredTraceCode: readiness.optionalUpsellIgnoredTraceCode,
       activeParticipantPanelRootStatus: rootInfo.status,
       activeParticipantPanelRootMethod: rootInfo.method,
       activeParticipantPanelRadioLikeControlCount: String(panelRadioLikeControls.length),
@@ -5859,6 +6059,8 @@ copy(String((() => {
           activeParticipantDefensiveDrivingDefaultApplied: '0',
           activeParticipantUnknownRequiredYesNoCount: '0',
           activeParticipantUnknownRequiredYesNoQuestions: '',
+          activeParticipantOptionalUpsellIgnoredCount: '0',
+          activeParticipantOptionalUpsellIgnoredTraceCode: '',
           activeParticipantPanelRootStatus: '',
           activeParticipantPanelRootMethod: '',
           activeParticipantPanelRadioLikeControlCount: '0',
@@ -5884,7 +6086,7 @@ copy(String((() => {
       const saveButton = findAscPageSaveContinueButton();
       const inlineSaveButton = findAscInlineParticipantSaveButton();
       const removeFields = readAscRemoveDriverFields();
-      const inlinePresent = advisorInlineParticipantPanelPresent();
+      const inlinePresent = advisorInlineParticipantPanelPresent() || !!inlineSaveButton;
       const activeParticipant = readAscActiveParticipantPanelFields(collectAscDriverRows());
       const unresolvedDriverCount = Number(driverStatus.unresolvedDriverCount || 0);
       const unresolvedVehicleCount = Number(vehicleStatus.unresolvedVehicleCount || 0);
@@ -5997,6 +6199,8 @@ copy(String((() => {
         activeParticipantDefensiveDrivingDefaultApplied: activeParticipant.activeParticipantDefensiveDrivingDefaultApplied,
         activeParticipantUnknownRequiredYesNoCount: activeParticipant.activeParticipantUnknownRequiredYesNoCount,
         activeParticipantUnknownRequiredYesNoQuestions: activeParticipant.activeParticipantUnknownRequiredYesNoQuestions,
+        activeParticipantOptionalUpsellIgnoredCount: activeParticipant.activeParticipantOptionalUpsellIgnoredCount,
+        activeParticipantOptionalUpsellIgnoredTraceCode: activeParticipant.activeParticipantOptionalUpsellIgnoredTraceCode,
         activeParticipantPanelRootStatus: activeParticipant.activeParticipantPanelRootStatus,
         activeParticipantPanelRootMethod: activeParticipant.activeParticipantPanelRootMethod,
         activeParticipantPanelRadioLikeControlCount: activeParticipant.activeParticipantPanelRadioLikeControlCount,
@@ -6060,6 +6264,8 @@ copy(String((() => {
         activeParticipantDefensiveDrivingDefaultApplied: '0',
         activeParticipantUnknownRequiredYesNoCount: '0',
         activeParticipantUnknownRequiredYesNoQuestions: '',
+        activeParticipantOptionalUpsellIgnoredCount: '0',
+        activeParticipantOptionalUpsellIgnoredTraceCode: '',
         activeParticipantPanelRootStatus: '',
         activeParticipantPanelRootMethod: '',
         activeParticipantPanelRadioLikeControlCount: '0',
@@ -9075,6 +9281,8 @@ copy(String((() => {
           defensiveDrivingDefaultApplied: '0',
           activeParticipantUnknownRequiredYesNoCount: before.unknownRequiredYesNoCount,
           activeParticipantUnknownRequiredYesNoQuestions: before.unknownRequiredYesNoQuestions,
+          activeParticipantOptionalUpsellIgnoredCount: before.optionalUpsellIgnoredCount,
+          activeParticipantOptionalUpsellIgnoredTraceCode: before.optionalUpsellIgnoredTraceCode,
           requiresClientVerification: '1',
           source: safe(args.source || ASC_PARTICIPANT_DEFAULT_SOURCE),
           failedFields: 'participantPanel'
@@ -9107,6 +9315,8 @@ copy(String((() => {
           defensiveDrivingDefaultApplied: '0',
           activeParticipantUnknownRequiredYesNoCount: before.unknownRequiredYesNoCount,
           activeParticipantUnknownRequiredYesNoQuestions: before.unknownRequiredYesNoQuestions,
+          activeParticipantOptionalUpsellIgnoredCount: before.optionalUpsellIgnoredCount,
+          activeParticipantOptionalUpsellIgnoredTraceCode: before.optionalUpsellIgnoredTraceCode,
           requiresClientVerification: '0',
           source: safe(args.source || ASC_PARTICIPANT_DEFAULT_SOURCE),
           failedFields: 'participantPanelKind'
@@ -9155,6 +9365,8 @@ copy(String((() => {
         defensiveDrivingDefaultApplied: defensiveDefaultApplied,
         activeParticipantUnknownRequiredYesNoCount: after.unknownRequiredYesNoCount,
         activeParticipantUnknownRequiredYesNoQuestions: after.unknownRequiredYesNoQuestions || defaults.unknownRequiredQuestions || '',
+        activeParticipantOptionalUpsellIgnoredCount: after.optionalUpsellIgnoredCount || defaults.optionalUpsellIgnoredCount || '0',
+        activeParticipantOptionalUpsellIgnoredTraceCode: after.optionalUpsellIgnoredTraceCode || defaults.optionalUpsellIgnoredTraceCode || '',
         knownDefaultsApplied: appliedDefaults.join('|'),
         requiresClientVerification: appliedDefaults.length ? '1' : '0',
         source: safe(args.source || ASC_PARTICIPANT_DEFAULT_SOURCE),
@@ -9607,7 +9819,7 @@ copy(String((() => {
         radios,
         radioLikeControls,
         activeParticipantPanel: {
-          present: advisorInlineParticipantPanelPresent(),
+          present: advisorInlineParticipantPanelPresent() || !!findAscInlineParticipantSaveButton(),
           rootStatus: activePanelInfo.status,
           rootMethod: activePanelInfo.method,
           radioLikeControls: activePanelControls
