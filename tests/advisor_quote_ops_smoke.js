@@ -5921,7 +5921,9 @@ function testAscDriversVehiclesSnapshotContracts() {
     'removeDriverReasonCode', 'driversAndVehiclesHeadingPresent', 'inlineParticipantSavePresent',
     'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'activeParticipantPanelPresent',
     'activeParticipantRowKey', 'activeParticipantRowKeyFallback', 'activeParticipantNameMasked', 'activeParticipantRowStatus',
-    'activeParticipantPanelKind', 'activeParticipantSavePresent', 'activeParticipantSaveEnabled',
+    'activeParticipantPanelKind', 'activeParticipantPanelFallbackStatus', 'activeParticipantPanelFallbackRejectedReason',
+    'primaryAddCandidateCount', 'addToQuoteCandidateCount', 'nonDriverCandidateCount', 'genericAddCandidateCount',
+    'activeParticipantSavePresent', 'activeParticipantSaveEnabled',
     'activeParticipantPanelRequiredMissing', 'activeParticipantRequiredMissing',
     'activeParticipantMovingViolationsQuestionPresent', 'activeParticipantMovingViolationsSelectedValue',
     'activeParticipantMovingViolationsDefaultApplied', 'activeParticipantDefensiveDrivingQuestionPresent',
@@ -6008,6 +6010,10 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowStatus, 'NON_DRIVER');
   assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowKey, 'test-found-driver-one');
   assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowKeyFallback, 'single-non-driver-row');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantPanelFallbackStatus, 'single-non-driver-row');
+  assert.strictEqual(nonDriverOwnershipFallback.nonDriverCandidateCount, '1');
+  assert.strictEqual(nonDriverOwnershipFallback.primaryAddCandidateCount, '0');
+  assert.strictEqual(nonDriverOwnershipFallback.addToQuoteCandidateCount, '0');
   assert.strictEqual(nonDriverOwnershipFallback.activeParticipantMovingViolationsQuestionPresent, '1');
   assert.strictEqual(nonDriverOwnershipFallback.activeParticipantPanelAction, 'COMPLETE_NON_DRIVER_PANEL');
   assert.ok(nonDriverOwnershipFallback.blockers.includes('ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD'));
@@ -6033,9 +6039,31 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(primaryOwnershipFallback.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
   assert.strictEqual(primaryOwnershipFallback.activeParticipantRowKey, 'test-primary-driver');
   assert.strictEqual(primaryOwnershipFallback.activeParticipantRowKeyFallback, 'single-primary-add-row');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantPanelFallbackStatus, 'single-primary-add-row');
+  assert.strictEqual(primaryOwnershipFallback.primaryAddCandidateCount, '0');
+  assert.strictEqual(primaryOwnershipFallback.addToQuoteCandidateCount, '1');
   assert.strictEqual(primaryOwnershipFallback.activeParticipantMovingViolationsQuestionPresent, '1');
   assert.strictEqual(primaryOwnershipFallback.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
   assert.strictEqual(primaryOwnershipFallback.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+
+  const primaryAddWithExtraAddToQuote = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-primary-add-extra-addtoquote-fallback')), requiredKeys);
+  assert.strictEqual(primaryAddWithExtraAddToQuote.result, 'OK');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantRowKey, 'test-primary-driver');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantRowKeyFallback, 'single-primary-add-row');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelFallbackStatus, 'single-primary-add-row');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelFallbackRejectedReason, '');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.primaryAddCandidateCount, '1');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.addToQuoteCandidateCount, '2');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.nonDriverCandidateCount, '0');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelReadyToSave, '0');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
+  assert.notStrictEqual(primaryAddWithExtraAddToQuote.activeParticipantPanelAction, 'FAIL_SAFE');
+  assert.strictEqual(primaryAddWithExtraAddToQuote.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+  assert.ok(primaryAddWithExtraAddToQuote.driverSummaries.includes('addButtonId=test-primary-driver-add'));
+  assert.ok(primaryAddWithExtraAddToQuote.driverSummaries.includes('rowActionKind=PRIMARY_ADD_ROW'));
+  assert.ok(primaryAddWithExtraAddToQuote.driverSummaries.includes('rowActionKind=EXTRA_ADD_TO_QUOTE_ROW'));
 
   const ambiguousNonDriverOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-inline-panel-ambiguous-ownership-fallback')), requiredKeys);
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.result, 'OK');
@@ -6043,8 +6071,22 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowStatus, 'UNKNOWN');
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowKey, '');
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowKeyFallback, '');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantPanelFallbackRejectedReason, 'ambiguous-non-driver-row-fallback');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.nonDriverCandidateCount, '2');
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantPanelAction, 'FAIL_SAFE');
   assert.strictEqual(ambiguousNonDriverOwnershipFallback.blockerCode, 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS');
+
+  const ambiguousPrimaryAddFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-two-primary-add-ambiguous')), requiredKeys);
+  assert.strictEqual(ambiguousPrimaryAddFallback.result, 'OK');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantPanelKind, 'UNKNOWN');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantRowStatus, 'UNKNOWN');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantRowKey, '');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantRowKeyFallback, '');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantPanelFallbackRejectedReason, 'ambiguous-primary-add-button-fallback');
+  assert.strictEqual(ambiguousPrimaryAddFallback.primaryAddCandidateCount, '2');
+  assert.strictEqual(ambiguousPrimaryAddFallback.addToQuoteCandidateCount, '0');
+  assert.strictEqual(ambiguousPrimaryAddFallback.activeParticipantPanelAction, 'FAIL_SAFE');
+  assert.strictEqual(ambiguousPrimaryAddFallback.blockerCode, 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS');
 
   const ambiguousAddOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-ambiguous-add-ownership-fallback')), requiredKeys);
   assert.strictEqual(ambiguousAddOwnershipFallback.result, 'OK');
@@ -6052,6 +6094,9 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowStatus, 'UNKNOWN');
   assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowKey, '');
   assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowKeyFallback, '');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantPanelFallbackRejectedReason, 'multiple-add-to-quote-no-primary-add-row');
+  assert.strictEqual(ambiguousAddOwnershipFallback.primaryAddCandidateCount, '0');
+  assert.strictEqual(ambiguousAddOwnershipFallback.addToQuoteCandidateCount, '2');
   assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantPanelAction, 'FAIL_SAFE');
   assert.strictEqual(ambiguousAddOwnershipFallback.blockerCode, 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS');
 
@@ -6082,6 +6127,7 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(unknownRequired.result, 'OK');
   assert.strictEqual(unknownRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
   assert.strictEqual(unknownRequired.activeParticipantUnknownRequiredYesNoCount, '1');
+  assert.strictEqual(unknownRequired.activeParticipantPanelAction, 'FAIL_SAFE');
   assert.strictEqual(unknownRequired.blockerCode, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN');
   assert.strictEqual(unknownRequired.nextRecommendedAction, '');
 

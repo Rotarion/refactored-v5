@@ -1649,6 +1649,17 @@ copy(String((() => {
       const slugSource = safe((addButton || removeButton || editButton || {}).id).replace(/-(addToQuote|add|remove|edit)$/i, '');
       const lowerText = normLower(text);
       const nonDriverResolved = /\b(?:non[-\s]?driver|removed|not\s+added|excluded)\b/.test(lowerText);
+      const addButtonId = safe(addButton && addButton.id);
+      const removeButtonId = safe(removeButton && removeButton.id);
+      const hasRemoveButton = !!removeButton;
+      const isPrimaryAddRow = /-add$/i.test(addButtonId) && !/-addToQuote$/i.test(addButtonId) && !hasRemoveButton;
+      const isAddToQuoteRow = /-addToQuote$/i.test(addButtonId);
+      const added = (!!editButton && !addButton) || lowerText.includes('added to quote') || lowerText.includes('added driver');
+      let rowActionKind = 'UNKNOWN';
+      if (added) rowActionKind = 'ADDED_ROW';
+      else if (nonDriverResolved) rowActionKind = 'NON_DRIVER_ROW';
+      else if (isPrimaryAddRow) rowActionKind = 'PRIMARY_ADD_ROW';
+      else if (isAddToQuoteRow) rowActionKind = 'EXTRA_ADD_TO_QUOTE_ROW';
       rows.push({
         row,
         text,
@@ -1657,9 +1668,15 @@ copy(String((() => {
         slug: slugSource,
         rowKey: slugSource,
         addButton,
+        addButtonId,
         removeButton,
+        removeButtonId,
         editButton,
-        added: (!!editButton && !addButton) || lowerText.includes('added to quote') || lowerText.includes('added driver'),
+        hasRemoveButton,
+        isPrimaryAddRow,
+        isAddToQuoteRow,
+        rowActionKind,
+        added,
         nonDriverResolved,
         unresolved: !nonDriverResolved && (!!addButton || !!removeButton)
       });
@@ -1685,7 +1702,7 @@ copy(String((() => {
       saveButtonEnabled: saveButton && !isDisabledLike(saveButton) ? '1' : '0',
       evidence: compact(evidence.join('|'), 240),
       missing: rows.length ? '' : 'driver-rows',
-      driverSummaries: compact(rows.map((row) => `${row.name}|rowKey=${row.rowKey}|age=${row.age}|added=${row.added ? 1 : 0}|nonDriver=${row.nonDriverResolved ? 1 : 0}|unresolved=${row.unresolved ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}|edit=${row.editButton ? 1 : 0}|addButtonId=${safe(row.addButton && row.addButton.id)}|removeButtonId=${safe(row.removeButton && row.removeButton.id)}|editButtonId=${safe(row.editButton && row.editButton.id)}`).join('||'), 720)
+      driverSummaries: compact(rows.map((row) => `${row.name}|rowKey=${row.rowKey}|age=${row.age}|added=${row.added ? 1 : 0}|nonDriver=${row.nonDriverResolved ? 1 : 0}|unresolved=${row.unresolved ? 1 : 0}|add=${row.addButton ? 1 : 0}|remove=${row.removeButton ? 1 : 0}|edit=${row.editButton ? 1 : 0}|addButtonId=${safe(row.addButtonId || row.addButton && row.addButton.id)}|removeButtonId=${safe(row.removeButtonId || row.removeButton && row.removeButton.id)}|editButtonId=${safe(row.editButton && row.editButton.id)}|hasRemoveButton=${row.hasRemoveButton ? 1 : 0}|isPrimaryAddRow=${row.isPrimaryAddRow ? 1 : 0}|isAddToQuoteRow=${row.isAddToQuoteRow ? 1 : 0}|rowActionKind=${safe(row.rowActionKind)}`).join('||'), 900)
     };
   };
   const parsePersonListArg = (value) => {
@@ -6145,9 +6162,28 @@ copy(String((() => {
   });
   const ascPanelOwnershipCandidates = (driverRows) => {
     const rows = driverRows || [];
+    const nonDriver = rows.filter((row) => row.nonDriverResolved && !row.added);
+    const added = rows.filter((row) => row.added);
+    const primaryAdd = rows.filter((row) => row.isPrimaryAddRow && !row.added && !row.nonDriverResolved);
+    const addToQuote = rows.filter((row) => row.isAddToQuoteRow && !row.added && !row.nonDriverResolved);
+    const genericAdd = rows.filter((row) => !!row.addButton && !row.added && !row.nonDriverResolved && !row.isPrimaryAddRow && !row.isAddToQuoteRow);
     return {
-      nonDriver: rows.filter((row) => row.nonDriverResolved && !row.added),
-      add: rows.filter((row) => !!row.addButton && !row.added && !row.nonDriverResolved)
+      nonDriver,
+      primaryAdd,
+      addToQuote,
+      added,
+      genericAdd,
+      unknown: rows.filter((row) => safe(row.rowActionKind) === 'UNKNOWN'),
+      add: primaryAdd.concat(addToQuote, genericAdd)
+    };
+  };
+  const ascPanelOwnershipCandidateCounts = (driverRows) => {
+    const candidates = ascPanelOwnershipCandidates(driverRows);
+    return {
+      primaryAddCandidateCount: String(candidates.primaryAdd.length),
+      addToQuoteCandidateCount: String(candidates.addToQuote.length),
+      nonDriverCandidateCount: String(candidates.nonDriver.length),
+      genericAddCandidateCount: String(candidates.genericAdd.length)
     };
   };
   const ascNonDriverPanelFallbackMatch = (driverRows, panelText, readiness) => {
@@ -6156,12 +6192,14 @@ copy(String((() => {
       return { row: null, status: 'not-participant-panel-evidence' };
     if (!ascParticipantPanelHasKnownQuestionEvidence(readiness))
       return { row: null, status: 'known-question-evidence-missing' };
+    if (Number(readiness && readiness.unknownRequiredYesNoCount || 0) > 0)
+      return { row: null, status: 'unknown-required-yes-no-present' };
     if (ascPanelExplicitUnknownIdentity(panelText))
       return { row: null, status: 'explicit-unknown-panel-identity' };
     const candidates = ascPanelOwnershipCandidates(driverRows);
     if (candidates.nonDriver.length !== 1)
       return { row: null, status: candidates.nonDriver.length > 1 ? 'ambiguous-non-driver-row-fallback' : 'non-driver-row-missing' };
-    if (candidates.add.length > 0)
+    if (candidates.primaryAdd.length > 0 || candidates.addToQuote.length > 0 || candidates.genericAdd.length > 0)
       return { row: null, status: 'ambiguous-panel-owner-fallback' };
     const row = candidates.nonDriver[0];
     if (ascPanelMatchesOtherDriver(panelText, driverRows, row))
@@ -6174,19 +6212,33 @@ copy(String((() => {
       return { row: null, status: 'not-primary-panel-evidence' };
     if (!ascParticipantPanelHasKnownQuestionEvidence(readiness))
       return { row: null, status: 'known-question-evidence-missing' };
+    if (Number(readiness && readiness.unknownRequiredYesNoCount || 0) > 0)
+      return { row: null, status: 'unknown-required-yes-no-present' };
     if (ascPanelExplicitUnknownIdentity(panelText))
       return { row: null, status: 'explicit-unknown-panel-identity' };
     const candidates = ascPanelOwnershipCandidates(driverRows);
     if (candidates.nonDriver.length > 0)
       return { row: null, status: 'ambiguous-panel-owner-fallback' };
-    if (candidates.add.length !== 1)
+    if (candidates.primaryAdd.length > 1)
       return { row: null, status: 'ambiguous-primary-add-button-fallback' };
-    const row = candidates.add[0];
+    if (candidates.genericAdd.length > 0)
+      return { row: null, status: 'ambiguous-generic-add-button-fallback' };
+    let row = null;
+    if (candidates.primaryAdd.length === 1) {
+      row = candidates.primaryAdd[0];
+    } else if (candidates.addToQuote.length === 1) {
+      row = candidates.addToQuote[0];
+    } else if (candidates.addToQuote.length > 1) {
+      return { row: null, status: 'multiple-add-to-quote-no-primary-add-row' };
+    } else {
+      return { row: null, status: 'primary-add-row-missing' };
+    }
     if (ascPanelMatchesOtherDriver(panelText, driverRows, row))
       return { row: null, status: 'conflicting-panel-identity' };
     return { row, status: 'single-primary-add-row' };
   };
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
+    const ownershipCounts = ascPanelOwnershipCandidateCounts(driverRows);
     const saveButton = findAscInlineParticipantSaveButton();
     const panelPresent = advisorInlineParticipantPanelPresent() || !!saveButton;
     const savePresent = !!(saveButton && visible(saveButton));
@@ -6199,6 +6251,12 @@ copy(String((() => {
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
         activeParticipantPanelKind: '',
+        activeParticipantPanelFallbackStatus: '',
+        activeParticipantPanelFallbackRejectedReason: '',
+        primaryAddCandidateCount: ownershipCounts.primaryAddCandidateCount,
+        addToQuoteCandidateCount: ownershipCounts.addToQuoteCandidateCount,
+        nonDriverCandidateCount: ownershipCounts.nonDriverCandidateCount,
+        genericAddCandidateCount: ownershipCounts.genericAddCandidateCount,
         activeParticipantSavePresent: savePresent ? '1' : '0',
         activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
         activeParticipantPanelRequiredMissing: '0',
@@ -6231,6 +6289,12 @@ copy(String((() => {
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: 'UNKNOWN',
         activeParticipantPanelKind: 'UNKNOWN',
+        activeParticipantPanelFallbackStatus: '',
+        activeParticipantPanelFallbackRejectedReason: 'active-panel-root-not-ok',
+        primaryAddCandidateCount: ownershipCounts.primaryAddCandidateCount,
+        addToQuoteCandidateCount: ownershipCounts.addToQuoteCandidateCount,
+        nonDriverCandidateCount: ownershipCounts.nonDriverCandidateCount,
+        genericAddCandidateCount: ownershipCounts.genericAddCandidateCount,
         activeParticipantSavePresent: savePresent ? '1' : '0',
         activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
         activeParticipantPanelRequiredMissing: '1',
@@ -6263,6 +6327,8 @@ copy(String((() => {
     let rowStatus = 'UNKNOWN';
     let rowKey = '';
     let rowKeyFallback = '';
+    let fallbackStatus = '';
+    let fallbackRejectedReason = '';
     if (matches.length === 1) {
       const row = matches[0].row;
       rowKey = safe(row.rowKey) || `row-${matches[0].index + 1}`;
@@ -6272,6 +6338,7 @@ copy(String((() => {
     } else if (matches.length > 1) {
       rowStatus = 'UNKNOWN';
       rowKey = 'ambiguous';
+      fallbackRejectedReason = 'ambiguous-panel-identity-match';
     }
     if (rowStatus === 'UNKNOWN' && rowKey !== 'ambiguous') {
       const nonDriverFallback = ascNonDriverPanelFallbackMatch(driverRows, panelText, readiness);
@@ -6279,24 +6346,33 @@ copy(String((() => {
         rowKey = safe(nonDriverFallback.row.rowKey || nonDriverFallback.row.slug);
         rowStatus = 'NON_DRIVER';
         rowKeyFallback = 'single-non-driver-row';
+        fallbackStatus = nonDriverFallback.status;
       } else {
         const primaryFallback = ascPrimaryAddPanelFallbackMatch(driverRows, panelText, readiness);
         if (primaryFallback.row) {
           rowKey = safe(primaryFallback.row.rowKey || primaryFallback.row.slug);
           rowStatus = 'FOUND_UNRESOLVED';
           rowKeyFallback = 'single-primary-add-row';
+          fallbackStatus = primaryFallback.status;
+        } else {
+          fallbackRejectedReason = (nonDriverFallback.status && nonDriverFallback.status !== 'non-driver-row-missing')
+            ? nonDriverFallback.status
+            : (primaryFallback.status || nonDriverFallback.status || 'panel-owner-fallback-unmatched');
         }
       }
     }
     const panelKind = rowStatus === 'NON_DRIVER'
       ? 'NON_DRIVER'
       : ((rowStatus === 'ADDED' || rowStatus === 'FOUND_UNRESOLVED') ? 'PRIMARY_OR_ADDING_DRIVER' : 'UNKNOWN');
+    const unknownRequiredPresent = Number(readiness.unknownRequiredYesNoCount || 0) > 0;
     let action = 'FAIL_SAFE';
-    if (rowStatus === 'NON_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_NON_DRIVER_PANEL';
-    else if (rowStatus === 'NON_DRIVER' && saveEnabled) action = 'COMPLETE_NON_DRIVER_PANEL';
-    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_PRIMARY_DRIVER_PANEL';
-    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled) action = 'COMPLETE_PRIMARY_DRIVER_PANEL';
-    else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER') action = 'FILL_ADDED_DRIVER_PANEL';
+    if (!unknownRequiredPresent) {
+      if (rowStatus === 'NON_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_NON_DRIVER_PANEL';
+      else if (rowStatus === 'NON_DRIVER' && saveEnabled) action = 'COMPLETE_NON_DRIVER_PANEL';
+      else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled && readiness.readyToSave === '1') action = 'SAVE_PRIMARY_DRIVER_PANEL';
+      else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER' && saveEnabled) action = 'COMPLETE_PRIMARY_DRIVER_PANEL';
+      else if (panelKind === 'PRIMARY_OR_ADDING_DRIVER') action = 'FILL_ADDED_DRIVER_PANEL';
+    }
     const panelRadioLikeControls = ascPanelRadioLikeControls(root);
     return {
       activeParticipantPanelPresent: '1',
@@ -6305,6 +6381,12 @@ copy(String((() => {
       activeParticipantNameMasked: rowKey ? '[REDACTED]' : '',
       activeParticipantRowStatus: rowStatus,
       activeParticipantPanelKind: panelKind,
+      activeParticipantPanelFallbackStatus: fallbackStatus,
+      activeParticipantPanelFallbackRejectedReason: fallbackRejectedReason,
+      primaryAddCandidateCount: ownershipCounts.primaryAddCandidateCount,
+      addToQuoteCandidateCount: ownershipCounts.addToQuoteCandidateCount,
+      nonDriverCandidateCount: ownershipCounts.nonDriverCandidateCount,
+      genericAddCandidateCount: ownershipCounts.genericAddCandidateCount,
       activeParticipantSavePresent: savePresent ? '1' : '0',
       activeParticipantSaveEnabled: saveEnabled ? '1' : '0',
       activeParticipantPanelRequiredMissing: readiness.requiredMissing,
@@ -6365,6 +6447,12 @@ copy(String((() => {
           activeParticipantNameMasked: '',
           activeParticipantRowStatus: '',
           activeParticipantPanelKind: '',
+          activeParticipantPanelFallbackStatus: '',
+          activeParticipantPanelFallbackRejectedReason: '',
+          primaryAddCandidateCount: '0',
+          addToQuoteCandidateCount: '0',
+          nonDriverCandidateCount: '0',
+          genericAddCandidateCount: '0',
           activeParticipantSavePresent: '0',
           activeParticipantSaveEnabled: '0',
           activeParticipantPanelRequiredMissing: '0',
@@ -6506,6 +6594,12 @@ copy(String((() => {
         activeParticipantNameMasked: activeParticipant.activeParticipantNameMasked,
         activeParticipantRowStatus: activeParticipant.activeParticipantRowStatus,
         activeParticipantPanelKind: activeParticipant.activeParticipantPanelKind,
+        activeParticipantPanelFallbackStatus: activeParticipant.activeParticipantPanelFallbackStatus,
+        activeParticipantPanelFallbackRejectedReason: activeParticipant.activeParticipantPanelFallbackRejectedReason,
+        primaryAddCandidateCount: activeParticipant.primaryAddCandidateCount,
+        addToQuoteCandidateCount: activeParticipant.addToQuoteCandidateCount,
+        nonDriverCandidateCount: activeParticipant.nonDriverCandidateCount,
+        genericAddCandidateCount: activeParticipant.genericAddCandidateCount,
         activeParticipantSavePresent: activeParticipant.activeParticipantSavePresent,
         activeParticipantSaveEnabled: activeParticipant.activeParticipantSaveEnabled,
         activeParticipantPanelRequiredMissing: activeParticipant.activeParticipantPanelRequiredMissing,
@@ -6572,6 +6666,12 @@ copy(String((() => {
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
         activeParticipantPanelKind: '',
+        activeParticipantPanelFallbackStatus: '',
+        activeParticipantPanelFallbackRejectedReason: '',
+        primaryAddCandidateCount: '0',
+        addToQuoteCandidateCount: '0',
+        nonDriverCandidateCount: '0',
+        genericAddCandidateCount: '0',
         activeParticipantSavePresent: '0',
         activeParticipantSaveEnabled: '0',
         activeParticipantPanelRequiredMissing: '0',

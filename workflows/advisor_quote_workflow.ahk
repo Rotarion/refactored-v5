@@ -680,8 +680,15 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
         . ", inlineParticipantSaveEnabled=" AdvisorQuoteStatusValue(status, "inlineParticipantSaveEnabled")
         . ", activeParticipantPanelPresent=" AdvisorQuoteStatusValue(status, "activeParticipantPanelPresent")
         . ", activeParticipantRowKey=" AdvisorQuoteStatusValue(status, "activeParticipantRowKey")
+        . ", activeParticipantRowKeyFallback=" AdvisorQuoteStatusValue(status, "activeParticipantRowKeyFallback")
         . ", activeParticipantRowStatus=" AdvisorQuoteStatusValue(status, "activeParticipantRowStatus")
         . ", activeParticipantPanelKind=" AdvisorQuoteStatusValue(status, "activeParticipantPanelKind")
+        . ", activeParticipantPanelFallbackStatus=" AdvisorQuoteStatusValue(status, "activeParticipantPanelFallbackStatus")
+        . ", activeParticipantPanelFallbackRejectedReason=" AdvisorQuoteStatusValue(status, "activeParticipantPanelFallbackRejectedReason")
+        . ", primaryAddCandidateCount=" AdvisorQuoteStatusValue(status, "primaryAddCandidateCount")
+        . ", addToQuoteCandidateCount=" AdvisorQuoteStatusValue(status, "addToQuoteCandidateCount")
+        . ", nonDriverCandidateCount=" AdvisorQuoteStatusValue(status, "nonDriverCandidateCount")
+        . ", genericAddCandidateCount=" AdvisorQuoteStatusValue(status, "genericAddCandidateCount")
         . ", activeParticipantSavePresent=" AdvisorQuoteStatusValue(status, "activeParticipantSavePresent")
         . ", activeParticipantSaveEnabled=" AdvisorQuoteStatusValue(status, "activeParticipantSaveEnabled")
         . ", activeParticipantPanelRequiredMissing=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRequiredMissing")
@@ -2049,6 +2056,12 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
         failureReason := "ASC_ACTIVE_PANEL_ROOT_TOO_BROAD: " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-panel-root-too-broad")
         AdvisorQuoteClearAscPanelActionContext("active-panel-root-too-broad")
+        return false
+    }
+    if (AdvisorQuoteStatusInteger(beforeSnapshot, "activeParticipantUnknownRequiredYesNoCount") > 0) {
+        failureReason := "ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN: " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-unknown-required-yes-no")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-unknown-required-yes-no")
         return false
     }
     if (contextPanelKind != "" && panelKind != "UNKNOWN" && panelKind != contextPanelKind) {
