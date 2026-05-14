@@ -1848,6 +1848,25 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-primary-inline-panel-moving-violations-label-only-click-works": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Primary driver Add Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Primary driver Age 40 Add", "children": [
+        { "tag": "button", "id": "primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Primary driver Let's get some more details", "children": [
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+          { "tag": "label", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "label", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Found Driver One Non-driver Let's get some more details Have you had any moving violations in the past five years? Yes No Additional Yes No Please make a selection. Save and Continue",

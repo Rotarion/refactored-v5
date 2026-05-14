@@ -2490,8 +2490,11 @@ function testReturnShapeContracts() {
     source: 'PROVISIONAL_WORKFLOW_DEFAULT'
   }, associatedInputScenario.doc, associatedInputScenario.href), [
     'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'questionContext',
     'clickTargetTag', 'clickTargetClass', 'clickTargetId', 'clickTargetRole',
     'clickTargetAriaChecked', 'clickTargetAriaPressed', 'clickTargetDataState',
+    'clickTargetAssociatedInputId', 'clickTargetAssociatedInputCheckedBefore', 'clickTargetAssociatedInputCheckedAfter',
+    'readbackSelectedValue', 'readbackSelectedRaw', 'dispatchedEvents',
     'readbackEvidence', 'knownDefaultsApplied', 'failedFields'
   ]);
   assert.strictEqual(associatedInputResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
@@ -2499,6 +2502,7 @@ function testReturnShapeContracts() {
   assert.strictEqual(associatedInputResult.traceCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED');
   assert.strictEqual(associatedInputResult.movingViolationsSelectedValue, 'NO');
   assert.strictEqual(associatedInputResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(associatedInputResult.questionContext, 'movingViolations');
   assert.strictEqual(associatedInputResult.clickTargetTag, 'INPUT');
   assert.strictEqual(associatedInputResult.clickTargetClass, 'mesh-hidden-input');
   assert.strictEqual(associatedInputResult.clickTargetId, 'moving-violations-no-input');
@@ -2506,11 +2510,49 @@ function testReturnShapeContracts() {
   assert.strictEqual(associatedInputResult.clickTargetAriaChecked, '');
   assert.strictEqual(associatedInputResult.clickTargetAriaPressed, '');
   assert.strictEqual(associatedInputResult.clickTargetDataState, '');
+  assert.strictEqual(associatedInputResult.clickTargetAssociatedInputId, 'moving-violations-no-input');
+  assert.strictEqual(associatedInputResult.clickTargetAssociatedInputCheckedBefore, '0');
+  assert.strictEqual(associatedInputResult.clickTargetAssociatedInputCheckedAfter, '1');
+  assert.strictEqual(associatedInputResult.readbackSelectedValue, 'NO');
+  assert.ok(associatedInputResult.readbackSelectedRaw.includes('stateSelectedValue=NO'));
+  assert.ok(associatedInputResult.dispatchedEvents.includes('input'));
+  assert.ok(associatedInputResult.dispatchedEvents.includes('change'));
   assert.ok(associatedInputResult.readbackEvidence.includes('selectedValue=NO'));
   assert.strictEqual(associatedInputResult.knownDefaultsApplied, 'movingViolations');
   assert.strictEqual(associatedInputResult.failedFields, '');
   assert.strictEqual(associatedInputScenario.doc.getElementById('primary-driver-addToQuote').clickCalls, 0);
   assert.strictEqual(associatedInputScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
+  const labelOnlyScenario = fixtureScenario('snapshot-asc-primary-inline-panel-moving-violations-label-only-click-works');
+  const labelOnlyResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    panelKind: 'PRIMARY_OR_ADDING_DRIVER',
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, labelOnlyScenario.doc, labelOnlyScenario.href), [
+    'result', 'method', 'traceCode', 'questionContext',
+    'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'clickTargetTag', 'clickTargetRole', 'clickTargetAriaChecked',
+    'clickTargetAssociatedInputId', 'readbackSelectedValue', 'dispatchedEvents',
+    'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(labelOnlyResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.ok(labelOnlyResult.method.includes('scoped-visible-target-click'));
+  assert.strictEqual(labelOnlyResult.traceCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED');
+  assert.strictEqual(labelOnlyResult.questionContext, 'movingViolations');
+  assert.strictEqual(labelOnlyResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(labelOnlyResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(labelOnlyResult.clickTargetTag, 'LABEL');
+  assert.strictEqual(labelOnlyResult.clickTargetRole, 'radio');
+  assert.strictEqual(labelOnlyResult.clickTargetAriaChecked, 'true');
+  assert.strictEqual(labelOnlyResult.clickTargetAssociatedInputId, '');
+  assert.strictEqual(labelOnlyResult.readbackSelectedValue, 'NO');
+  assert.ok(labelOnlyResult.dispatchedEvents.includes('pointerdown'));
+  assert.ok(labelOnlyResult.dispatchedEvents.includes('mousedown'));
+  assert.ok(labelOnlyResult.dispatchedEvents.includes('click'));
+  assert.ok(labelOnlyResult.dispatchedEvents.includes('native-click'));
+  assert.strictEqual(labelOnlyResult.knownDefaultsApplied, 'movingViolations');
+  assert.strictEqual(labelOnlyResult.failedFields, '');
+  assert.strictEqual(labelOnlyScenario.doc.getElementById('primary-driver-addToQuote').clickCalls, 0);
+  assert.strictEqual(labelOnlyScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
 
   const scopedKnownScenario = fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped');
   const scopedKnownResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
@@ -2525,6 +2567,7 @@ function testReturnShapeContracts() {
     'activeParticipantRequiredMissing', 'activeParticipantPanelReadyToSave',
     'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
     'defensiveDrivingSelectedValue', 'defensiveDrivingDefaultApplied',
+    'questionContext', 'readbackSelectedValue', 'dispatchedEvents',
     'knownDefaultsApplied', 'requiresClientVerification', 'source', 'failedFields'
   ]);
   assert.strictEqual(scopedKnownResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
@@ -2539,6 +2582,9 @@ function testReturnShapeContracts() {
   assert.strictEqual(scopedKnownResult.movingViolationsDefaultApplied, '1');
   assert.strictEqual(scopedKnownResult.defensiveDrivingSelectedValue, 'NO');
   assert.strictEqual(scopedKnownResult.defensiveDrivingDefaultApplied, '1');
+  assert.strictEqual(scopedKnownResult.questionContext, 'defensiveDriving');
+  assert.strictEqual(scopedKnownResult.readbackSelectedValue, 'NO');
+  assert.ok(scopedKnownResult.dispatchedEvents.includes('native-click'));
   assert.strictEqual(scopedKnownResult.knownDefaultsApplied, 'movingViolations|defensiveDriving');
   assert.ok(scopedKnownResult.traceCodes.includes('ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED'));
   assert.ok(scopedKnownResult.traceCodes.includes('ASC_PARTICIPANT_DEFENSIVE_DRIVING_NO_SELECTED'));
@@ -2703,14 +2749,18 @@ function testReturnShapeContracts() {
     source: 'PROVISIONAL_WORKFLOW_DEFAULT'
   }, readbackFailedScenario.doc, readbackFailedScenario.href), [
     'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'questionContext',
     'clickTargetTag', 'clickTargetClass', 'clickTargetId', 'clickTargetRole',
     'clickTargetAriaChecked', 'clickTargetAriaPressed', 'clickTargetDataState',
+    'clickTargetAssociatedInputId', 'clickTargetAssociatedInputCheckedBefore', 'clickTargetAssociatedInputCheckedAfter',
+    'readbackSelectedValue', 'readbackSelectedRaw', 'dispatchedEvents',
     'readbackEvidence', 'knownDefaultsApplied', 'failedFields'
   ]);
   assert.strictEqual(readbackFailedResult.result, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED');
   assert.strictEqual(readbackFailedResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED');
   assert.strictEqual(readbackFailedResult.movingViolationsSelectedValue, '');
   assert.strictEqual(readbackFailedResult.movingViolationsDefaultApplied, '0');
+  assert.strictEqual(readbackFailedResult.questionContext, 'movingViolations');
   assert.strictEqual(readbackFailedResult.clickTargetTag, 'LABEL');
   assert.strictEqual(readbackFailedResult.clickTargetClass, '');
   assert.strictEqual(readbackFailedResult.clickTargetId, '');
@@ -2718,6 +2768,12 @@ function testReturnShapeContracts() {
   assert.strictEqual(readbackFailedResult.clickTargetAriaChecked, '');
   assert.strictEqual(readbackFailedResult.clickTargetAriaPressed, '');
   assert.strictEqual(readbackFailedResult.clickTargetDataState, '');
+  assert.strictEqual(readbackFailedResult.clickTargetAssociatedInputId, '');
+  assert.strictEqual(readbackFailedResult.clickTargetAssociatedInputCheckedBefore, '');
+  assert.strictEqual(readbackFailedResult.clickTargetAssociatedInputCheckedAfter, '');
+  assert.strictEqual(readbackFailedResult.readbackSelectedValue, '');
+  assert.ok(readbackFailedResult.readbackSelectedRaw.includes('stateSelectedValue='));
+  assert.ok(readbackFailedResult.dispatchedEvents.includes('click'));
   assert.ok(readbackFailedResult.readbackEvidence.includes('selectedValue='));
   assert.strictEqual(readbackFailedResult.knownDefaultsApplied, '');
   assert.strictEqual(readbackFailedResult.failedFields, 'movingViolations');

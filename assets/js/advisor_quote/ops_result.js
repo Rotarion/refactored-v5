@@ -5734,23 +5734,33 @@ copy(String((() => {
       return ascKnownQuestionContextEligible(getText(item), block.item);
     });
   };
+  const ascAssociatedControlInsideBlock = (control, label, block, root) => {
+    if (!control || !root || !root.contains || !root.contains(control)) return false;
+    if (!block || !block.present) return true;
+    if (ascBlockContainsNode(block, control)) return true;
+    let current = label && label.parentElement;
+    for (let depth = 0; depth < 4 && current && current !== root && root.contains(current); depth += 1) {
+      if (current.contains(control) && ascBlockContainsNode(block, current)) return true;
+      current = current.parentElement;
+    }
+    return false;
+  };
   const ascAssociatedControlForLabel = (node, block, root) => {
     if (!node || safe(node.tagName).toUpperCase() !== 'LABEL') return null;
     const forId = safe(node.getAttribute && node.getAttribute('for'));
     if (forId) {
       const input = document.getElementById(forId);
-      if (input && root && root.contains && root.contains(input))
+      if (ascAssociatedControlInsideBlock(input, node, block, root))
         return input;
     }
     const nested = node.querySelector && node.querySelector('input[type=radio],input[type=checkbox],[role=radio],[role=button]');
-    if (nested && root && root.contains && root.contains(nested)) return nested;
+    if (ascAssociatedControlInsideBlock(nested, node, block, root)) return nested;
     const labelValue = normalizeYesNoValue(getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')));
     if (!labelValue || !root || !root.querySelectorAll) return null;
     const localScope = node.parentElement || root;
     const nearby = Array.from((localScope.querySelectorAll ? localScope : root).querySelectorAll('input[type=radio],input[type=checkbox],[role=radio],[role=button]'))
-      .filter((candidate) => candidate !== node && root.contains(candidate))
+      .filter((candidate) => candidate !== node && ascAssociatedControlInsideBlock(candidate, node, block, root))
       .filter((candidate) => {
-        if (block && block.present && !ascBlockContainsNode(block, candidate)) return false;
         const evidence = `${safe(candidate.value)} ${safe(candidate.id)} ${safe(candidate.name)} ${readInputLabel(candidate)} ${safe(candidate.getAttribute && candidate.getAttribute('aria-label'))}`;
         return normalizeYesNoValue(evidence) === labelValue;
       });
@@ -5765,6 +5775,17 @@ copy(String((() => {
     clickTargetAriaPressed: safe(node && node.getAttribute && node.getAttribute('aria-pressed')),
     clickTargetDataState: safe(node && node.getAttribute && node.getAttribute('data-state'))
   });
+  const ascAssociatedInputChecked = (input) => input && /^(INPUT)$/i.test(safe(input.tagName)) && /^(radio|checkbox)$/i.test(safe(input.type))
+    ? (input.checked ? '1' : '0')
+    : '';
+  const ascQuestionSelectedRaw = (candidate, state) => compact([
+    `nodeSelected=${isSelectedNode(candidate && candidate.node) ? '1' : '0'}`,
+    `targetSelected=${isSelectedNode(candidate && candidate.target) ? '1' : '0'}`,
+    `controlChecked=${ascAssociatedInputChecked(candidate && candidate.control)}`,
+    `controlSelected=${isSelectedNode(candidate && candidate.control) ? '1' : '0'}`,
+    `stateSelected=${safe(state && state.selected)}`,
+    `stateSelectedValue=${safe(state && state.selectedValue)}`
+  ].join(';'), 360);
   const ascQuestionReadbackEvidence = (state) => compact([
     `selected=${safe(state && state.selected)}`,
     `selectedValue=${safe(state && state.selectedValue)}`,
@@ -5775,6 +5796,65 @@ copy(String((() => {
     `noCandidateCount=${safe(state && state.noCandidateCount)}`,
     `warningPresent=${safe(state && state.warningPresent)}`
   ].join(';'), 360);
+  const ascDispatchRecordedEvent = (target, type, Ctor, init, dispatched) => {
+    if (!target || typeof target.dispatchEvent !== 'function') return false;
+    try {
+      target.dispatchEvent(new Ctor(type, Object.assign({ bubbles: true, cancelable: true, composed: true }, init || {})));
+      dispatched.push(type);
+      return true;
+    } catch {
+      try {
+        target.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+        dispatched.push(type);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+  const ascSetNativeChecked = (input, checked) => {
+    if (!input || !/^(INPUT)$/i.test(safe(input.tagName)) || !/^(radio|checkbox)$/i.test(safe(input.type))) return false;
+    try {
+      const proto = globalThis.HTMLInputElement && globalThis.HTMLInputElement.prototype;
+      const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'checked') : null;
+      if (descriptor && typeof descriptor.set === 'function') descriptor.set.call(input, checked);
+      else input.checked = checked;
+      return true;
+    } catch {
+      try {
+        input.checked = checked;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+  const ascDispatchMeshSelectSequence = (target, associatedInput = null) => {
+    const dispatched = [];
+    if (target) {
+      try { target.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
+      try { target.focus({ preventScroll: true }); dispatched.push('focus'); } catch {
+        try { target.focus(); dispatched.push('focus'); } catch {}
+      }
+      const pointerInit = { button: 0, buttons: 1 };
+      if (typeof PointerEvent !== 'undefined') {
+        ascDispatchRecordedEvent(target, 'pointerdown', PointerEvent, pointerInit, dispatched);
+        ascDispatchRecordedEvent(target, 'pointerup', PointerEvent, pointerInit, dispatched);
+      }
+      if (typeof MouseEvent !== 'undefined') {
+        ascDispatchRecordedEvent(target, 'mousedown', MouseEvent, pointerInit, dispatched);
+        ascDispatchRecordedEvent(target, 'mouseup', MouseEvent, pointerInit, dispatched);
+        ascDispatchRecordedEvent(target, 'click', MouseEvent, { button: 0, buttons: 0 }, dispatched);
+      }
+      try { target.click(); dispatched.push('native-click'); } catch {}
+    }
+    if (associatedInput && /^(INPUT)$/i.test(safe(associatedInput.tagName))) {
+      ascSetNativeChecked(associatedInput, true);
+      try { associatedInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); dispatched.push('input'); } catch {}
+      try { associatedInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); dispatched.push('change'); } catch {}
+    }
+    return dispatched;
+  };
   const ascClickParticipantQuestionCandidate = (candidate, block, root) => {
     const control = candidate && candidate.control;
     const visibleTarget = candidate && candidate.target;
@@ -5782,28 +5862,30 @@ copy(String((() => {
     let clickTarget = visibleTarget || node || control;
     let method = 'scoped-question-target-click';
     let clicked = false;
+    let associatedInput = null;
+    const associatedInputBefore = ascAssociatedInputChecked(control);
+    let dispatchedEvents = [];
     if (control && control !== node && root && root.contains && root.contains(control)
       && /^(INPUT)$/i.test(safe(control.tagName)) && /^(radio|checkbox)$/i.test(safe(control.type))
       && !control.disabled && !isAriaDisabled(control)) {
       clickTarget = control;
+      associatedInput = control;
       method = visible(control) ? 'associated-input-click' : 'associated-input-direct-click';
-      try { control.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
-      try { control.focus({ preventScroll: true }); } catch { try { control.focus(); } catch {} }
-      try {
-        control.click();
-        clicked = true;
-      } catch {
-        clicked = false;
-      }
-      if (clicked) {
-        try { control.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
-        try { control.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch {}
-      }
+      dispatchedEvents = ascDispatchMeshSelectSequence(control, control);
+      clicked = dispatchedEvents.length > 0;
     } else if (clickTarget && block && ascBlockContainsNode(block, clickTarget)) {
       method = 'scoped-visible-target-click';
-      clicked = clickEl(clickTarget, { preClickSequence: true });
+      dispatchedEvents = ascDispatchMeshSelectSequence(clickTarget, null);
+      clicked = dispatchedEvents.length > 0;
     }
-    return Object.assign({ clicked, clickMethod: method }, ascClickTargetEvidence(clickTarget));
+    return Object.assign({
+      clicked,
+      clickMethod: method,
+      clickTargetAssociatedInputId: safe(associatedInput && associatedInput.id),
+      clickTargetAssociatedInputCheckedBefore: associatedInputBefore,
+      clickTargetAssociatedInputCheckedAfter: ascAssociatedInputChecked(associatedInput || control),
+      dispatchedEvents: dispatchedEvents.join('|')
+    }, ascClickTargetEvidence(clickTarget));
   };
   const ascQuestionBlockAnswerCandidates = (block, answerText, root) => {
     if (!block || !block.present) return [];
@@ -6125,9 +6207,11 @@ copy(String((() => {
       return {
         ok: false,
         method: noCandidates.length ? `ambiguous-${methodPrefix}-no-target` : `${methodPrefix}-no-target-missing`,
-        traceCode: 'ASC_PARTICIPANT_QUESTION_BLOCK_AMBIGUOUS',
+        traceCode: noCandidates.length ? 'ASC_PARTICIPANT_QUESTION_BLOCK_AMBIGUOUS' : 'ASC_PARTICIPANT_KNOWN_QUESTION_NO_TARGET_UNRESOLVED',
         before,
-        after: readAscKnownQuestionState(panelRoot, key)
+        after: readAscKnownQuestionState(panelRoot, key),
+        questionContext: key,
+        readbackEvidence: `candidateCount=${noCandidates.length};methodPrefix=${methodPrefix}`
       };
     }
     const clickBlock = block && block.present ? block : {
@@ -6140,21 +6224,30 @@ copy(String((() => {
     const after = readAscKnownQuestionState(panelRoot, key);
     const readbackFailedTrace = key === 'movingViolations' && clickInfo.clicked && !after.selectedValue
       ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED'
-      : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED';
+      : (key === 'defensiveDriving' && clickInfo.clicked && !after.selectedValue
+        ? 'ASC_PARTICIPANT_DEFENSIVE_DRIVING_CLICK_NO_READBACK_FAILED'
+        : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
     return {
       ok: clickInfo.clicked && after.selectedValue === 'NO',
       method: clickInfo.clicked ? `${methodPrefix}-no-click:${clickInfo.clickMethod}` : `${methodPrefix}-no-click-failed:${clickInfo.clickMethod}`,
       traceCode: clickInfo.clicked && after.selectedValue === 'NO' ? item.selectedTraceCode : readbackFailedTrace,
       before,
       after,
+      questionContext: key,
       readbackEvidence: ascQuestionReadbackEvidence(after),
+      readbackSelectedValue: safe(after.selectedValue),
+      readbackSelectedRaw: ascQuestionSelectedRaw(noCandidates[0], after),
       clickTargetTag: clickInfo.clickTargetTag,
       clickTargetClass: clickInfo.clickTargetClass,
       clickTargetId: clickInfo.clickTargetId,
       clickTargetRole: clickInfo.clickTargetRole,
       clickTargetAriaChecked: clickInfo.clickTargetAriaChecked,
       clickTargetAriaPressed: clickInfo.clickTargetAriaPressed,
-      clickTargetDataState: clickInfo.clickTargetDataState
+      clickTargetDataState: clickInfo.clickTargetDataState,
+      clickTargetAssociatedInputId: clickInfo.clickTargetAssociatedInputId,
+      clickTargetAssociatedInputCheckedBefore: clickInfo.clickTargetAssociatedInputCheckedBefore,
+      clickTargetAssociatedInputCheckedAfter: clickInfo.clickTargetAssociatedInputCheckedAfter,
+      dispatchedEvents: clickInfo.dispatchedEvents
     };
   };
   const selectAscParticipantMovingViolationsNo = (root = findAscInlineParticipantPanelRoot()) => selectAscKnownParticipantQuestionNo(root, 'movingViolations');
@@ -6196,6 +6289,7 @@ copy(String((() => {
           traceCodes,
           unknownRequiredQuestions: '',
           failedFields: item.key,
+          questionContext: safe(selection.questionContext),
           clickTargetTag: safe(selection.clickTargetTag),
           clickTargetClass: safe(selection.clickTargetClass),
           clickTargetId: safe(selection.clickTargetId),
@@ -6203,6 +6297,12 @@ copy(String((() => {
           clickTargetAriaChecked: safe(selection.clickTargetAriaChecked),
           clickTargetAriaPressed: safe(selection.clickTargetAriaPressed),
           clickTargetDataState: safe(selection.clickTargetDataState),
+          clickTargetAssociatedInputId: safe(selection.clickTargetAssociatedInputId),
+          clickTargetAssociatedInputCheckedBefore: safe(selection.clickTargetAssociatedInputCheckedBefore),
+          clickTargetAssociatedInputCheckedAfter: safe(selection.clickTargetAssociatedInputCheckedAfter),
+          readbackSelectedValue: safe(selection.readbackSelectedValue),
+          readbackSelectedRaw: safe(selection.readbackSelectedRaw),
+          dispatchedEvents: safe(selection.dispatchedEvents),
           readbackEvidence: safe(selection.readbackEvidence)
         };
       }
@@ -6210,7 +6310,9 @@ copy(String((() => {
       if (after.selectedValue !== 'NO') {
         const result = item.key === 'movingViolations' && !after.selectedValue
           ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED'
-          : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED';
+          : (item.key === 'defensiveDriving' && !after.selectedValue
+            ? 'ASC_PARTICIPANT_DEFENSIVE_DRIVING_CLICK_NO_READBACK_FAILED'
+            : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
         return {
           ok: false,
           result,
@@ -6219,6 +6321,7 @@ copy(String((() => {
           traceCodes,
           unknownRequiredQuestions: '',
           failedFields: item.key,
+          questionContext: safe(selection.questionContext),
           clickTargetTag: safe(selection.clickTargetTag),
           clickTargetClass: safe(selection.clickTargetClass),
           clickTargetId: safe(selection.clickTargetId),
@@ -6226,6 +6329,12 @@ copy(String((() => {
           clickTargetAriaChecked: safe(selection.clickTargetAriaChecked),
           clickTargetAriaPressed: safe(selection.clickTargetAriaPressed),
           clickTargetDataState: safe(selection.clickTargetDataState),
+          clickTargetAssociatedInputId: safe(selection.clickTargetAssociatedInputId),
+          clickTargetAssociatedInputCheckedBefore: safe(selection.clickTargetAssociatedInputCheckedBefore),
+          clickTargetAssociatedInputCheckedAfter: safe(selection.clickTargetAssociatedInputCheckedAfter),
+          readbackSelectedValue: safe(after.selectedValue),
+          readbackSelectedRaw: safe(selection.readbackSelectedRaw) || ascQuestionReadbackEvidence(after),
+          dispatchedEvents: safe(selection.dispatchedEvents),
           readbackEvidence: ascQuestionReadbackEvidence(after)
         };
       }
@@ -6242,6 +6351,7 @@ copy(String((() => {
       optionalUpsellIgnoredCount: String(optionalUpsells.length),
       optionalUpsellIgnoredTraceCode: optionalUpsells.length ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : '',
       failedFields: '',
+      questionContext: safe(lastSelection && lastSelection.questionContext),
       clickTargetTag: safe(lastSelection && lastSelection.clickTargetTag),
       clickTargetClass: safe(lastSelection && lastSelection.clickTargetClass),
       clickTargetId: safe(lastSelection && lastSelection.clickTargetId),
@@ -6249,6 +6359,12 @@ copy(String((() => {
       clickTargetAriaChecked: safe(lastSelection && lastSelection.clickTargetAriaChecked),
       clickTargetAriaPressed: safe(lastSelection && lastSelection.clickTargetAriaPressed),
       clickTargetDataState: safe(lastSelection && lastSelection.clickTargetDataState),
+      clickTargetAssociatedInputId: safe(lastSelection && lastSelection.clickTargetAssociatedInputId),
+      clickTargetAssociatedInputCheckedBefore: safe(lastSelection && lastSelection.clickTargetAssociatedInputCheckedBefore),
+      clickTargetAssociatedInputCheckedAfter: safe(lastSelection && lastSelection.clickTargetAssociatedInputCheckedAfter),
+      readbackSelectedValue: safe(lastSelection && lastSelection.readbackSelectedValue),
+      readbackSelectedRaw: safe(lastSelection && lastSelection.readbackSelectedRaw),
+      dispatchedEvents: safe(lastSelection && lastSelection.dispatchedEvents),
       readbackEvidence: safe(lastSelection && lastSelection.readbackEvidence)
     };
   };
@@ -10145,6 +10261,7 @@ copy(String((() => {
         activeParticipantOptionalUpsellIgnoredCount: after.optionalUpsellIgnoredCount || defaults.optionalUpsellIgnoredCount || '0',
         activeParticipantOptionalUpsellIgnoredTraceCode: after.optionalUpsellIgnoredTraceCode || defaults.optionalUpsellIgnoredTraceCode || '',
         knownDefaultsApplied: appliedDefaults.join('|'),
+        questionContext: safe(defaults.questionContext),
         clickTargetTag: safe(defaults.clickTargetTag),
         clickTargetClass: safe(defaults.clickTargetClass),
         clickTargetId: safe(defaults.clickTargetId),
@@ -10152,6 +10269,12 @@ copy(String((() => {
         clickTargetAriaChecked: safe(defaults.clickTargetAriaChecked),
         clickTargetAriaPressed: safe(defaults.clickTargetAriaPressed),
         clickTargetDataState: safe(defaults.clickTargetDataState),
+        clickTargetAssociatedInputId: safe(defaults.clickTargetAssociatedInputId),
+        clickTargetAssociatedInputCheckedBefore: safe(defaults.clickTargetAssociatedInputCheckedBefore),
+        clickTargetAssociatedInputCheckedAfter: safe(defaults.clickTargetAssociatedInputCheckedAfter),
+        readbackSelectedValue: safe(defaults.readbackSelectedValue),
+        readbackSelectedRaw: safe(defaults.readbackSelectedRaw),
+        dispatchedEvents: safe(defaults.dispatchedEvents),
         readbackEvidence: safe(defaults.readbackEvidence),
         requiresClientVerification: appliedDefaults.length ? '1' : '0',
         source: safe(args.source || ASC_PARTICIPANT_DEFAULT_SOURCE),
