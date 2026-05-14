@@ -34,6 +34,10 @@ global advisorQuoteProductOverviewSaved := false
 global advisorQuoteGatherAutoCommitted := false
 global advisorQuoteProductTileRecoveryAttempted := false
 global advisorQuoteAscLastAddedVehicleYear := ""
+global advisorQuoteAscPanelContextClickedButtonId := ""
+global advisorQuoteAscPanelContextRowKey := ""
+global advisorQuoteAscPanelContextActionKind := ""
+global advisorQuoteAscPanelContextRouteId := ""
 global advisorQuoteUseResidentOperatorTransport := true
 global advisorQuoteResidentTransportReadOnlyEnabled := true
 global advisorQuoteResidentTransportMutationEnabled := false
@@ -527,6 +531,88 @@ AdvisorQuoteStatusInteger(status, key) {
     return RegExMatch(value, "^-?\d+$") ? Integer(value) : 0
 }
 
+AdvisorQuoteSetAscPanelActionContext(clickedButtonId, rowKey, actionKind, routeId := "") {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind, advisorQuoteAscPanelContextRouteId
+    advisorQuoteAscPanelContextClickedButtonId := Trim(String(clickedButtonId ?? ""))
+    advisorQuoteAscPanelContextRowKey := Trim(String(rowKey ?? ""))
+    advisorQuoteAscPanelContextActionKind := Trim(String(actionKind ?? "UNKNOWN"))
+    advisorQuoteAscPanelContextRouteId := Trim(String(routeId ?? ""))
+}
+
+AdvisorQuoteSetAscPanelActionContextFromDriverResult(result, snapshot, ledgerAction := "") {
+    outcome := AdvisorQuoteStatusValue(result, "result")
+    if (outcome != "PARTIAL")
+        return false
+    clickedButtonId := AdvisorQuoteStatusValue(result, "clickedButtonId")
+    rowKey := AdvisorQuoteStatusValue(result, "rowKey")
+    actionKind := AdvisorQuoteStatusValue(result, "actionKind")
+    if (actionKind = "" || actionKind = "UNKNOWN") {
+        if (ledgerAction = "add_primary_driver" || ledgerAction = "add_spouse_driver")
+            actionKind := "PRIMARY_ADD"
+        else if (ledgerAction = "remove_extra_driver")
+            actionKind := "EXTRA_DRIVER_REMOVE"
+        else
+            actionKind := "UNKNOWN"
+    }
+    if (clickedButtonId = "" && rowKey = "" && actionKind = "UNKNOWN")
+        return false
+    AdvisorQuoteSetAscPanelActionContext(clickedButtonId, rowKey, actionKind, AdvisorQuoteStatusValue(snapshot, "ascProductRouteId"))
+    AdvisorQuoteAppendLog("ASC_PANEL_ACTION_CONTEXT_SET", AdvisorQuoteGetLastStep(), AdvisorQuoteAscPanelActionContextDetail())
+    return true
+}
+
+AdvisorQuoteClearAscPanelActionContext(reason := "") {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind, advisorQuoteAscPanelContextRouteId
+    hadContext := (
+        Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? "")) != ""
+        || Trim(String(advisorQuoteAscPanelContextRowKey ?? "")) != ""
+        || Trim(String(advisorQuoteAscPanelContextActionKind ?? "")) != ""
+    )
+    advisorQuoteAscPanelContextClickedButtonId := ""
+    advisorQuoteAscPanelContextRowKey := ""
+    advisorQuoteAscPanelContextActionKind := ""
+    advisorQuoteAscPanelContextRouteId := ""
+    if (hadContext && Trim(String(reason ?? "")) != "")
+        AdvisorQuoteAppendLog("ASC_PANEL_ACTION_CONTEXT_CLEARED", AdvisorQuoteGetLastStep(), "reason=" reason)
+}
+
+AdvisorQuoteAscPanelActionContextDetail() {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind, advisorQuoteAscPanelContextRouteId
+    return "clickedButtonId=" Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? ""))
+        . ", rowKey=" Trim(String(advisorQuoteAscPanelContextRowKey ?? ""))
+        . ", actionKind=" Trim(String(advisorQuoteAscPanelContextActionKind ?? ""))
+        . ", routeId=" Trim(String(advisorQuoteAscPanelContextRouteId ?? ""))
+}
+
+AdvisorQuoteAscPanelKindFromActionContext(defaultKind := "") {
+    global advisorQuoteAscPanelContextActionKind
+    actionKind := Trim(String(advisorQuoteAscPanelContextActionKind ?? ""))
+    if (actionKind = "PRIMARY_ADD")
+        return "PRIMARY_OR_ADDING_DRIVER"
+    if (actionKind = "NON_DRIVER" || actionKind = "EXTRA_DRIVER_REMOVE")
+        return "NON_DRIVER"
+    return Trim(String(defaultKind ?? ""))
+}
+
+AdvisorQuoteAscPanelActionContextArgs(args := "") {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind
+    out := IsObject(args) ? args : Map()
+    if (Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? "")) != "")
+        out["clickedButtonId"] := Trim(String(advisorQuoteAscPanelContextClickedButtonId))
+    if (Trim(String(advisorQuoteAscPanelContextRowKey ?? "")) != "")
+        out["rowKey"] := Trim(String(advisorQuoteAscPanelContextRowKey))
+    if (Trim(String(advisorQuoteAscPanelContextActionKind ?? "")) != "")
+        out["actionKind"] := Trim(String(advisorQuoteAscPanelContextActionKind))
+    return out
+}
+
+AdvisorQuoteAscPanelContextRouteChanged(snapshot) {
+    global advisorQuoteAscPanelContextRouteId
+    contextRoute := Trim(String(advisorQuoteAscPanelContextRouteId ?? ""))
+    currentRoute := AdvisorQuoteStatusValue(snapshot, "ascProductRouteId")
+    return contextRoute != "" && currentRoute != "" && contextRoute != currentRoute
+}
+
 AdvisorQuoteSnapshotArgs() {
     db := GetAdvisorQuoteWorkflowDb()
     return Map(
@@ -603,6 +689,14 @@ AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(status) {
         . ", activeParticipantMovingViolationsQuestionPresent=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsQuestionPresent")
         . ", activeParticipantMovingViolationsSelectedValue=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsSelectedValue")
         . ", activeParticipantMovingViolationsDefaultApplied=" AdvisorQuoteStatusValue(status, "activeParticipantMovingViolationsDefaultApplied")
+        . ", activeParticipantDefensiveDrivingQuestionPresent=" AdvisorQuoteStatusValue(status, "activeParticipantDefensiveDrivingQuestionPresent")
+        . ", activeParticipantDefensiveDrivingSelectedValue=" AdvisorQuoteStatusValue(status, "activeParticipantDefensiveDrivingSelectedValue")
+        . ", activeParticipantDefensiveDrivingDefaultApplied=" AdvisorQuoteStatusValue(status, "activeParticipantDefensiveDrivingDefaultApplied")
+        . ", activeParticipantUnknownRequiredYesNoCount=" AdvisorQuoteStatusValue(status, "activeParticipantUnknownRequiredYesNoCount")
+        . ", activeParticipantUnknownRequiredYesNoQuestions=" AdvisorQuoteStatusValue(status, "activeParticipantUnknownRequiredYesNoQuestions")
+        . ", activeParticipantPanelRootStatus=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRootStatus")
+        . ", activeParticipantPanelRootMethod=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRootMethod")
+        . ", activeParticipantPanelRadioLikeControlCount=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRadioLikeControlCount")
         . ", activeParticipantPanelReadyToSave=" AdvisorQuoteStatusValue(status, "activeParticipantPanelReadyToSave")
         . ", activeParticipantPanelSavePostcondition=" AdvisorQuoteStatusValue(status, "activeParticipantPanelSavePostcondition")
         . ", activeParticipantPanelAction=" AdvisorQuoteStatusValue(status, "activeParticipantPanelAction")
@@ -842,8 +936,14 @@ AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(status) {
     return "result=" AdvisorQuoteStatusValue(status, "result")
         . ", method=" AdvisorQuoteStatusValue(status, "method")
         . ", traceCode=" AdvisorQuoteStatusValue(status, "traceCode")
+        . ", traceCodes=" AdvisorQuoteStatusValue(status, "traceCodes")
         . ", initialTraceCode=" AdvisorQuoteStatusValue(status, "initialTraceCode")
         . ", activeParticipantPanelKind=" AdvisorQuoteStatusValue(status, "activeParticipantPanelKind")
+        . ", activeParticipantPanelRootStatus=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRootStatus")
+        . ", activeParticipantPanelRootMethod=" AdvisorQuoteStatusValue(status, "activeParticipantPanelRootMethod")
+        . ", clickedButtonId=" AdvisorQuoteStatusValue(status, "clickedButtonId")
+        . ", rowKey=" AdvisorQuoteStatusValue(status, "rowKey")
+        . ", actionKind=" AdvisorQuoteStatusValue(status, "actionKind")
         . ", activeParticipantRowStatus=" AdvisorQuoteStatusValue(status, "activeParticipantRowStatus")
         . ", activeParticipantPanelAction=" AdvisorQuoteStatusValue(status, "activeParticipantPanelAction")
         . ", panelPresent=" AdvisorQuoteStatusValue(status, "panelPresent")
@@ -858,6 +958,15 @@ AdvisorQuoteBuildAscNonDriverParticipantPanelReadyDetail(status) {
         . ", movingViolationsSelectedValue=" AdvisorQuoteStatusValue(status, "movingViolationsSelectedValue")
         . ", movingViolationsSelectionSource=" AdvisorQuoteStatusValue(status, "movingViolationsSelectionSource")
         . ", movingViolationsDefaultApplied=" AdvisorQuoteStatusValue(status, "movingViolationsDefaultApplied")
+        . ", defensiveDrivingQuestionPresent=" AdvisorQuoteStatusValue(status, "defensiveDrivingQuestionPresent")
+        . ", defensiveDrivingControlPresent=" AdvisorQuoteStatusValue(status, "defensiveDrivingControlPresent")
+        . ", defensiveDrivingWarningPresent=" AdvisorQuoteStatusValue(status, "defensiveDrivingWarningPresent")
+        . ", defensiveDrivingSelectedValue=" AdvisorQuoteStatusValue(status, "defensiveDrivingSelectedValue")
+        . ", defensiveDrivingSelectionSource=" AdvisorQuoteStatusValue(status, "defensiveDrivingSelectionSource")
+        . ", defensiveDrivingDefaultApplied=" AdvisorQuoteStatusValue(status, "defensiveDrivingDefaultApplied")
+        . ", activeParticipantUnknownRequiredYesNoCount=" AdvisorQuoteStatusValue(status, "activeParticipantUnknownRequiredYesNoCount")
+        . ", activeParticipantUnknownRequiredYesNoQuestions=" AdvisorQuoteStatusValue(status, "activeParticipantUnknownRequiredYesNoQuestions")
+        . ", knownDefaultsApplied=" AdvisorQuoteStatusValue(status, "knownDefaultsApplied")
         . ", requiresClientVerification=" AdvisorQuoteStatusValue(status, "requiresClientVerification")
         . ", source=" AdvisorQuoteStatusValue(status, "source")
         . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
@@ -933,6 +1042,12 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
 
         activeModalType := AdvisorQuoteStatusValue(snapshot, "activeModalType")
         activePanelType := AdvisorQuoteStatusValue(snapshot, "activePanelType")
+        if AdvisorQuoteAscPanelContextRouteChanged(snapshot)
+            AdvisorQuoteClearAscPanelActionContext("route-changed")
+        if (activeModalType != "ASC_INLINE_PARTICIPANT_PANEL"
+            && activePanelType != "ASC_INLINE_PARTICIPANT_PANEL"
+            && activeModalType != "ASC_REMOVE_DRIVER_MODAL")
+            AdvisorQuoteClearAscPanelActionContext("no-active-participant-panel")
         hasActiveBlocker := !AdvisorQuoteAscModalPanelClear(activeModalType) || !AdvisorQuoteAscModalPanelClear(activePanelType)
         if !hasActiveBlocker {
             AdvisorQuoteAppendLog("ASC_PARTICIPANT_STATUS_CALL", AdvisorQuoteGetLastStep(), "ascParticipantStatusCalled=1, source=ledger")
@@ -1031,6 +1146,7 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
                 selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
                 result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
                 AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                AdvisorQuoteSetAscPanelActionContextFromDriverResult(result, snapshot, nextAction)
                 if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
                     return false
             Case "add_spouse_driver":
@@ -1043,6 +1159,7 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
                 selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
                 result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
                 AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                AdvisorQuoteSetAscPanelActionContextFromDriverResult(result, snapshot, nextAction)
                 if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
                     return false
             Case "remove_extra_driver":
@@ -1055,6 +1172,7 @@ AdvisorQuoteRunAscDriversVehiclesLedgerLoop(profile, db, &failureReason := "", &
                 selectedSpouseName := AdvisorQuoteStatusValue(ledger, "selectedSpouseName")
                 result := AdvisorQuoteRunAscDriverReconcile(profile, selectedSpouseName)
                 AdvisorQuoteAppendLog("ASC_DRIVER_RECONCILE_RESULT", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscDriverReconcileDetail(result) ", ledgerAction=" nextAction)
+                AdvisorQuoteSetAscPanelActionContextFromDriverResult(result, snapshot, nextAction)
                 if !AdvisorQuoteVerifyAscLedgerRowActionProgress("driver", nextAction, snapshot, result, db, &failureReason, &failureScan)
                     return false
             Case "add_vehicle_row":
@@ -1726,9 +1844,12 @@ AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, resul
     failureReason := ""
     failureScan := ""
     outcome := AdvisorQuoteStatusValue(result, "result")
-    if (outcome = "OK")
+    if (outcome = "OK") {
+        AdvisorQuoteClearAscPanelActionContext("driver-reconcile-ok")
         return true
+    }
     if (outcome != "PARTIAL") {
+        AdvisorQuoteClearAscPanelActionContext("row-action-not-partial")
         failureReason := (kind = "driver") ? "ASC_DRIVER_ROW_VERIFY_FAILED: " : "ASC_VEHICLE_ROW_VERIFY_FAILED: "
         failureReason .= (kind = "driver") ? AdvisorQuoteBuildAscDriverReconcileDetail(result) : AdvisorQuoteBuildAscVehicleReconcileDetail(result)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-failed")
@@ -1743,8 +1864,10 @@ AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, resul
     afterPanel := AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
     if !AdvisorQuoteAscModalPanelClear(afterModal) || !AdvisorQuoteAscModalPanelClear(afterPanel)
         return true
-    if (kind = "driver" && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount"))
+    if (kind = "driver" && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount")) {
+        AdvisorQuoteClearAscPanelActionContext("driver-row-count-progress")
         return true
+    }
     if (kind = "vehicle" && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedVehicleCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedVehicleCount"))
         return true
     if (kind = "vehicle" && AdvisorQuoteStatusInteger(afterSnapshot, "addedVehicleCount") > AdvisorQuoteStatusInteger(beforeSnapshot, "addedVehicleCount"))
@@ -1755,17 +1878,21 @@ AdvisorQuoteVerifyAscLedgerRowActionProgress(kind, action, beforeSnapshot, resul
         if (AdvisorQuoteStatusValue(afterSnapshot, "activeParticipantRequiredMissing") = "1") {
             failureReason := "ASC_LEDGER_ROW_ACTION_NO_PROGRESS_ACTIVE_PANEL_REQUIRED_FIELD: " failureReason
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress-active-panel-required-field")
+            AdvisorQuoteClearAscPanelActionContext("active-panel-required-field-fail-safe")
             return false
         }
         failureReason := "ASC_LEDGER_ROW_ACTION_NO_PROGRESS_ACTIVE_PANEL: " failureReason
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress-active-panel")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-no-progress-fail-safe")
         return false
     }
     failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-ledger-row-action-no-progress")
+    AdvisorQuoteClearAscPanelActionContext("row-action-no-progress")
     return false
 }
 
 AdvisorQuoteHandleAscRemoveDriverModalLedger(profile, db, beforeSnapshot, &failureReason := "", &failureScan := "") {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey
     failureReason := ""
     failureScan := ""
     reasonCode := AdvisorQuoteAscRemoveReasonCode(db)
@@ -1793,12 +1920,120 @@ AdvisorQuoteHandleAscRemoveDriverModalLedger(profile, db, beforeSnapshot, &failu
         return false
     }
     afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
-    if (AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") != "ASC_REMOVE_DRIVER_MODAL")
+    if (AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") != "ASC_REMOVE_DRIVER_MODAL") {
+        if (AdvisorQuoteStatusValue(afterSnapshot, "activePanelType") = "ASC_INLINE_PARTICIPANT_PANEL"
+            || AdvisorQuoteStatusValue(afterSnapshot, "activeModalType") = "ASC_INLINE_PARTICIPANT_PANEL") {
+            if (Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? "")) != "" || Trim(String(advisorQuoteAscPanelContextRowKey ?? "")) != "") {
+                AdvisorQuoteSetAscPanelActionContext(
+                    Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? "")),
+                    Trim(String(advisorQuoteAscPanelContextRowKey ?? "")),
+                    "NON_DRIVER",
+                    AdvisorQuoteStatusValue(afterSnapshot, "ascProductRouteId")
+                )
+                AdvisorQuoteAppendLog("ASC_PANEL_ACTION_CONTEXT_SET", AdvisorQuoteGetLastStep(), AdvisorQuoteAscPanelActionContextDetail())
+            }
+        } else
+            AdvisorQuoteClearAscPanelActionContext("remove-modal-closed")
         return true
-    if (AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount"))
+    }
+    if (AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") < AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount")) {
+        AdvisorQuoteClearAscPanelActionContext("remove-modal-driver-count-progress")
         return true
+    }
     failureReason := "ASC_REMOVE_DRIVER_SAVE_DID_NOT_COMMIT: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
     failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-remove-save-did-not-commit")
+    AdvisorQuoteClearAscPanelActionContext("remove-modal-save-failed")
+    return false
+}
+
+AdvisorQuoteAscFindDriverRowByActionContext(rows, rowKey, clickedButtonId) {
+    if !IsObject(rows)
+        return ""
+    matches := []
+    rowKey := Trim(String(rowKey ?? ""))
+    clickedButtonId := Trim(String(clickedButtonId ?? ""))
+    for _, row in rows {
+        if (rowKey != "" && AdvisorQuoteStatusValue(row, "rowKey") = rowKey)
+            matches.Push(row)
+        else if (clickedButtonId != ""
+            && (AdvisorQuoteStatusValue(row, "addButtonId") = clickedButtonId
+                || AdvisorQuoteStatusValue(row, "removeButtonId") = clickedButtonId
+                || AdvisorQuoteStatusValue(row, "editButtonId") = clickedButtonId))
+            matches.Push(row)
+    }
+    if (matches.Length = 1)
+        return matches[1]
+    return (matches.Length > 1) ? "AMBIGUOUS" : ""
+}
+
+AdvisorQuoteAscParticipantPanelSavePostconditionSatisfied(panelKind, beforeSnapshot, afterSnapshot, &code := "", &detail := "") {
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind
+    code := ""
+    detail := ""
+    clickedButtonId := Trim(String(advisorQuoteAscPanelContextClickedButtonId ?? ""))
+    rowKey := Trim(String(advisorQuoteAscPanelContextRowKey ?? ""))
+    actionKind := Trim(String(advisorQuoteAscPanelContextActionKind ?? ""))
+    fallbackRowKey := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantRowKey")
+    if (rowKey = "" && fallbackRowKey != "" && fallbackRowKey != "ambiguous") {
+        rowKey := fallbackRowKey
+        detail := "rowKeyFallback=snapshot-active-row-key"
+    }
+    if (rowKey = "" && clickedButtonId = "") {
+        code := (panelKind = "PRIMARY_OR_ADDING_DRIVER") ? "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED" : "ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+        detail .= ", missing-action-context, " AdvisorQuoteAscPanelActionContextDetail()
+        return false
+    }
+    rows := AdvisorQuoteAscParseDriverRows(afterSnapshot)
+    row := AdvisorQuoteAscFindDriverRowByActionContext(rows, rowKey, clickedButtonId)
+    if (!IsObject(row) && row = "AMBIGUOUS") {
+        code := (panelKind = "PRIMARY_OR_ADDING_DRIVER") ? "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED" : "ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+        detail .= ", ambiguous-action-context, " AdvisorQuoteAscPanelActionContextDetail()
+        return false
+    }
+    beforeUnresolved := AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount")
+    afterUnresolved := AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount")
+    beforeAdded := AdvisorQuoteStatusInteger(beforeSnapshot, "addedDriverCount")
+    afterAdded := AdvisorQuoteStatusInteger(afterSnapshot, "addedDriverCount")
+    beforeRemoved := AdvisorQuoteStatusInteger(beforeSnapshot, "removedDriverCount")
+    afterRemoved := AdvisorQuoteStatusInteger(afterSnapshot, "removedDriverCount")
+    if (panelKind = "PRIMARY_OR_ADDING_DRIVER") {
+        if IsObject(row) {
+            if (AdvisorQuoteStatusValue(row, "added") = "1" || AdvisorQuoteStatusValue(row, "edit") = "1") {
+                detail .= ", postcondition=clicked-row-added, actionKind=" actionKind
+                return true
+            }
+            code := "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+            detail .= ", clicked-row-not-added, rowKey=" rowKey ", clickedButtonId=" clickedButtonId ", row=" AdvisorQuoteStatusValue(row, "name")
+            return false
+        }
+        if (afterAdded > beforeAdded || afterUnresolved < beforeUnresolved) {
+            detail .= ", postcondition=count-change-fallback, actionKind=" actionKind ", beforeAdded=" beforeAdded ", afterAdded=" afterAdded ", beforeUnresolved=" beforeUnresolved ", afterUnresolved=" afterUnresolved
+            return true
+        }
+        code := "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+        detail .= ", clicked-row-not-found, " AdvisorQuoteAscPanelActionContextDetail()
+        return false
+    }
+    if (panelKind = "NON_DRIVER") {
+        if IsObject(row) {
+            if (AdvisorQuoteStatusValue(row, "nonDriver") = "1" || AdvisorQuoteStatusValue(row, "removed") = "1") {
+                detail .= ", postcondition=clicked-row-non-driver, actionKind=" actionKind
+                return true
+            }
+            code := "ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+            detail .= ", clicked-row-not-non-driver, rowKey=" rowKey ", clickedButtonId=" clickedButtonId ", row=" AdvisorQuoteStatusValue(row, "name")
+            return false
+        }
+        if (afterRemoved > beforeRemoved || afterUnresolved < beforeUnresolved) {
+            detail .= ", postcondition=count-change-fallback, actionKind=" actionKind ", beforeRemoved=" beforeRemoved ", afterRemoved=" afterRemoved ", beforeUnresolved=" beforeUnresolved ", afterUnresolved=" afterUnresolved
+            return true
+        }
+        code := "ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+        detail .= ", clicked-row-not-found, " AdvisorQuoteAscPanelActionContextDetail()
+        return false
+    }
+    code := "ASC_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+    detail .= ", unsupported-panel-kind=" panelKind ", " AdvisorQuoteAscPanelActionContextDetail()
     return false
 }
 
@@ -1808,9 +2043,26 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
     activeRowStatus := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantRowStatus")
     activePanelAction := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantPanelAction")
     panelKind := AdvisorQuoteAscPanelKindFromSnapshot(beforeSnapshot)
-    if (panelKind = "UNKNOWN" || activePanelAction = "FAIL_SAFE" || activeRowStatus = "UNKNOWN") {
+    contextPanelKind := AdvisorQuoteAscPanelKindFromActionContext("")
+    rootStatus := AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantPanelRootStatus")
+    if (rootStatus != "" && rootStatus != "ok") {
+        failureReason := "ASC_ACTIVE_PANEL_ROOT_TOO_BROAD: " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-panel-root-too-broad")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-root-too-broad")
+        return false
+    }
+    if (contextPanelKind != "" && panelKind != "UNKNOWN" && panelKind != contextPanelKind) {
+        failureReason := "ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS: context panel kind mismatch, contextKind=" contextPanelKind ", snapshotKind=" panelKind ", " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
+        failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-panel-context-mismatch")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-context-mismatch")
+        return false
+    }
+    if (panelKind = "UNKNOWN" && contextPanelKind != "")
+        panelKind := contextPanelKind
+    if (panelKind = "UNKNOWN" || (activePanelAction = "FAIL_SAFE" && contextPanelKind = "") || (activeRowStatus = "UNKNOWN" && contextPanelKind = "")) {
         failureReason := "ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS: " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-panel-blocks-row-progress")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-fail-safe")
         return false
     }
     if (panelKind = "NON_DRIVER" || panelKind = "PRIMARY_OR_ADDING_DRIVER") {
@@ -1821,14 +2073,23 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
         if (readyResult != expectedReadyResult) {
             failureReason := readyResult ": " AdvisorQuoteBuildAscParticipantPanelReadyDetail(readyStatus) ", snapshot=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-inline-required-selection-failed")
+            AdvisorQuoteClearAscPanelActionContext("active-panel-ready-fail-safe")
             return false
         }
         AdvisorQuoteAppendLog(expectedReadyResult, AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantPanelReadyDetail(readyStatus))
+        if (AdvisorQuoteStatusValue(readyStatus, "requiresClientVerification") = "1") {
+            fieldsText := AdvisorQuoteStatusValue(readyStatus, "knownDefaultsApplied")
+            if (fieldsText = "")
+                fieldsText := "movingViolations,defensiveDriving"
+            fieldsText := StrReplace(fieldsText, "|", ",")
+            AdvisorQuoteMarkClientVerificationRequired(fieldsText, AdvisorQuoteStatusValue(readyStatus, "source"), false)
+        }
         if (panelKind = "PRIMARY_OR_ADDING_DRIVER") {
             if !AdvisorQuoteFillParticipantModal(profile, db) {
                 participantStatusAfterFill := AdvisorQuoteGetAscParticipantDetailStatus()
                 failureReason := "ASC_INLINE_PARTICIPANT_SAVE_FAILED: fill failed. " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatusAfterFill)
                 failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-primary-inline-fill-failed")
+                AdvisorQuoteClearAscPanelActionContext("primary-panel-fill-failed")
                 return false
             }
         }
@@ -1836,6 +2097,7 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
         if (panelKind = "PRIMARY_OR_ADDING_DRIVER" && !AdvisorQuoteAscParticipantRequiredSatisfied(participantStatus)) {
             failureReason := "ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD: " AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-primary-inline-required-field-still-missing")
+            AdvisorQuoteClearAscPanelActionContext("primary-panel-required-field-still-missing")
             return false
         }
         if (AdvisorQuoteStatusValue(beforeSnapshot, "activeParticipantSaveEnabled") != "1"
@@ -1843,39 +2105,48 @@ AdvisorQuoteHandleAscInlineParticipantPanelLedger(profile, db, beforeSnapshot, &
             && AdvisorQuoteStatusValue(participantStatus, "saveButtonEnabled") != "1") {
             failureReason := eventPrefix "_SAVE_DISABLED: " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", participant=" AdvisorQuoteBuildAscParticipantDetailStatusDetail(participantStatus)
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-inline-save-disabled")
+            AdvisorQuoteClearAscPanelActionContext("active-panel-save-disabled")
             return false
         }
         saveClickStatus := ""
         if !AdvisorQuoteClickActiveParticipantSave(db, &saveClickStatus) {
             failureReason := eventPrefix "_SAVE_CLICK_FAILED: " AdvisorQuoteBuildAscParticipantPanelReadyDetail(saveClickStatus) ", snapshot=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
             failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-inline-save-click-failed")
+            AdvisorQuoteClearAscPanelActionContext("active-panel-save-click-failed")
             return false
         }
         AdvisorQuoteAppendLog(eventPrefix "_SAVE_CLICKED", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantPanelReadyDetail(readyStatus))
         if !SafeSleep(db["timeouts"]["pollMs"]) {
             failureReason := eventPrefix "_SAVE_FAILED: wait interrupted."
+            AdvisorQuoteClearAscPanelActionContext("active-panel-save-wait-interrupted")
             return false
         }
         afterSnapshot := AdvisorQuoteGetAscDriversVehiclesSnapshot()
         afterActivePanel := AdvisorQuoteStatusValue(afterSnapshot, "activePanelType")
         afterActiveModal := AdvisorQuoteStatusValue(afterSnapshot, "activeModalType")
         if (afterActivePanel != "ASC_INLINE_PARTICIPANT_PANEL" && afterActiveModal != "ASC_INLINE_PARTICIPANT_PANEL") {
-            if (panelKind = "PRIMARY_OR_ADDING_DRIVER" && activeRowStatus = "FOUND_UNRESOLVED"
-                && AdvisorQuoteStatusInteger(afterSnapshot, "unresolvedDriverCount") >= AdvisorQuoteStatusInteger(beforeSnapshot, "unresolvedDriverCount")
-                && AdvisorQuoteStatusInteger(afterSnapshot, "addedDriverCount") <= AdvisorQuoteStatusInteger(beforeSnapshot, "addedDriverCount")) {
-                failureReason := "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
-                failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-primary-inline-save-postcondition-failed")
+            postconditionCode := ""
+            postconditionDetail := ""
+            if !AdvisorQuoteAscParticipantPanelSavePostconditionSatisfied(panelKind, beforeSnapshot, afterSnapshot, &postconditionCode, &postconditionDetail) {
+                if (postconditionCode = "")
+                    postconditionCode := (panelKind = "PRIMARY_OR_ADDING_DRIVER") ? "ASC_PRIMARY_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED" : "ASC_NON_DRIVER_PARTICIPANT_PANEL_SAVE_POSTCONDITION_FAILED"
+                failureReason := postconditionCode ": " postconditionDetail ", before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
+                failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-panel-save-postcondition-failed")
+                AdvisorQuoteClearAscPanelActionContext("active-panel-save-postcondition-failed")
                 return false
             }
-            AdvisorQuoteAppendLog(eventPrefix "_CLOSED", AdvisorQuoteGetLastStep(), "before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot))
+            AdvisorQuoteAppendLog(eventPrefix "_CLOSED", AdvisorQuoteGetLastStep(), "postcondition=" postconditionDetail ", before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot))
+            AdvisorQuoteClearAscPanelActionContext("active-panel-closed")
             return true
         }
-        failureReason := eventPrefix "_STILL_OPEN_AFTER_SAVE: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
+        failureReason := "ASC_PARTICIPANT_PANEL_STILL_OPEN_AFTER_SAVE: before=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot) ", after=" AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(afterSnapshot)
         failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-inline-still-open-after-save")
+        AdvisorQuoteClearAscPanelActionContext("active-panel-still-open-after-save")
         return false
     }
     failureReason := "ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS: unhandled panel kind=" panelKind ", " AdvisorQuoteBuildAscDriversVehiclesSnapshotDetail(beforeSnapshot)
     failureScan := AdvisorQuoteScanCurrentPage("DRIVERS_VEHICLES", "asc-active-participant-panel-unhandled-kind")
+    AdvisorQuoteClearAscPanelActionContext("active-panel-unhandled-kind")
     return false
 }
 
@@ -1998,6 +2269,9 @@ AdvisorQuoteBuildAscDriverReconcileDetail(status) {
         . ", unresolvedDrivers=" AdvisorQuoteStatusValue(status, "unresolvedDrivers")
         . ", addClickedCount=" AdvisorQuoteStatusValue(status, "addClickedCount")
         . ", removeClickedCount=" AdvisorQuoteStatusValue(status, "removeClickedCount")
+        . ", clickedButtonId=" AdvisorQuoteStatusValue(status, "clickedButtonId")
+        . ", rowKey=" AdvisorQuoteStatusValue(status, "rowKey")
+        . ", actionKind=" AdvisorQuoteStatusValue(status, "actionKind")
         . ", failedFields=" AdvisorQuoteStatusValue(status, "failedFields")
 }
 
@@ -2373,6 +2647,7 @@ AdvisorQuoteEnsureActiveParticipantPanelReady(db, panelKind := "") {
         "source", "PROVISIONAL_WORKFLOW_DEFAULT",
         "panelKind", panelKind
     )
+    args := AdvisorQuoteAscPanelActionContextArgs(args)
     raw := AdvisorQuoteRunOp("asc_ensure_active_participant_panel_ready", args, 1, 120)
     status := AdvisorQuoteParseKeyValueLines(raw)
     AdvisorQuoteAppendLog("ASC_ACTIVE_PARTICIPANT_PANEL_READY_CHECK", AdvisorQuoteGetLastStep(), AdvisorQuoteBuildAscParticipantPanelReadyDetail(status))
@@ -2623,6 +2898,7 @@ AdvisorQuoteInitTrace(profile) {
     global advisorQuoteProductTileAutoSelectedOnOverview, advisorQuoteProductOverviewSaved, advisorQuoteGatherAutoCommitted, advisorQuoteProductTileRecoveryAttempted
     global advisorQuoteRequiresClientVerification, advisorQuoteCreditHitNotReceived, advisorQuoteProvisionalFields, advisorQuoteProvisionalSource
     global advisorQuoteAscLastAddedVehicleYear
+    global advisorQuoteAscPanelContextClickedButtonId, advisorQuoteAscPanelContextRowKey, advisorQuoteAscPanelContextActionKind, advisorQuoteAscPanelContextRouteId
     AdvisorQuoteResetConsoleBridge()
     AdvisorQuoteInitScanBundle()
     AdvisorQuoteResetSnapshotObserverRun()
@@ -2638,6 +2914,10 @@ AdvisorQuoteInitTrace(profile) {
     advisorQuoteGatherAutoCommitted := false
     advisorQuoteProductTileRecoveryAttempted := false
     advisorQuoteAscLastAddedVehicleYear := ""
+    advisorQuoteAscPanelContextClickedButtonId := ""
+    advisorQuoteAscPanelContextRowKey := ""
+    advisorQuoteAscPanelContextActionKind := ""
+    advisorQuoteAscPanelContextRouteId := ""
     person := (IsObject(profile) && profile.Has("person")) ? profile["person"] : Map()
     fullName := person.Has("fullName") ? Trim(String(person["fullName"])) : ""
     if (fullName = "")

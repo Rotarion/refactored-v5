@@ -1539,6 +1539,73 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-primary-inline-panel-known-required-mesh-scoped": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Primary Driver Add 2013 Nissan Altima Add Test Primary Driver Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Have you completed a defensive driving course in the last 3 years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "driver-row", "text": "Test Found Driver One Age 66 Add", "children": [
+        { "tag": "button", "id": "test-found-driver-one-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "div", "className": "vehicle-row", "text": "2013 Nissan Altima VIN: MASKEDALT*******01 Add", "children": [
+        { "tag": "button", "id": "2013-nissan-altima-add", "text": "Add" }
+      ] },
+      { "tag": "div", "text": "Test Primary Driver Let's get some more details" },
+      { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+      ] },
+      { "tag": "div", "className": "mesh-question", "text": "Have you completed a defensive driving course in the last 3 years? Please make a selection.", "children": [
+        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+      ] },
+      { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+      { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-unknown-required-yes-no": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Test Primary Driver Let's get some more details Have you had a license suspension in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Test Primary Driver Let's get some more details", "children": [
+        { "tag": "div", "text": "Test Primary Driver Let's get some more details" },
+        { "tag": "input", "type": "text", "id": "ageFirstLicensed_ageFirstLicensed", "value": "16" },
+        { "tag": "div", "className": "mesh-question", "text": "Have you had a license suspension in the past five years? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-moving-violations-readback-fails": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Test Primary Driver Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Primary Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Test Primary Driver Let's get some more details", "children": [
+        { "tag": "h2", "text": "Test Primary Driver Let's get some more details" },
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+          { "tag": "label", "text": "Yes" },
+          { "tag": "label", "text": "No" }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] }
+    ]
+  },
   "snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Add drivers Add vehicles Test Found Driver One Non-driver Let's get some more details Have you had any moving violations in the past five years? Yes No Additional Yes No Please make a selection. Save and Continue",
@@ -1550,11 +1617,13 @@
       { "tag": "div", "className": "driver-row", "text": "Test Found Driver One Age 66 Non-driver Add", "children": [
         { "tag": "button", "id": "test-found-driver-one-addToQuote", "text": "Add" }
       ] },
-      { "tag": "section", "className": "participant-panel", "text": "Test Found Driver One Let's get some more details Have you had any moving violations in the past five years? Yes No Additional Yes No Please make a selection.", "children": [
-        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
-        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
-        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
-        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
+      { "tag": "section", "className": "participant-panel", "text": "Test Found Driver One Let's get some more details", "children": [
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Additional Yes No Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
         { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
         { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
       ] },

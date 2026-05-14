@@ -2434,7 +2434,8 @@ function testReturnShapeContracts() {
   const readyResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, movingRequiredScenario.doc, movingRequiredScenario.href), [
     'result', 'method', 'traceCode', 'initialTraceCode', 'activeParticipantRequiredMissing',
     'activeParticipantPanelReadyToSave', 'movingViolationsQuestionPresent', 'movingViolationsControlPresent',
-    'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'requiresClientVerification', 'source', 'failedFields'
+    'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'defensiveDrivingQuestionPresent',
+    'defensiveDrivingDefaultApplied', 'knownDefaultsApplied', 'requiresClientVerification', 'source', 'failedFields'
   ]);
   assert.strictEqual(readyResult.result, 'ASC_NON_DRIVER_PARTICIPANT_PANEL_READY_TO_SAVE');
   assert.strictEqual(readyResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED');
@@ -2443,6 +2444,9 @@ function testReturnShapeContracts() {
   assert.strictEqual(readyResult.activeParticipantPanelReadyToSave, '1');
   assert.strictEqual(readyResult.movingViolationsSelectedValue, 'NO');
   assert.strictEqual(readyResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(readyResult.defensiveDrivingQuestionPresent, '0');
+  assert.strictEqual(readyResult.defensiveDrivingDefaultApplied, '0');
+  assert.strictEqual(readyResult.knownDefaultsApplied, 'movingViolations');
   assert.strictEqual(readyResult.requiresClientVerification, '1');
   assert.strictEqual(readyResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
   assert.strictEqual(readyResult.failedFields, '');
@@ -2460,6 +2464,7 @@ function testReturnShapeContracts() {
     'result', 'method', 'traceCode', 'initialTraceCode', 'activeParticipantPanelKind',
     'activeParticipantRowStatus', 'activeParticipantPanelAction', 'activeParticipantRequiredMissing',
     'activeParticipantPanelReadyToSave', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'defensiveDrivingQuestionPresent', 'defensiveDrivingDefaultApplied', 'knownDefaultsApplied',
     'requiresClientVerification', 'source', 'failedFields'
   ]);
   assert.strictEqual(primaryReadyResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
@@ -2472,20 +2477,94 @@ function testReturnShapeContracts() {
   assert.strictEqual(primaryReadyResult.activeParticipantPanelReadyToSave, '1');
   assert.strictEqual(primaryReadyResult.movingViolationsSelectedValue, 'NO');
   assert.strictEqual(primaryReadyResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(primaryReadyResult.defensiveDrivingQuestionPresent, '0');
+  assert.strictEqual(primaryReadyResult.defensiveDrivingDefaultApplied, '0');
+  assert.strictEqual(primaryReadyResult.knownDefaultsApplied, 'movingViolations');
   assert.strictEqual(primaryReadyResult.requiresClientVerification, '1');
   assert.strictEqual(primaryReadyResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
   assert.strictEqual(primaryReadyResult.failedFields, '');
+
+  const scopedKnownScenario = fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped');
+  const scopedKnownResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    panelKind: 'PRIMARY_OR_ADDING_DRIVER',
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT',
+    clickedButtonId: 'test-primary-driver-addToQuote',
+    rowKey: 'test-primary-driver',
+    actionKind: 'PRIMARY_ADD'
+  }, scopedKnownScenario.doc, scopedKnownScenario.href), [
+    'result', 'method', 'traceCode', 'traceCodes', 'activeParticipantPanelKind',
+    'activeParticipantPanelRootStatus', 'activeParticipantPanelRootMethod', 'clickedButtonId', 'rowKey', 'actionKind',
+    'activeParticipantRequiredMissing', 'activeParticipantPanelReadyToSave',
+    'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'defensiveDrivingSelectedValue', 'defensiveDrivingDefaultApplied',
+    'knownDefaultsApplied', 'requiresClientVerification', 'source', 'failedFields'
+  ]);
+  assert.strictEqual(scopedKnownResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.strictEqual(scopedKnownResult.activeParticipantPanelRootStatus, 'ok');
+  assert.strictEqual(scopedKnownResult.activeParticipantPanelRootMethod, 'bounded-active-panel-range');
+  assert.strictEqual(scopedKnownResult.clickedButtonId, 'test-primary-driver-addToQuote');
+  assert.strictEqual(scopedKnownResult.rowKey, 'test-primary-driver');
+  assert.strictEqual(scopedKnownResult.actionKind, 'PRIMARY_ADD');
+  assert.strictEqual(scopedKnownResult.activeParticipantRequiredMissing, '0');
+  assert.strictEqual(scopedKnownResult.activeParticipantPanelReadyToSave, '1');
+  assert.strictEqual(scopedKnownResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(scopedKnownResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(scopedKnownResult.defensiveDrivingSelectedValue, 'NO');
+  assert.strictEqual(scopedKnownResult.defensiveDrivingDefaultApplied, '1');
+  assert.strictEqual(scopedKnownResult.knownDefaultsApplied, 'movingViolations|defensiveDriving');
+  assert.ok(scopedKnownResult.traceCodes.includes('ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED'));
+  assert.ok(scopedKnownResult.traceCodes.includes('ASC_PARTICIPANT_DEFENSIVE_DRIVING_NO_SELECTED'));
+  assert.strictEqual(scopedKnownResult.requiresClientVerification, '1');
+  assert.strictEqual(scopedKnownResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
+  assert.strictEqual(scopedKnownResult.failedFields, '');
+  assert.strictEqual(scopedKnownScenario.doc.getElementById('test-primary-driver-addToQuote').clickCalls, 0);
+  assert.strictEqual(scopedKnownScenario.doc.getElementById('2013-nissan-altima-add').clickCalls, 0);
+  assert.strictEqual(scopedKnownScenario.doc.getElementById('profile-summary-submitBtn').clickCalls, 0);
+  assert.strictEqual(scopedKnownScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
 
   const ambiguousScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh');
   const ambiguousResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, ambiguousScenario.doc, ambiguousScenario.href), [
     'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'failedFields'
   ]);
-  assert.strictEqual(ambiguousResult.result, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS');
-  assert.strictEqual(ambiguousResult.method, 'ambiguous-semantic-target');
-  assert.strictEqual(ambiguousResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_SELECTION_AMBIGUOUS');
+  assert.strictEqual(ambiguousResult.result, 'ASC_PARTICIPANT_QUESTION_BLOCK_AMBIGUOUS');
+  assert.strictEqual(ambiguousResult.method, 'movingViolations:ambiguous-question-block-no-target');
+  assert.strictEqual(ambiguousResult.traceCode, 'ASC_PARTICIPANT_QUESTION_BLOCK_AMBIGUOUS');
   assert.strictEqual(ambiguousResult.movingViolationsSelectedValue, '');
   assert.strictEqual(ambiguousResult.movingViolationsDefaultApplied, '0');
   assert.strictEqual(ambiguousResult.failedFields, 'movingViolations');
+
+  const unknownRequiredScenario = fixtureScenario('snapshot-asc-primary-inline-panel-unknown-required-yes-no');
+  const unknownRequiredBeforeClicks = totalClickCalls(unknownRequiredScenario.doc);
+  const unknownRequiredResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    panelKind: 'PRIMARY_OR_ADDING_DRIVER',
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, unknownRequiredScenario.doc, unknownRequiredScenario.href), [
+    'result', 'method', 'traceCode', 'activeParticipantUnknownRequiredYesNoCount',
+    'activeParticipantUnknownRequiredYesNoQuestions', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(unknownRequiredResult.result, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN');
+  assert.strictEqual(unknownRequiredResult.traceCode, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN');
+  assert.strictEqual(unknownRequiredResult.activeParticipantUnknownRequiredYesNoCount, '1');
+  assert.ok(unknownRequiredResult.activeParticipantUnknownRequiredYesNoQuestions.includes('license suspension'));
+  assert.strictEqual(unknownRequiredResult.knownDefaultsApplied, '');
+  assert.strictEqual(unknownRequiredResult.failedFields, 'unknownRequiredYesNo');
+  assert.strictEqual(totalClickCalls(unknownRequiredScenario.doc), unknownRequiredBeforeClicks);
+  assert.strictEqual(unknownRequiredScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
+  const readbackFailedScenario = fixtureScenario('snapshot-asc-primary-inline-panel-moving-violations-readback-fails');
+  const readbackFailedResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    panelKind: 'PRIMARY_OR_ADDING_DRIVER',
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, readbackFailedScenario.doc, readbackFailedScenario.href), [
+    'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(readbackFailedResult.result, 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
+  assert.strictEqual(readbackFailedResult.traceCode, 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
+  assert.strictEqual(readbackFailedResult.movingViolationsSelectedValue, '');
+  assert.strictEqual(readbackFailedResult.movingViolationsDefaultApplied, '0');
+  assert.strictEqual(readbackFailedResult.knownDefaultsApplied, '');
+  assert.strictEqual(readbackFailedResult.failedFields, 'movingViolations');
+  assert.strictEqual(readbackFailedScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
 
   const unknownScenario = fixtureScenario('snapshot-asc-unknown-inline-panel-moving-violations-required-mesh');
   const unknownPanelResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, unknownScenario.doc, unknownScenario.href), [
@@ -2548,11 +2627,21 @@ function testReturnShapeContracts() {
   assert.ok(Array.isArray(scan.fields));
   assert.ok(Array.isArray(scan.buttons));
   assert.ok(Array.isArray(scan.radioLikeControls));
+  assert.ok(scan.activeParticipantPanel && Array.isArray(scan.activeParticipantPanel.radioLikeControls));
 
   const meshScanScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-required-mesh');
   const meshScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'mesh-radio-contract' }, meshScanScenario.doc, meshScanScenario.href));
   assert.strictEqual(meshScan.radios.length, 0);
   assert.ok(meshScan.radioLikeControls.some((entry) => entry.role === 'radio' && entry.text === 'No'));
+  assert.strictEqual(meshScan.activeParticipantPanel.present, true);
+  assert.ok(meshScan.activeParticipantPanel.radioLikeControls.some((entry) => entry.role === 'radio' && entry.text === 'No' && entry.questionContext === 'movingViolations'));
+
+  const scopedScanScenario = fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped');
+  const scopedScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'scoped-panel-contract' }, scopedScanScenario.doc, scopedScanScenario.href));
+  assert.strictEqual(scopedScan.activeParticipantPanel.rootStatus, 'ok');
+  assert.ok(scopedScan.activeParticipantPanel.radioLikeControls.some((entry) => entry.questionContext === 'movingViolations' && entry.text === 'No'));
+  assert.ok(scopedScan.activeParticipantPanel.radioLikeControls.some((entry) => entry.questionContext === 'defensiveDriving' && entry.text === 'No'));
+  assert.ok(!scopedScan.activeParticipantPanel.radioLikeControls.some((entry) => /(?:addToQuote|profile-summary-submitBtn|nissan-altima-add)/.test(entry.id)));
 }
 
 function testGenericOpsContract() {
@@ -5622,7 +5711,11 @@ function testAscDriversVehiclesSnapshotContracts() {
     'activeParticipantPanelKind', 'activeParticipantSavePresent', 'activeParticipantSaveEnabled',
     'activeParticipantPanelRequiredMissing', 'activeParticipantRequiredMissing',
     'activeParticipantMovingViolationsQuestionPresent', 'activeParticipantMovingViolationsSelectedValue',
-    'activeParticipantMovingViolationsDefaultApplied', 'activeParticipantPanelReadyToSave',
+    'activeParticipantMovingViolationsDefaultApplied', 'activeParticipantDefensiveDrivingQuestionPresent',
+    'activeParticipantDefensiveDrivingSelectedValue', 'activeParticipantDefensiveDrivingDefaultApplied',
+    'activeParticipantUnknownRequiredYesNoCount', 'activeParticipantUnknownRequiredYesNoQuestions',
+    'activeParticipantPanelRootStatus', 'activeParticipantPanelRootMethod',
+    'activeParticipantPanelRadioLikeControlCount', 'activeParticipantPanelReadyToSave',
     'activeParticipantPanelSavePostcondition', 'activeParticipantPanelAction', 'pageSaveContinuePresent',
     'pageSaveContinueEnabled', 'pageSaveContinueButtonId', 'mainSavePresent', 'mainSaveEnabled',
     'blockerCode', 'blockers', 'nextRecommendedAction', 'nextRecommendedReadOnlyStatus', 'evidence', 'missing'
@@ -5709,6 +5802,24 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(primaryMovingRequired.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
   assert.ok(primaryMovingRequired.blockers.includes('ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'));
   assert.ok(primaryMovingRequired.blockers.includes('ASC_PRIMARY_PARTICIPANT_PANEL_OPEN'));
+
+  const scopedKnownRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped')), requiredKeys);
+  assert.strictEqual(scopedKnownRequired.result, 'OK');
+  assert.strictEqual(scopedKnownRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(scopedKnownRequired.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(scopedKnownRequired.activeParticipantPanelRootStatus, 'ok');
+  assert.strictEqual(scopedKnownRequired.activeParticipantPanelRootMethod, 'bounded-active-panel-range');
+  assert.strictEqual(scopedKnownRequired.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(scopedKnownRequired.activeParticipantDefensiveDrivingQuestionPresent, '1');
+  assert.strictEqual(scopedKnownRequired.activeParticipantPanelRadioLikeControlCount, '4');
+  assert.strictEqual(scopedKnownRequired.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+
+  const unknownRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-unknown-required-yes-no')), requiredKeys);
+  assert.strictEqual(unknownRequired.result, 'OK');
+  assert.strictEqual(unknownRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
+  assert.strictEqual(unknownRequired.activeParticipantUnknownRequiredYesNoCount, '1');
+  assert.strictEqual(unknownRequired.blockerCode, 'ASC_PARTICIPANT_REQUIRED_YES_NO_UNKNOWN');
+  assert.strictEqual(unknownRequired.nextRecommendedAction, '');
 
   const unknownPanel = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-unknown-inline-panel-moving-violations-required-mesh')), requiredKeys);
   assert.strictEqual(unknownPanel.result, 'OK');
@@ -5912,7 +6023,7 @@ function testHighRiskStrengthenedContracts() {
 
   const scanFixture = fixtureScenario('scan-current-page-rich');
   const scan = JSON.parse(runOperator('scan_current_page', { label: 'FIXTURE', reason: 'shape' }, scanFixture.doc, scanFixture.href));
-  for (const key of ['capturedAt', 'stepLabel', 'scanReason', 'url', 'title', 'heading', 'bodySample', 'headings', 'fields', 'buttons', 'radios', 'alerts', 'modalText'])
+  for (const key of ['capturedAt', 'stepLabel', 'scanReason', 'url', 'title', 'heading', 'bodySample', 'headings', 'fields', 'buttons', 'radios', 'radioLikeControls', 'activeParticipantPanel', 'alerts', 'modalText'])
     assert.ok(Object.prototype.hasOwnProperty.call(scan, key), `scan missing ${key}`);
   assert.strictEqual(scan.stepLabel, 'FIXTURE');
   assert.strictEqual(scan.scanReason, 'shape');
@@ -5921,6 +6032,8 @@ function testHighRiskStrengthenedContracts() {
   assert.ok(Array.isArray(scan.fields));
   assert.ok(Array.isArray(scan.buttons));
   assert.ok(Array.isArray(scan.radios));
+  assert.ok(Array.isArray(scan.radioLikeControls));
+  assert.ok(scan.activeParticipantPanel && Array.isArray(scan.activeParticipantPanel.radioLikeControls));
   assert.ok(Array.isArray(scan.alerts));
 }
 
