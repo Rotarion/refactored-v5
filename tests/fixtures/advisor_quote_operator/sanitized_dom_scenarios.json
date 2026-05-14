@@ -1609,6 +1609,97 @@
       { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
     ]
   },
+  "snapshot-asc-primary-inline-panel-demographics-moving-scoped": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Primary driver Let's get some more details Gender Male Female Marital status Single Married Property ownership Own Rent Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Primary driver Age 40 Add", "children": [
+        { "tag": "button", "id": "primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Primary driver Let's get some more details", "children": [
+        { "tag": "div", "className": "mesh-question", "text": "Gender", "children": [
+          { "tag": "div", "role": "radio", "text": "Male", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "Female", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "div", "className": "mesh-question", "text": "Marital status", "children": [
+          { "tag": "div", "role": "radio", "text": "Single", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "Married", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "Widowed", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "div", "className": "mesh-question", "text": "Property ownership", "children": [
+          { "tag": "div", "role": "radio", "text": "Own", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "Rent", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-broad-ancestor-moving-bleed-guard": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Primary driver Let's get some more details Gender Male Female Marital status Single Married Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Primary driver Age 40 Add", "children": [
+        { "tag": "button", "id": "primary-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Primary driver Let's get some more details Gender Male Female Marital status Single Married Have you had any moving violations in the past five years? Please make a selection.", "children": [
+        { "tag": "div", "role": "radio", "text": "Male", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "Female", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "Single", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "Married", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+        { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-older-driver-defensive-course": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Test Older Driver Let's get some more details Has this driver completed a driver safety course for mature drivers? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Older Driver Age 66 Add", "children": [
+        { "tag": "button", "id": "test-older-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Test Older Driver Let's get some more details", "children": [
+        { "tag": "div", "className": "mesh-question", "text": "Has this driver completed a driver safety course for mature drivers? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
+  "snapshot-asc-primary-inline-panel-unique-add-row-context-recovery": {
+    "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
+    "bodyText": "Drivers and vehicles Test Unique Driver Add Let's get some more details Have you had any moving violations in the past five years? Yes No Please make a selection. Save and Continue",
+    "nodes": [
+      { "tag": "h2", "text": "Drivers and vehicles" },
+      { "tag": "div", "className": "driver-row", "text": "Test Unique Driver Age 40 Add", "children": [
+        { "tag": "button", "id": "test-unique-driver-addToQuote", "text": "Add" }
+      ] },
+      { "tag": "section", "className": "participant-panel", "text": "Let's get some more details", "children": [
+        { "tag": "div", "className": "mesh-question", "text": "Have you had any moving violations in the past five years? Please make a selection.", "children": [
+          { "tag": "div", "role": "radio", "text": "Yes", "attributes": { "aria-checked": "false" } },
+          { "tag": "div", "role": "radio", "text": "No", "attributes": { "aria-checked": "false" } }
+        ] },
+        { "tag": "button", "id": "PARTICIPANT_SAVE-btn", "text": "Save" },
+        { "tag": "button", "id": "PARTICIPANT_CANCEL-btn", "text": "Cancel" }
+      ] },
+      { "tag": "button", "id": "profile-summary-submitBtn", "text": "Save and Continue", "disabled": true }
+    ]
+  },
   "snapshot-asc-primary-inline-panel-unknown-required-yes-no": {
     "href": "https://advisorpro.allstate.com/#/apps/ASCPRODUCT/112/",
     "bodyText": "Drivers and vehicles Test Primary Driver Let's get some more details Have you had a license suspension in the past five years? Yes No Please make a selection. Save and Continue",

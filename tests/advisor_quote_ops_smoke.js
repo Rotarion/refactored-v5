@@ -2572,6 +2572,73 @@ function testReturnShapeContracts() {
   assert.strictEqual(totalClickCalls(rentersUnknownScenario.doc), rentersUnknownBeforeClicks);
   assert.strictEqual(rentersUnknownScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
 
+  const demographicsScenario = fixtureScenario('snapshot-asc-primary-inline-panel-demographics-moving-scoped');
+  const demographicsScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'demographics-moving-scoped' }, demographicsScenario.doc, demographicsScenario.href));
+  const demographicsPanelControls = demographicsScan.activeParticipantPanel.radioLikeControls;
+  for (const text of ['Male', 'Female', 'Single', 'Married', 'Widowed', 'Own', 'Rent']) {
+    const hit = demographicsPanelControls.find((entry) => entry.text === text);
+    assert.ok(hit, `missing demographics control ${text}`);
+    assert.strictEqual(hit.questionContext, '', `${text} must not inherit movingViolations context`);
+  }
+  assert.deepStrictEqual(demographicsPanelControls.filter((entry) => entry.questionContext === 'movingViolations').map((entry) => entry.text).sort(), ['No', 'Yes']);
+  const demographicsResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, demographicsScenario.doc, demographicsScenario.href), [
+    'result', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(demographicsResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.strictEqual(demographicsResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(demographicsResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(demographicsResult.knownDefaultsApplied, 'movingViolations');
+  assert.strictEqual(demographicsResult.failedFields, '');
+
+  const broadBleedScenario = fixtureScenario('snapshot-asc-primary-inline-panel-broad-ancestor-moving-bleed-guard');
+  const broadBleedScan = JSON.parse(runOperator('scan_current_page', { label: 'ASC', reason: 'broad-ancestor-moving-bleed-guard' }, broadBleedScenario.doc, broadBleedScenario.href));
+  assert.strictEqual(broadBleedScan.activeParticipantPanel.radioLikeControls.filter((entry) => entry.questionContext === 'movingViolations').length, 0);
+  const broadBleedBeforeClicks = totalClickCalls(broadBleedScenario.doc);
+  const broadBleedResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, broadBleedScenario.doc, broadBleedScenario.href), [
+    'result', 'method', 'movingViolationsQuestionPresent', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(broadBleedResult.result, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+  assert.strictEqual(broadBleedResult.movingViolationsQuestionPresent, '0');
+  assert.strictEqual(broadBleedResult.movingViolationsSelectedValue, '');
+  assert.strictEqual(broadBleedResult.movingViolationsDefaultApplied, '0');
+  assert.strictEqual(broadBleedResult.knownDefaultsApplied, '');
+  assert.strictEqual(totalClickCalls(broadBleedScenario.doc), broadBleedBeforeClicks);
+  assert.strictEqual(broadBleedScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
+  const olderDefensiveScenario = fixtureScenario('snapshot-asc-primary-inline-panel-older-driver-defensive-course');
+  const olderDefensiveResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, olderDefensiveScenario.doc, olderDefensiveScenario.href), [
+    'result', 'defensiveDrivingQuestionPresent', 'defensiveDrivingSelectedValue', 'defensiveDrivingDefaultApplied',
+    'knownDefaultsApplied', 'requiresClientVerification', 'source', 'failedFields'
+  ]);
+  assert.strictEqual(olderDefensiveResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.strictEqual(olderDefensiveResult.defensiveDrivingQuestionPresent, '1');
+  assert.strictEqual(olderDefensiveResult.defensiveDrivingSelectedValue, 'NO');
+  assert.strictEqual(olderDefensiveResult.defensiveDrivingDefaultApplied, '1');
+  assert.strictEqual(olderDefensiveResult.knownDefaultsApplied, 'defensiveDriving');
+  assert.strictEqual(olderDefensiveResult.requiresClientVerification, '1');
+  assert.strictEqual(olderDefensiveResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
+  assert.strictEqual(olderDefensiveResult.failedFields, '');
+  assert.strictEqual(olderDefensiveScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
+  const uniqueRecoveryScenario = fixtureScenario('snapshot-asc-primary-inline-panel-unique-add-row-context-recovery');
+  const uniqueRecoverySnapshot = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', baseArgs(), uniqueRecoveryScenario), [
+    'result', 'activeParticipantPanelKind', 'activeParticipantRowKey', 'activeParticipantRowStatus',
+    'activeParticipantPanelAction', 'activeParticipantMovingViolationsQuestionPresent', 'blockerCode'
+  ]);
+  assert.strictEqual(uniqueRecoverySnapshot.result, 'OK');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantRowKey, 'test-unique-driver');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(uniqueRecoverySnapshot.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+
   const ambiguousScenario = fixtureScenario('snapshot-asc-non-driver-inline-panel-moving-violations-ambiguous-mesh');
   const ambiguousResult = assertKeyBlock(runOperator('asc_ensure_non_driver_participant_panel_ready', { source: 'PROVISIONAL_WORKFLOW_DEFAULT' }, ambiguousScenario.doc, ambiguousScenario.href), [
     'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'failedFields'

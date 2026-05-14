@@ -5493,7 +5493,9 @@ copy(String((() => {
       answer: 'NO',
       requiredTraceCode: 'ASC_PARTICIPANT_DEFENSIVE_DRIVING_REQUIRED',
       selectedTraceCode: 'ASC_PARTICIPANT_DEFENSIVE_DRIVING_NO_SELECTED',
-      match: (text) => /defensive driving/i.test(text) || /completed a defensive driving course/i.test(text)
+      match: (text) => /defensive (?:driving|driver)/i.test(text)
+        || /completed?.{0,80}(?:driver safety|driver improvement|driving|accident prevention|mature driver).{0,80}course/i.test(text)
+        || /(?:driver safety|driver improvement|accident prevention|mature driver).{0,80}course/i.test(text)
     }
   ];
   const ascKnownQuestionKeysInText = (text) => {
@@ -5621,6 +5623,22 @@ copy(String((() => {
   };
   const ascKnownQuestionForText = (text) => ASC_KNOWN_PARTICIPANT_DEFAULTS.find((item) => item.match(text)) || null;
   const ascQuestionTextMatches = (text, item) => !!(item && item.match(text));
+  const ascKnownQuestionByKey = (key) => ASC_KNOWN_PARTICIPANT_DEFAULTS.find((item) => item.key === key) || null;
+  const ascTextHasUnrelatedParticipantFields = (text, currentItem) => {
+    const normalized = normLower(text);
+    if (!normalized) return false;
+    const withoutCurrent = currentItem ? normalized.replace(normLower(currentItem.question), ' ') : normalized;
+    if (ASC_KNOWN_PARTICIPANT_DEFAULTS.some((item) => item.key !== safe(currentItem && currentItem.key) && item.match(text)))
+      return true;
+    return /\b(?:gender|male|female|marital status|single|married|widowed|divorced|own or rent|property ownership|ownership status|first name|last name|date of birth|email address|phone number|mailing address|garaging address|age were you issued|age did (?:you|they) receive|first driver s license|driver s license|state licensed|state province|military)\b/i.test(withoutCurrent);
+  };
+  const ascKnownQuestionContextEligible = (text, item) => {
+    const value = safe(text);
+    if (!item || !value || !ascQuestionTextMatches(value, item)) return false;
+    if (value.length > 900) return false;
+    if (ascTextHasUnrelatedParticipantFields(value, item)) return false;
+    return true;
+  };
   const ascParticipantSaveCancelControl = (node) => {
     if (!node) return false;
     const id = safe(node.id);
@@ -5633,12 +5651,30 @@ copy(String((() => {
     const panelRoot = root && root.contains ? root : null;
     if (!panelRoot || !node || !panelRoot.contains(node)) return { questionContext: '', optionalKind: '', method: 'outside-panel' };
     if (ascParticipantSaveCancelControl(node)) return { questionContext: '', optionalKind: '', method: 'panel-boundary-control' };
+    const nodeText = getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')) || safe(node.value);
+    const directKnownKeys = ascKnownQuestionKeysInText(nodeText);
+    if (directKnownKeys.length === 1) {
+      const directItem = ascKnownQuestionByKey(directKnownKeys[0]);
+      if (ascKnownQuestionContextEligible(nodeText, directItem))
+        return { questionContext: directItem.key, optionalKind: '', method: 'direct-question-context' };
+    }
+    if (directKnownKeys.length > 1)
+      return { questionContext: '', optionalKind: '', method: 'ambiguous-direct-question-context' };
+    const directOptionalKind = ascOptionalParticipantControlKind(nodeText);
+    if (directOptionalKind)
+      return { questionContext: '', optionalKind: directOptionalKind, method: 'known-optional-upsell' };
+    const directValue = normalizeYesNoValue(nodeText);
+    if (directValue !== 'YES' && directValue !== 'NO')
+      return { questionContext: '', optionalKind: '', method: 'non-yes-no-control' };
     let current = node;
     for (let depth = 0; depth < 8 && current && current !== document && current !== document.body && panelRoot.contains(current); depth += 1) {
       const text = getText(current) || safe(current.getAttribute && current.getAttribute('aria-label')) || safe(current.value);
       const knownKeys = ascKnownQuestionKeysInText(text);
-      if (knownKeys.length === 1 && safe(text).length <= 1200)
-        return { questionContext: knownKeys[0], optionalKind: '', method: 'ancestor-question-context' };
+      if (knownKeys.length === 1) {
+        const item = ascKnownQuestionByKey(knownKeys[0]);
+        if (ascKnownQuestionContextEligible(text, item))
+          return { questionContext: knownKeys[0], optionalKind: '', method: 'ancestor-question-context' };
+      }
       if (knownKeys.length > 1)
         return { questionContext: '', optionalKind: '', method: 'ambiguous-ancestor-question-context' };
       const optionalKind = ascOptionalParticipantControlKind(text);
@@ -5671,7 +5707,7 @@ copy(String((() => {
     const ordered = ascActivePanelOrderedNodes(panelRoot);
     const startIndex = ordered.findIndex((node) => {
       const text = getText(node);
-      return text && text.length <= 420 && ascQuestionTextMatches(text, item);
+      return ascKnownQuestionContextEligible(text, item);
     });
     if (startIndex < 0) return { present: false, nodes: [], questionText: '', method: 'question-not-present' };
     let endIndex = ordered.length;
@@ -5686,12 +5722,17 @@ copy(String((() => {
       present: true,
       nodes,
       questionText: compact(getText(ordered[startIndex]), 180),
+      item,
       method: 'question-window'
     };
   };
   const ascBlockContainsNode = (block, node) => {
     if (!block || !node) return false;
-    return block.nodes.some((item) => item === node || (item && item.contains && item.contains(node)) || (node.contains && node.contains(item)));
+    return block.nodes.some((item) => {
+      if (item === node || (node.contains && node.contains(item))) return true;
+      if (!(item && item.contains && item.contains(node))) return false;
+      return ascKnownQuestionContextEligible(getText(item), block.item);
+    });
   };
   const ascAssociatedControlForLabel = (node, block, root) => {
     if (!node || safe(node.tagName).toUpperCase() !== 'LABEL') return null;
@@ -6111,9 +6152,13 @@ copy(String((() => {
     const unknownRequired = panelRoot ? ascUnknownRequiredYesNoQuestions(panelRoot) : [];
     const optionalUpsells = panelRoot ? ascOptionalParticipantUpsellEntries(panelRoot) : [];
     const requiredWarning = panelRoot ? ascParticipantPanelRequiredWarningPresent(panelRoot) : false;
+    const panelText = panelRoot ? getText(panelRoot) : '';
+    const knownQuestionScopeFailures = panelRoot
+      ? ASC_KNOWN_PARTICIPANT_DEFAULTS.filter((item) => item.match(panelText) && readAscKnownQuestionState(panelRoot, item.key).questionPresent !== '1').map((item) => item.key)
+      : [];
     const movingAmbiguous = moving.ambiguous === true || moving.ambiguous === '1';
     const defensiveAmbiguous = defensive.ambiguous === true || defensive.ambiguous === '1';
-    const requiredMissing = moving.requiredMissing === '1' || defensive.requiredMissing === '1' || movingAmbiguous || defensiveAmbiguous || unknownRequired.length > 0 || (!!requiredWarning && moving.questionPresent !== '0' && !moving.selectedValue);
+    const requiredMissing = moving.requiredMissing === '1' || defensive.requiredMissing === '1' || movingAmbiguous || defensiveAmbiguous || unknownRequired.length > 0 || knownQuestionScopeFailures.length > 0 || (!!requiredWarning && moving.questionPresent !== '0' && !moving.selectedValue);
     const saveButton = findAscInlineParticipantSaveButton();
     const saveEnabled = !!(saveButton && visible(saveButton) && !isDisabledLike(saveButton));
     return {
@@ -6133,14 +6178,21 @@ copy(String((() => {
   const readAscNonDriverParticipantPanelReadiness = readAscParticipantPanelReadiness;
   const ascPrimaryAddPanelFallbackMatch = (driverRows, panelText) => {
     const text = normLower(panelText);
-    if (!advisorMoreDetailsTextPresent(text) || !/primary driver|primary applicant/.test(text))
+    if (!advisorMoreDetailsTextPresent(text))
       return { row: null, status: 'not-primary-panel-evidence' };
+    if (/\bunknown (?:person|driver|applicant)\b/.test(text))
+      return { row: null, status: 'explicit-unknown-panel-identity' };
     const plausible = (driverRows || []).filter((row) => {
       const evidence = normLower(`${safe(row.name)} ${safe(row.slug)} ${safe(row.rowKey)} ${safe(row.text)} ${safe(row.addButton && row.addButton.id)}`);
-      return !!row.addButton && !row.added && !row.nonDriverResolved && /primary/.test(evidence);
+      return !!row.addButton && !row.added && !row.nonDriverResolved;
     });
+    const primary = plausible.filter((row) => /primary/.test(normLower(`${safe(row.name)} ${safe(row.slug)} ${safe(row.rowKey)} ${safe(row.text)} ${safe(row.addButton && row.addButton.id)}`)));
+    if (primary.length === 1)
+      return { row: primary[0], status: 'primary-add-button-fallback' };
+    if (primary.length > 1)
+      return { row: null, status: 'ambiguous-primary-add-button-fallback' };
     if (plausible.length === 1)
-      return { row: plausible[0], status: 'primary-add-button-fallback' };
+      return { row: plausible[0], status: 'unique-add-button-fallback' };
     return { row: null, status: plausible.length > 1 ? 'ambiguous-primary-add-button-fallback' : 'primary-add-button-missing' };
   };
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
