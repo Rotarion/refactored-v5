@@ -5478,7 +5478,68 @@ copy(String((() => {
       if (input && root && root.contains && root.contains(input))
         return input;
     }
-    return node.querySelector && node.querySelector('input[type=radio],input[type=checkbox],[role=radio],[role=button]');
+    const nested = node.querySelector && node.querySelector('input[type=radio],input[type=checkbox],[role=radio],[role=button]');
+    if (nested && root && root.contains && root.contains(nested)) return nested;
+    const labelValue = normalizeYesNoValue(getText(node) || safe(node.getAttribute && node.getAttribute('aria-label')));
+    if (!labelValue || !root || !root.querySelectorAll) return null;
+    const localScope = node.parentElement || root;
+    const nearby = Array.from((localScope.querySelectorAll ? localScope : root).querySelectorAll('input[type=radio],input[type=checkbox],[role=radio],[role=button]'))
+      .filter((candidate) => candidate !== node && root.contains(candidate))
+      .filter((candidate) => {
+        if (block && block.present && !ascBlockContainsNode(block, candidate)) return false;
+        const evidence = `${safe(candidate.value)} ${safe(candidate.id)} ${safe(candidate.name)} ${readInputLabel(candidate)} ${safe(candidate.getAttribute && candidate.getAttribute('aria-label'))}`;
+        return normalizeYesNoValue(evidence) === labelValue;
+      });
+    return nearby.length === 1 ? nearby[0] : null;
+  };
+  const ascClickTargetEvidence = (node) => ({
+    clickTargetTag: safe(node && node.tagName),
+    clickTargetClass: safe(node && node.className),
+    clickTargetId: safe(node && node.id),
+    clickTargetRole: safe(node && node.getAttribute && node.getAttribute('role')),
+    clickTargetAriaChecked: safe(node && node.getAttribute && node.getAttribute('aria-checked')),
+    clickTargetAriaPressed: safe(node && node.getAttribute && node.getAttribute('aria-pressed')),
+    clickTargetDataState: safe(node && node.getAttribute && node.getAttribute('data-state'))
+  });
+  const ascQuestionReadbackEvidence = (state) => compact([
+    `selected=${safe(state && state.selected)}`,
+    `selectedValue=${safe(state && state.selectedValue)}`,
+    `selectedSource=${safe(state && state.selectedSource)}`,
+    `blockMethod=${safe(state && state.blockMethod)}`,
+    `controlCount=${safe(state && state.controlCount)}`,
+    `yesCandidateCount=${safe(state && state.yesCandidateCount)}`,
+    `noCandidateCount=${safe(state && state.noCandidateCount)}`,
+    `warningPresent=${safe(state && state.warningPresent)}`
+  ].join(';'), 360);
+  const ascClickParticipantQuestionCandidate = (candidate, block, root) => {
+    const control = candidate && candidate.control;
+    const visibleTarget = candidate && candidate.target;
+    const node = candidate && candidate.node;
+    let clickTarget = visibleTarget || node || control;
+    let method = 'scoped-question-target-click';
+    let clicked = false;
+    if (control && control !== node && root && root.contains && root.contains(control)
+      && /^(INPUT)$/i.test(safe(control.tagName)) && /^(radio|checkbox)$/i.test(safe(control.type))
+      && !control.disabled && !isAriaDisabled(control)) {
+      clickTarget = control;
+      method = visible(control) ? 'associated-input-click' : 'associated-input-direct-click';
+      try { control.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
+      try { control.focus({ preventScroll: true }); } catch { try { control.focus(); } catch {} }
+      try {
+        control.click();
+        clicked = true;
+      } catch {
+        clicked = false;
+      }
+      if (clicked) {
+        try { control.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+        try { control.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch {}
+      }
+    } else if (clickTarget && block && ascBlockContainsNode(block, clickTarget)) {
+      method = 'scoped-visible-target-click';
+      clicked = clickEl(clickTarget, { preClickSequence: true });
+    }
+    return Object.assign({ clicked, clickMethod: method }, ascClickTargetEvidence(clickTarget));
   };
   const ascQuestionBlockAnswerCandidates = (block, answerText, root) => {
     if (!block || !block.present) return [];
@@ -5805,14 +5866,31 @@ copy(String((() => {
         after: readAscKnownQuestionState(panelRoot, key)
       };
     }
-    const clicked = clickCenterEl(noCandidates[0].target);
+    const clickBlock = block && block.present ? block : {
+      present: true,
+      nodes: [noCandidates[0].node, noCandidates[0].target, noCandidates[0].control].filter(Boolean),
+      item,
+      method: 'question-context-controls'
+    };
+    const clickInfo = ascClickParticipantQuestionCandidate(noCandidates[0], clickBlock, panelRoot);
     const after = readAscKnownQuestionState(panelRoot, key);
+    const readbackFailedTrace = key === 'movingViolations' && clickInfo.clicked && !after.selectedValue
+      ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED'
+      : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED';
     return {
-      ok: clicked && after.selectedValue === 'NO',
-      method: clicked ? `${methodPrefix}-no-click` : `${methodPrefix}-no-click-failed`,
-      traceCode: clicked && after.selectedValue === 'NO' ? item.selectedTraceCode : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED',
+      ok: clickInfo.clicked && after.selectedValue === 'NO',
+      method: clickInfo.clicked ? `${methodPrefix}-no-click:${clickInfo.clickMethod}` : `${methodPrefix}-no-click-failed:${clickInfo.clickMethod}`,
+      traceCode: clickInfo.clicked && after.selectedValue === 'NO' ? item.selectedTraceCode : readbackFailedTrace,
       before,
-      after
+      after,
+      readbackEvidence: ascQuestionReadbackEvidence(after),
+      clickTargetTag: clickInfo.clickTargetTag,
+      clickTargetClass: clickInfo.clickTargetClass,
+      clickTargetId: clickInfo.clickTargetId,
+      clickTargetRole: clickInfo.clickTargetRole,
+      clickTargetAriaChecked: clickInfo.clickTargetAriaChecked,
+      clickTargetAriaPressed: clickInfo.clickTargetAriaPressed,
+      clickTargetDataState: clickInfo.clickTargetDataState
     };
   };
   const selectAscParticipantMovingViolationsNo = (root = findAscInlineParticipantPanelRoot()) => selectAscKnownParticipantQuestionNo(root, 'movingViolations');
@@ -5838,10 +5916,12 @@ copy(String((() => {
     const applied = [];
     const traceCodes = optionalUpsells.length ? [ASC_OPTIONAL_RENTERS_UPSELL_TRACE] : [];
     let method = [];
+    let lastSelection = null;
     for (const item of ASC_KNOWN_PARTICIPANT_DEFAULTS) {
       const before = readAscKnownQuestionState(panelRoot, item.key);
       if (before.questionPresent !== '1' || before.selectedValue) continue;
       const selection = selectAscKnownParticipantQuestionNo(panelRoot, item.key);
+      lastSelection = selection;
       method.push(`${item.key}:${selection.method}`);
       if (!selection.ok) {
         return {
@@ -5851,19 +5931,38 @@ copy(String((() => {
           applied,
           traceCodes,
           unknownRequiredQuestions: '',
-          failedFields: item.key
+          failedFields: item.key,
+          clickTargetTag: safe(selection.clickTargetTag),
+          clickTargetClass: safe(selection.clickTargetClass),
+          clickTargetId: safe(selection.clickTargetId),
+          clickTargetRole: safe(selection.clickTargetRole),
+          clickTargetAriaChecked: safe(selection.clickTargetAriaChecked),
+          clickTargetAriaPressed: safe(selection.clickTargetAriaPressed),
+          clickTargetDataState: safe(selection.clickTargetDataState),
+          readbackEvidence: safe(selection.readbackEvidence)
         };
       }
       const after = readAscKnownQuestionState(panelRoot, item.key);
       if (after.selectedValue !== 'NO') {
+        const result = item.key === 'movingViolations' && !after.selectedValue
+          ? 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED'
+          : 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED';
         return {
           ok: false,
-          result: 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED',
+          result,
           method: `${method.join('|')}|${item.key}:readback-failed`,
           applied,
           traceCodes,
           unknownRequiredQuestions: '',
-          failedFields: item.key
+          failedFields: item.key,
+          clickTargetTag: safe(selection.clickTargetTag),
+          clickTargetClass: safe(selection.clickTargetClass),
+          clickTargetId: safe(selection.clickTargetId),
+          clickTargetRole: safe(selection.clickTargetRole),
+          clickTargetAriaChecked: safe(selection.clickTargetAriaChecked),
+          clickTargetAriaPressed: safe(selection.clickTargetAriaPressed),
+          clickTargetDataState: safe(selection.clickTargetDataState),
+          readbackEvidence: ascQuestionReadbackEvidence(after)
         };
       }
       applied.push(item.key);
@@ -5878,7 +5977,15 @@ copy(String((() => {
       unknownRequiredQuestions: '',
       optionalUpsellIgnoredCount: String(optionalUpsells.length),
       optionalUpsellIgnoredTraceCode: optionalUpsells.length ? ASC_OPTIONAL_RENTERS_UPSELL_TRACE : '',
-      failedFields: ''
+      failedFields: '',
+      clickTargetTag: safe(lastSelection && lastSelection.clickTargetTag),
+      clickTargetClass: safe(lastSelection && lastSelection.clickTargetClass),
+      clickTargetId: safe(lastSelection && lastSelection.clickTargetId),
+      clickTargetRole: safe(lastSelection && lastSelection.clickTargetRole),
+      clickTargetAriaChecked: safe(lastSelection && lastSelection.clickTargetAriaChecked),
+      clickTargetAriaPressed: safe(lastSelection && lastSelection.clickTargetAriaPressed),
+      clickTargetDataState: safe(lastSelection && lastSelection.clickTargetDataState),
+      readbackEvidence: safe(lastSelection && lastSelection.readbackEvidence)
     };
   };
   const readAscParticipantPanelReadiness = (root = findAscInlineParticipantPanelRoot()) => {
@@ -5912,24 +6019,56 @@ copy(String((() => {
     };
   };
   const readAscNonDriverParticipantPanelReadiness = readAscParticipantPanelReadiness;
-  const ascPrimaryAddPanelFallbackMatch = (driverRows, panelText) => {
+  const ascParticipantPanelHasKnownQuestionEvidence = (readiness) => !!(readiness
+    && (readiness.moving && readiness.moving.questionPresent === '1'
+      || readiness.defensive && readiness.defensive.questionPresent === '1'));
+  const ascPanelExplicitUnknownIdentity = (panelText) => /\bunknown (?:person|driver|applicant)\b/.test(normLower(panelText));
+  const ascPanelMatchesOtherDriver = (panelText, driverRows, targetRow) => (driverRows || []).some((row) => {
+    if (row === targetRow || !safe(row && row.name).trim()) return false;
+    return personNameMatches(panelText, row.name);
+  });
+  const ascPanelOwnershipCandidates = (driverRows) => {
+    const rows = driverRows || [];
+    return {
+      nonDriver: rows.filter((row) => row.nonDriverResolved && !row.added),
+      add: rows.filter((row) => !!row.addButton && !row.added && !row.nonDriverResolved)
+    };
+  };
+  const ascNonDriverPanelFallbackMatch = (driverRows, panelText, readiness) => {
+    const text = normLower(panelText);
+    if (!advisorMoreDetailsTextPresent(text))
+      return { row: null, status: 'not-participant-panel-evidence' };
+    if (!ascParticipantPanelHasKnownQuestionEvidence(readiness))
+      return { row: null, status: 'known-question-evidence-missing' };
+    if (ascPanelExplicitUnknownIdentity(panelText))
+      return { row: null, status: 'explicit-unknown-panel-identity' };
+    const candidates = ascPanelOwnershipCandidates(driverRows);
+    if (candidates.nonDriver.length !== 1)
+      return { row: null, status: candidates.nonDriver.length > 1 ? 'ambiguous-non-driver-row-fallback' : 'non-driver-row-missing' };
+    if (candidates.add.length > 0)
+      return { row: null, status: 'ambiguous-panel-owner-fallback' };
+    const row = candidates.nonDriver[0];
+    if (ascPanelMatchesOtherDriver(panelText, driverRows, row))
+      return { row: null, status: 'conflicting-panel-identity' };
+    return { row, status: 'single-non-driver-row' };
+  };
+  const ascPrimaryAddPanelFallbackMatch = (driverRows, panelText, readiness) => {
     const text = normLower(panelText);
     if (!advisorMoreDetailsTextPresent(text))
       return { row: null, status: 'not-primary-panel-evidence' };
-    if (/\bunknown (?:person|driver|applicant)\b/.test(text))
+    if (!ascParticipantPanelHasKnownQuestionEvidence(readiness))
+      return { row: null, status: 'known-question-evidence-missing' };
+    if (ascPanelExplicitUnknownIdentity(panelText))
       return { row: null, status: 'explicit-unknown-panel-identity' };
-    const plausible = (driverRows || []).filter((row) => {
-      const evidence = normLower(`${safe(row.name)} ${safe(row.slug)} ${safe(row.rowKey)} ${safe(row.text)} ${safe(row.addButton && row.addButton.id)}`);
-      return !!row.addButton && !row.added && !row.nonDriverResolved;
-    });
-    const primary = plausible.filter((row) => /primary/.test(normLower(`${safe(row.name)} ${safe(row.slug)} ${safe(row.rowKey)} ${safe(row.text)} ${safe(row.addButton && row.addButton.id)}`)));
-    if (primary.length === 1)
-      return { row: primary[0], status: 'primary-add-button-fallback' };
-    if (primary.length > 1)
+    const candidates = ascPanelOwnershipCandidates(driverRows);
+    if (candidates.nonDriver.length > 0)
+      return { row: null, status: 'ambiguous-panel-owner-fallback' };
+    if (candidates.add.length !== 1)
       return { row: null, status: 'ambiguous-primary-add-button-fallback' };
-    if (plausible.length === 1)
-      return { row: plausible[0], status: 'unique-add-button-fallback' };
-    return { row: null, status: plausible.length > 1 ? 'ambiguous-primary-add-button-fallback' : 'primary-add-button-missing' };
+    const row = candidates.add[0];
+    if (ascPanelMatchesOtherDriver(panelText, driverRows, row))
+      return { row: null, status: 'conflicting-panel-identity' };
+    return { row, status: 'single-primary-add-row' };
   };
   const readAscActiveParticipantPanelFields = (driverRows = []) => {
     const saveButton = findAscInlineParticipantSaveButton();
@@ -5940,6 +6079,7 @@ copy(String((() => {
       return {
         activeParticipantPanelPresent: '0',
         activeParticipantRowKey: '',
+        activeParticipantRowKeyFallback: '',
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
         activeParticipantPanelKind: '',
@@ -5971,6 +6111,7 @@ copy(String((() => {
       return {
         activeParticipantPanelPresent: '1',
         activeParticipantRowKey: '',
+        activeParticipantRowKeyFallback: '',
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: 'UNKNOWN',
         activeParticipantPanelKind: 'UNKNOWN',
@@ -6005,6 +6146,7 @@ copy(String((() => {
       .filter((item) => safe(item.row.name).trim() && personNameMatches(panelText, item.row.name));
     let rowStatus = 'UNKNOWN';
     let rowKey = '';
+    let rowKeyFallback = '';
     if (matches.length === 1) {
       const row = matches[0].row;
       rowKey = safe(row.rowKey) || `row-${matches[0].index + 1}`;
@@ -6016,12 +6158,18 @@ copy(String((() => {
       rowKey = 'ambiguous';
     }
     if (rowStatus === 'UNKNOWN' && rowKey !== 'ambiguous') {
-      const fallback = ascPrimaryAddPanelFallbackMatch(driverRows, panelText);
-      if (fallback.row) {
-        rowKey = safe(fallback.row.rowKey || fallback.row.slug);
-        rowStatus = 'FOUND_UNRESOLVED';
-      } else if (fallback.status === 'ambiguous-primary-add-button-fallback') {
-        rowKey = 'ambiguous';
+      const nonDriverFallback = ascNonDriverPanelFallbackMatch(driverRows, panelText, readiness);
+      if (nonDriverFallback.row) {
+        rowKey = safe(nonDriverFallback.row.rowKey || nonDriverFallback.row.slug);
+        rowStatus = 'NON_DRIVER';
+        rowKeyFallback = 'single-non-driver-row';
+      } else {
+        const primaryFallback = ascPrimaryAddPanelFallbackMatch(driverRows, panelText, readiness);
+        if (primaryFallback.row) {
+          rowKey = safe(primaryFallback.row.rowKey || primaryFallback.row.slug);
+          rowStatus = 'FOUND_UNRESOLVED';
+          rowKeyFallback = 'single-primary-add-row';
+        }
       }
     }
     const panelKind = rowStatus === 'NON_DRIVER'
@@ -6037,6 +6185,7 @@ copy(String((() => {
     return {
       activeParticipantPanelPresent: '1',
       activeParticipantRowKey: rowKey,
+      activeParticipantRowKeyFallback: rowKeyFallback,
       activeParticipantNameMasked: rowKey ? '[REDACTED]' : '',
       activeParticipantRowStatus: rowStatus,
       activeParticipantPanelKind: panelKind,
@@ -6096,6 +6245,7 @@ copy(String((() => {
           inlineParticipantSaveButtonId: '',
           activeParticipantPanelPresent: '0',
           activeParticipantRowKey: '',
+          activeParticipantRowKeyFallback: '',
           activeParticipantNameMasked: '',
           activeParticipantRowStatus: '',
           activeParticipantPanelKind: '',
@@ -6236,6 +6386,7 @@ copy(String((() => {
         inlineParticipantSaveButtonId: safe(inlineSaveButton && inlineSaveButton.id),
         activeParticipantPanelPresent: activeParticipant.activeParticipantPanelPresent,
         activeParticipantRowKey: activeParticipant.activeParticipantRowKey,
+        activeParticipantRowKeyFallback: activeParticipant.activeParticipantRowKeyFallback,
         activeParticipantNameMasked: activeParticipant.activeParticipantNameMasked,
         activeParticipantRowStatus: activeParticipant.activeParticipantRowStatus,
         activeParticipantPanelKind: activeParticipant.activeParticipantPanelKind,
@@ -6301,6 +6452,7 @@ copy(String((() => {
         inlineParticipantSaveButtonId: '',
         activeParticipantPanelPresent: '0',
         activeParticipantRowKey: '',
+        activeParticipantRowKeyFallback: '',
         activeParticipantNameMasked: '',
         activeParticipantRowStatus: '',
         activeParticipantPanelKind: '',
@@ -9420,6 +9572,14 @@ copy(String((() => {
         activeParticipantOptionalUpsellIgnoredCount: after.optionalUpsellIgnoredCount || defaults.optionalUpsellIgnoredCount || '0',
         activeParticipantOptionalUpsellIgnoredTraceCode: after.optionalUpsellIgnoredTraceCode || defaults.optionalUpsellIgnoredTraceCode || '',
         knownDefaultsApplied: appliedDefaults.join('|'),
+        clickTargetTag: safe(defaults.clickTargetTag),
+        clickTargetClass: safe(defaults.clickTargetClass),
+        clickTargetId: safe(defaults.clickTargetId),
+        clickTargetRole: safe(defaults.clickTargetRole),
+        clickTargetAriaChecked: safe(defaults.clickTargetAriaChecked),
+        clickTargetAriaPressed: safe(defaults.clickTargetAriaPressed),
+        clickTargetDataState: safe(defaults.clickTargetDataState),
+        readbackEvidence: safe(defaults.readbackEvidence),
         requiresClientVerification: appliedDefaults.length ? '1' : '0',
         source: safe(args.source || ASC_PARTICIPANT_DEFAULT_SOURCE),
         failedFields: ready ? '' : (defaults.failedFields || 'participantDefaults')

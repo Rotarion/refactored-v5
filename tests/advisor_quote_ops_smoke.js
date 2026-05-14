@@ -2484,6 +2484,34 @@ function testReturnShapeContracts() {
   assert.strictEqual(primaryReadyResult.source, 'PROVISIONAL_WORKFLOW_DEFAULT');
   assert.strictEqual(primaryReadyResult.failedFields, '');
 
+  const associatedInputScenario = fixtureScenario('snapshot-asc-primary-inline-panel-moving-violations-label-associated-input');
+  const associatedInputResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
+    panelKind: 'PRIMARY_OR_ADDING_DRIVER',
+    source: 'PROVISIONAL_WORKFLOW_DEFAULT'
+  }, associatedInputScenario.doc, associatedInputScenario.href), [
+    'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'clickTargetTag', 'clickTargetClass', 'clickTargetId', 'clickTargetRole',
+    'clickTargetAriaChecked', 'clickTargetAriaPressed', 'clickTargetDataState',
+    'readbackEvidence', 'knownDefaultsApplied', 'failedFields'
+  ]);
+  assert.strictEqual(associatedInputResult.result, 'ASC_PRIMARY_PARTICIPANT_PANEL_READY_TO_SAVE');
+  assert.ok(associatedInputResult.method.includes('associated-input-direct-click'));
+  assert.strictEqual(associatedInputResult.traceCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_NO_SELECTED');
+  assert.strictEqual(associatedInputResult.movingViolationsSelectedValue, 'NO');
+  assert.strictEqual(associatedInputResult.movingViolationsDefaultApplied, '1');
+  assert.strictEqual(associatedInputResult.clickTargetTag, 'INPUT');
+  assert.strictEqual(associatedInputResult.clickTargetClass, 'mesh-hidden-input');
+  assert.strictEqual(associatedInputResult.clickTargetId, 'moving-violations-no-input');
+  assert.strictEqual(associatedInputResult.clickTargetRole, '');
+  assert.strictEqual(associatedInputResult.clickTargetAriaChecked, '');
+  assert.strictEqual(associatedInputResult.clickTargetAriaPressed, '');
+  assert.strictEqual(associatedInputResult.clickTargetDataState, '');
+  assert.ok(associatedInputResult.readbackEvidence.includes('selectedValue=NO'));
+  assert.strictEqual(associatedInputResult.knownDefaultsApplied, 'movingViolations');
+  assert.strictEqual(associatedInputResult.failedFields, '');
+  assert.strictEqual(associatedInputScenario.doc.getElementById('primary-driver-addToQuote').clickCalls, 0);
+  assert.strictEqual(associatedInputScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
+
   const scopedKnownScenario = fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped');
   const scopedKnownResult = assertKeyBlock(runOperator('asc_ensure_active_participant_panel_ready', {
     panelKind: 'PRIMARY_OR_ADDING_DRIVER',
@@ -2628,12 +2656,13 @@ function testReturnShapeContracts() {
 
   const uniqueRecoveryScenario = fixtureScenario('snapshot-asc-primary-inline-panel-unique-add-row-context-recovery');
   const uniqueRecoverySnapshot = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', baseArgs(), uniqueRecoveryScenario), [
-    'result', 'activeParticipantPanelKind', 'activeParticipantRowKey', 'activeParticipantRowStatus',
+    'result', 'activeParticipantPanelKind', 'activeParticipantRowKey', 'activeParticipantRowKeyFallback', 'activeParticipantRowStatus',
     'activeParticipantPanelAction', 'activeParticipantMovingViolationsQuestionPresent', 'blockerCode'
   ]);
   assert.strictEqual(uniqueRecoverySnapshot.result, 'OK');
   assert.strictEqual(uniqueRecoverySnapshot.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
   assert.strictEqual(uniqueRecoverySnapshot.activeParticipantRowKey, 'test-unique-driver');
+  assert.strictEqual(uniqueRecoverySnapshot.activeParticipantRowKeyFallback, 'single-primary-add-row');
   assert.strictEqual(uniqueRecoverySnapshot.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
   assert.strictEqual(uniqueRecoverySnapshot.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
   assert.strictEqual(uniqueRecoverySnapshot.activeParticipantMovingViolationsQuestionPresent, '1');
@@ -2673,12 +2702,23 @@ function testReturnShapeContracts() {
     panelKind: 'PRIMARY_OR_ADDING_DRIVER',
     source: 'PROVISIONAL_WORKFLOW_DEFAULT'
   }, readbackFailedScenario.doc, readbackFailedScenario.href), [
-    'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied', 'knownDefaultsApplied', 'failedFields'
+    'result', 'method', 'traceCode', 'movingViolationsSelectedValue', 'movingViolationsDefaultApplied',
+    'clickTargetTag', 'clickTargetClass', 'clickTargetId', 'clickTargetRole',
+    'clickTargetAriaChecked', 'clickTargetAriaPressed', 'clickTargetDataState',
+    'readbackEvidence', 'knownDefaultsApplied', 'failedFields'
   ]);
-  assert.strictEqual(readbackFailedResult.result, 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
-  assert.strictEqual(readbackFailedResult.traceCode, 'ASC_PARTICIPANT_DEFAULT_READBACK_FAILED');
+  assert.strictEqual(readbackFailedResult.result, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED');
+  assert.strictEqual(readbackFailedResult.traceCode, 'ASC_PARTICIPANT_MOVING_VIOLATIONS_CLICK_NO_READBACK_FAILED');
   assert.strictEqual(readbackFailedResult.movingViolationsSelectedValue, '');
   assert.strictEqual(readbackFailedResult.movingViolationsDefaultApplied, '0');
+  assert.strictEqual(readbackFailedResult.clickTargetTag, 'LABEL');
+  assert.strictEqual(readbackFailedResult.clickTargetClass, '');
+  assert.strictEqual(readbackFailedResult.clickTargetId, '');
+  assert.strictEqual(readbackFailedResult.clickTargetRole, '');
+  assert.strictEqual(readbackFailedResult.clickTargetAriaChecked, '');
+  assert.strictEqual(readbackFailedResult.clickTargetAriaPressed, '');
+  assert.strictEqual(readbackFailedResult.clickTargetDataState, '');
+  assert.ok(readbackFailedResult.readbackEvidence.includes('selectedValue='));
   assert.strictEqual(readbackFailedResult.knownDefaultsApplied, '');
   assert.strictEqual(readbackFailedResult.failedFields, 'movingViolations');
   assert.strictEqual(readbackFailedScenario.doc.getElementById('PARTICIPANT_SAVE-btn').clickCalls, 0);
@@ -5824,7 +5864,7 @@ function testAscDriversVehiclesSnapshotContracts() {
     'removeDriverModalPresent', 'removeDriverTargetName', 'removeDriverReasonSelected',
     'removeDriverReasonCode', 'driversAndVehiclesHeadingPresent', 'inlineParticipantSavePresent',
     'inlineParticipantSaveEnabled', 'inlineParticipantSaveButtonId', 'activeParticipantPanelPresent',
-    'activeParticipantRowKey', 'activeParticipantNameMasked', 'activeParticipantRowStatus',
+    'activeParticipantRowKey', 'activeParticipantRowKeyFallback', 'activeParticipantNameMasked', 'activeParticipantRowStatus',
     'activeParticipantPanelKind', 'activeParticipantSavePresent', 'activeParticipantSaveEnabled',
     'activeParticipantPanelRequiredMissing', 'activeParticipantRequiredMissing',
     'activeParticipantMovingViolationsQuestionPresent', 'activeParticipantMovingViolationsSelectedValue',
@@ -5906,6 +5946,16 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(nonDriverMovingRequired.activeParticipantPanelAction, 'COMPLETE_NON_DRIVER_PANEL');
   assert.ok(nonDriverMovingRequired.blockers.includes('ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD'));
 
+  const nonDriverOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-inline-panel-single-row-ownership-fallback')), requiredKeys);
+  assert.strictEqual(nonDriverOwnershipFallback.result, 'OK');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantPanelKind, 'NON_DRIVER');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowStatus, 'NON_DRIVER');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowKey, 'test-found-driver-one');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantRowKeyFallback, 'single-non-driver-row');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(nonDriverOwnershipFallback.activeParticipantPanelAction, 'COMPLETE_NON_DRIVER_PANEL');
+  assert.ok(nonDriverOwnershipFallback.blockers.includes('ASC_ACTIVE_PARTICIPANT_PANEL_REQUIRED_FIELD'));
+
   const primaryMovingRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-moving-violations-required-mesh')), requiredKeys);
   assert.strictEqual(primaryMovingRequired.result, 'OK');
   assert.strictEqual(primaryMovingRequired.activePanelType, 'ASC_INLINE_PARTICIPANT_PANEL');
@@ -5920,6 +5970,34 @@ function testAscDriversVehiclesSnapshotContracts() {
   assert.strictEqual(primaryMovingRequired.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
   assert.ok(primaryMovingRequired.blockers.includes('ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED'));
   assert.ok(primaryMovingRequired.blockers.includes('ASC_PRIMARY_PARTICIPANT_PANEL_OPEN'));
+
+  const primaryOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-single-add-row-ownership-fallback')), requiredKeys);
+  assert.strictEqual(primaryOwnershipFallback.result, 'OK');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantPanelKind, 'PRIMARY_OR_ADDING_DRIVER');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantRowStatus, 'FOUND_UNRESOLVED');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantRowKey, 'test-primary-driver');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantRowKeyFallback, 'single-primary-add-row');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantMovingViolationsQuestionPresent, '1');
+  assert.strictEqual(primaryOwnershipFallback.activeParticipantPanelAction, 'COMPLETE_PRIMARY_DRIVER_PANEL');
+  assert.strictEqual(primaryOwnershipFallback.blockerCode, 'ASC_PRIMARY_PARTICIPANT_MOVING_VIOLATIONS_REQUIRED');
+
+  const ambiguousNonDriverOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-non-driver-inline-panel-ambiguous-ownership-fallback')), requiredKeys);
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.result, 'OK');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantPanelKind, 'UNKNOWN');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowStatus, 'UNKNOWN');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowKey, '');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantRowKeyFallback, '');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.activeParticipantPanelAction, 'FAIL_SAFE');
+  assert.strictEqual(ambiguousNonDriverOwnershipFallback.blockerCode, 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS');
+
+  const ambiguousAddOwnershipFallback = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-ambiguous-add-ownership-fallback')), requiredKeys);
+  assert.strictEqual(ambiguousAddOwnershipFallback.result, 'OK');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantPanelKind, 'UNKNOWN');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowStatus, 'UNKNOWN');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowKey, '');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantRowKeyFallback, '');
+  assert.strictEqual(ambiguousAddOwnershipFallback.activeParticipantPanelAction, 'FAIL_SAFE');
+  assert.strictEqual(ambiguousAddOwnershipFallback.blockerCode, 'ASC_ACTIVE_PARTICIPANT_PANEL_BLOCKS_ROW_PROGRESS');
 
   const scopedKnownRequired = assertKeyBlock(runReadOnlySnapshot('asc_drivers_vehicles_snapshot', args, fixtureScenario('snapshot-asc-primary-inline-panel-known-required-mesh-scoped')), requiredKeys);
   assert.strictEqual(scopedKnownRequired.result, 'OK');
